@@ -1,0 +1,82 @@
+{
+  "name": "worklens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "本地优先的通用桌面工作 Agent",
+  "author": "BuildWithAIs",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "pack": "npm run build && electron-builder --dir",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:mac": "npm run build && electron-builder --mac dmg"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "lucide-react": "0.577.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "10.1.0",
+    "rehype-highlight": "7.0.2",
+    "remark-gfm": "4.0.1",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "electron": "42.11.2",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "prettier": "3.8.1",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.0"
+  },
+  "build": {
+    "appId": "com.buildwithais.worklens",
+    "productName": "WorkLens",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "asarUnpack": [
+      "**/*.node",
+      "**/*.wasm",
+      "**/photon-node/**"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns"
+    }
+  }
+}

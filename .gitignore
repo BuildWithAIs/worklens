@@ -1,0 +1,9 @@
+# Local reference clones — not part of this repository
+reference/
+prd.md
+node_modules/
+dist/
+release/
+test-results/
+playwright-report/
+*.log
