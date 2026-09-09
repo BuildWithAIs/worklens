@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-WorkLens is a working agent built to serve employees at relatively large enterprises and to genuinely "understand" them.
+WorkLens is a local-first work agent for employees at larger companies — especially teams that rely on Jira, Confluence, GitHub, and similar enterprise services. Memory is on the roadmap, and it will make WorkLens understand you better over time.
 
 Built with Electron, React, TypeScript, Tailwind CSS, and Pi.
 

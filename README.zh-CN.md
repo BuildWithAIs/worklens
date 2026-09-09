@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-WorkLens 是一个 working agent，旨在开发一个适合在相对大型的企业工作的员工并且非常“懂”他们的 Agent。
+WorkLens 是一款本地优先的工作 Agent，面向中大型企业的员工——尤其是日常依赖 Jira、Confluence、GitHub 等企业服务的团队。随着记忆能力的加入，它会越来越“懂”你。
 
 基于 Electron、React、TypeScript、Tailwind CSS 和 Pi 进行开发。
 
