@@ -1,31 +1,24 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowUp,
-  UserRound,
-  Square,
   Plus,
   Settings as SettingsIcon,
   ArrowLeft,
-  ChevronDown,
   Check,
-  Copy,
-  Terminal,
   X,
   Trash2,
   Pencil,
   ShieldAlert,
-  Cpu,
   CheckCircle2,
   LoaderCircle,
+  RefreshCw,
+  FolderOpen,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
+import { AgentThread } from "@/components/worklens/AgentThread";
+import { ModelMenu } from "@/components/worklens/ModelMenu";
 import type {
   AuthStep,
   Bootstrap,
   ConversationView,
-  MessageView,
   Phase,
   Selection,
   Settings,
@@ -46,179 +39,6 @@ const labels: Record<Phase, string> = {
 const active = (phase?: Phase) =>
   !!phase &&
   ["generating", "tool", "compacting", "retrying", "stopping"].includes(phase);
-const thinkingLabels: Record<string, string> = {
-  off: "关闭",
-  minimal: "最少",
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "极高",
-  max: "最高",
-};
-
-function Markdown({ text }: { text: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
-      components={{
-        a: ({ href, children }) => (
-          <a
-            href={href}
-            onClick={(event) => {
-              event.preventDefault();
-              if (href)
-                void api.invoke("external", { url: href }).catch(() => {});
-            }}
-          >
-            {children}
-          </a>
-        ),
-        img: ({ alt }) => <span>[图片：{alt}]</span>,
-        pre: ({ children }) => (
-          <div className="code">
-            <button
-              className="icon copy-code"
-              title="复制代码"
-              onClick={(event) =>
-                void navigator.clipboard.writeText(
-                  event.currentTarget.parentElement?.querySelector("pre")
-                    ?.textContent ?? "",
-                )
-              }
-            >
-              <Copy size={14} />
-            </button>
-            <pre>{children}</pre>
-          </div>
-        ),
-      }}
-    >
-      {text}
-    </ReactMarkdown>
-  );
-}
-const Message = memo(function Message({ message }: { message: MessageView }) {
-  if (message.role === "summary")
-    return (
-      <details className="summary">
-        <summary>上下文已压缩 · 查看摘要</summary>
-        <Markdown text={message.text} />
-      </details>
-    );
-  if (message.role === "tool")
-    return (
-      <details className={`tool-card ${message.status}`}>
-        <summary>
-          <Terminal size={16} />
-          <strong>{message.toolName}</strong>
-          <span className="tool-arg">
-            {message.args?.replace(/\s+/g, " ").slice(0, 95)}
-          </span>
-          <span className="tool-status">
-            {
-              {
-                pending: "待执行",
-                waiting: "等待资源",
-                running: "执行中",
-                success: "成功",
-                error: "失败",
-                timeout: "已超时",
-                cancelled: "已取消",
-              }[message.status ?? "pending"]
-            }
-            {message.elapsed !== undefined && message.status !== "running"
-              ? ` · ${(message.elapsed / 1000).toFixed(1)}s`
-              : ""}
-          </span>
-          <ChevronDown size={14} />
-        </summary>
-        <div className="tool-detail">
-          {message.shellCwd && (
-            <>
-              <label>命令初始目录</label>
-              <pre>{message.shellCwd}</pre>
-              <p className="subtle">
-                超时：
-                {message.timeoutSeconds === undefined
-                  ? "未设置"
-                  : `${message.timeoutSeconds} 秒`}
-                {message.exitCode !== undefined
-                  ? ` · 退出码：${message.exitCode === null ? "进程被终止" : message.exitCode}`
-                  : ""}
-              </p>
-            </>
-          )}
-          {message.targetPath && (
-            <>
-              <label>目标绝对路径</label>
-              <pre>{message.targetPath}</pre>
-            </>
-          )}
-          {message.startedAt && (
-            <p className="subtle">
-              开始时间：{new Date(message.startedAt).toLocaleString("zh-CN")}
-              {message.elapsed !== undefined
-                ? ` · 耗时 ${(message.elapsed / 1000).toFixed(2)} 秒`
-                : ""}
-            </p>
-          )}
-          <label>参数</label>
-          <pre>{message.args}</pre>
-          {message.text && (
-            <>
-              <label>结果</label>
-              <pre>{message.text}</pre>
-            </>
-          )}
-        </div>
-      </details>
-    );
-  return (
-    <article className={`message ${message.role}`}>
-      <div className="message-by">
-        {message.role === "user" ? (
-          <span
-            className="user-avatar"
-            role="img"
-            aria-label="你的头像"
-            title="你"
-          >
-            <UserRound size={18} aria-hidden="true" />
-          </span>
-        ) : (
-          <>
-            <span className="mini-mark">W</span> WorkLens
-          </>
-        )}
-      </div>
-      {message.thinking && (
-        <details className="thinking">
-          <summary>推理摘要</summary>
-          <Markdown text={message.thinking} />
-        </details>
-      )}
-      <div className="prose">
-        {message.role === "user" ? (
-          <p className="whitespace-pre-wrap">{message.text}</p>
-        ) : (
-          <Markdown text={message.text} />
-        )}
-      </div>
-      {message.error && <p className="error">{message.error}</p>}
-      {message.role === "assistant" && message.text && (
-        <button
-          className="icon copy-message"
-          aria-label="复制回答"
-          onClick={() => void navigator.clipboard.writeText(message.text)}
-        >
-          <Copy size={14} />
-        </button>
-      )}
-    </article>
-  );
-});
-
 export function App() {
   const [data, setData] = useState<Bootstrap>();
   const [views, setViews] = useState<Record<string, ConversationView>>({});
@@ -227,6 +47,23 @@ export function App() {
   const [selection, setSelection] = useState<Selection>();
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState<{
+    type: "error" | "success";
+    text: string;
+  }>();
+  const notifyError = useCallback(
+    (text: string) => setNotice({ type: "error", text }),
+    [],
+  );
+  const notifySuccess = useCallback(
+    (text: string) => setNotice({ type: "success", text }),
+    [],
+  );
+  useEffect(() => {
+    if (notice?.type !== "success") return;
+    const timer = setTimeout(() => setNotice(undefined), 3200);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const [pendingSends, setPendingSends] = useState(new Set<string>());
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
   const navigation = useRef(0);
@@ -237,8 +74,6 @@ export function App() {
     title: string;
   }>();
   const [showRecovery, setShowRecovery] = useState(true);
-  const scroll = useRef<HTMLDivElement>(null);
-  const follow = useRef(true);
   const sequences = useRef(new Map<string, number>());
   const latestRuns = useRef(new Map<string, string>());
   const currentView = current ? views[current] : undefined;
@@ -316,10 +151,6 @@ export function App() {
     preference.addEventListener("change", apply);
     return () => preference.removeEventListener("change", apply);
   }, [data?.settings.theme]);
-  useEffect(() => {
-    if (follow.current && scroll.current)
-      scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [currentView?.messages, current]);
   async function open(id: string) {
     const visit = ++navigation.current;
     try {
@@ -330,9 +161,8 @@ export function App() {
       setSelection(view.selection ?? data?.settings.defaults);
       setPage("chat");
       setText("");
-      follow.current = true;
     } catch (error) {
-      setError(String(error));
+      notifyError(String(error));
     }
   }
   function newConversation() {
@@ -342,7 +172,6 @@ export function App() {
     setSelection(data?.settings.defaults);
     setText("");
     setPage("chat");
-    follow.current = true;
   }
   async function settings(patch: Partial<Settings>) {
     const result = await api.invoke("settings", patch);
@@ -350,20 +179,19 @@ export function App() {
       previous ? { ...previous, settings: result } : previous,
     );
   }
-  async function send() {
-    if (!selection || !text.trim() || sending || busy) return;
+  async function sendText(nextText: string) {
+    if (!selection || !nextText.trim() || sending || busy) return;
     const submissionKey = current ?? draftId;
     if (submissionLocks.current.has(submissionKey)) return;
     submissionLocks.current.add(submissionKey);
     setPendingSends((previous) => new Set(previous).add(submissionKey));
     const visit = navigation.current;
-    setError("");
-    follow.current = true;
+    setNotice(undefined);
     try {
       const view = await api.invoke("send", {
         conversationId: current,
         requestId: crypto.randomUUID(),
-        text,
+        text: nextText,
         selection,
       });
       acceptView(view);
@@ -373,7 +201,7 @@ export function App() {
         await settings({ lastConversation: view.id });
       }
     } catch (error) {
-      setError(String(error));
+      notifyError(String(error));
     } finally {
       submissionLocks.current.delete(submissionKey);
       setPendingSends((previous) => {
@@ -381,6 +209,27 @@ export function App() {
         next.delete(submissionKey);
         return next;
       });
+    }
+  }
+  async function changeModel(next: Selection) {
+    setSelection(next);
+    if (!current) return;
+    try {
+      const view = await api.invoke("model", { id: current, selection: next });
+      acceptView(view);
+    } catch (error) {
+      notifyError(String(error));
+    }
+  }
+  async function cancelCurrent() {
+    if (!currentView?.runId) return;
+    try {
+      await api.invoke("cancel", {
+        conversationId: currentView.id,
+        runId: currentView.runId,
+      });
+    } catch (nextError) {
+      notifyError(String(nextError));
     }
   }
   useEffect(() => {
@@ -508,7 +357,8 @@ export function App() {
             save={settings}
             refresh={refresh}
             onBack={() => setPage("chat")}
-            onError={setError}
+            onError={notifyError}
+            onSuccess={notifySuccess}
           />
         ) : (
           <>
@@ -527,132 +377,56 @@ export function App() {
                 </span>
               )}
             </header>
-            <div
-              className="message-scroll"
-              ref={scroll}
-              onScroll={() => {
-                const el = scroll.current;
-                if (el)
-                  follow.current =
-                    el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+            <AgentThread
+              key={current ?? draftId}
+              view={currentView}
+              canSend={!!availableModel?.available && !sending}
+              draft={text}
+              onDraftLoaded={() => setText("")}
+              onSend={sendText}
+              onCancel={cancelCurrent}
+              modelMenu={{
+                data,
+                selection,
+                onChange: changeModel,
+                onManage: () => setPage("settings"),
               }}
-            >
-              {!currentView?.messages.length ? (
-                <div className="welcome">
-                  <span className="eyebrow">一点想法，一起完成</span>
-                  <h2>今天，我们从哪里开始？</h2>
-                </div>
-              ) : (
-                <div className="messages">
-                  {currentView.messages.map((message) => (
-                    <Message key={message.id} message={message} />
-                  ))}
-                  {busy && (
-                    <div className="working-indicator">
-                      <LoaderCircle size={15} className="spin" />
-                      {labels[currentView.phase]}…
-                    </div>
-                  )}
-                  {currentView.error && (
-                    <div className="error-panel">
-                      <strong>这次运行未完成</strong>
-                      <p>{currentView.error}</p>
-                      <button
-                        onClick={() =>
-                          setText(
-                            [...currentView.messages]
-                              .reverse()
-                              .find((m) => m.role === "user")?.text ?? "",
-                          )
-                        }
-                      >
-                        编辑后重试
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="composer-wrap">
-              <div className="composer">
-                <textarea
-                  aria-label="消息"
-                  placeholder={
-                    availableModel?.available
-                      ? "描述你的任务，也可以附上本地文件路径…"
-                      : "先在设置中配置模型，即可开始工作…"
-                  }
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" &&
-                      !event.shiftKey &&
-                      !event.nativeEvent.isComposing
-                    ) {
-                      event.preventDefault();
-                      void send();
-                    }
-                  }}
-                />
-                <div className="composer-footer">
-                  <span>
-                    <span className="status-dot" />
-                    {availableModel?.available
-                      ? availableModel.name
-                      : "尚未配置模型"}
-                  </span>
-                  {busy ? (
-                    <button
-                      className="send stop"
-                      aria-label="停止运行"
-                      disabled={currentView?.phase === "stopping"}
-                      onClick={() =>
-                        currentView?.runId &&
-                        void api
-                          .invoke("cancel", {
-                            conversationId: currentView.id,
-                            runId: currentView.runId,
-                          })
-                          .catch((e) => setError(String(e)))
-                      }
-                    >
-                      <Square size={16} />
-                    </button>
-                  ) : (
-                    <button
-                      className="send"
-                      aria-label="发送消息"
-                      disabled={
-                        sending || !text.trim() || !availableModel?.available
-                      }
-                      onClick={() => void send()}
-                    >
-                      {sending ? (
-                        <LoaderCircle className="spin" size={18} />
-                      ) : (
-                        <ArrowUp size={19} />
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="composer-note">
-                Enter 发送 · Shift + Enter 换行
-                <span>本地工具以你的系统用户权限运行</span>
-              </div>
-            </div>
+            />
           </>
         )}
       </main>
-      {error && (
-        <div role="alert" className="toast">
-          <ShieldAlert size={17} />
-          <span>{error.replace(/^Error: /, "")}</span>
+      {notice && (
+        <div
+          role={notice.type === "error" ? "alert" : "status"}
+          className={`toast ${notice.type}`}
+        >
+          {notice.type === "error" ? (
+            <ShieldAlert size={17} />
+          ) : (
+            <CheckCircle2 size={17} />
+          )}
+          <span>
+            {notice.type === "error" &&
+            /模型尚未配置|模型.*不可用/.test(notice.text)
+              ? "请先选择并连接一个可用模型。"
+              : notice.text.replace(/^Error: /, "")}
+          </span>
+          {notice.type === "error" &&
+            /模型尚未配置|模型.*不可用/.test(notice.text) && (
+              <button
+                className="toast-action"
+                onClick={() => {
+                  setPage("settings");
+                  setNotice(undefined);
+                }}
+              >
+                前往设置
+              </button>
+            )}
           <button
             className="icon"
-            aria-label="关闭错误"
-            onClick={() => setError("")}
+            aria-label="关闭提示"
+            onClick={() => setNotice(undefined)}
           >
             <X size={16} />
           </button>
@@ -696,7 +470,7 @@ export function App() {
                     void api
                       .invoke("dismissRecovery", { runId: item.runId })
                       .then(refresh)
-                      .catch((e) => setError(String(e)))
+                      .catch((e) => notifyError(String(e)))
                   }
                 >
                   已核对，清除此恢复记录
@@ -747,7 +521,7 @@ export function App() {
                     setDialog(undefined);
                     await refresh();
                   })
-                  .catch((e) => setError(String(e)))
+                  .catch((e) => notifyError(String(e)))
               }
             >
               {dialog.type === "delete" ? "永久删除" : "保存名称"}
@@ -784,95 +558,30 @@ function Modal({
     </dialog>
   );
 }
-function ModelPicker({
-  data,
-  value,
-  disabled,
-  onChange,
+function PathRow({
+  label,
+  path,
+  onOpen,
 }: {
-  data: Bootstrap;
-  value?: Selection;
-  disabled?: boolean;
-  onChange: (value: Selection) => void;
+  label: string;
+  path: string;
+  onOpen: () => void;
 }) {
-  const provider = data.providers.find((p) => p.id === value?.provider);
-  const model = provider?.models.find((m) => m.id === value?.model);
   return (
-    <div className="model-picker">
-      <Cpu size={15} />
-      <select
-        aria-label="模型服务商"
-        value={value?.provider ?? ""}
-        disabled={disabled}
-        onChange={(e) => {
-          const p = data.providers.find((p) => p.id === e.target.value)!;
-          const m = p.models.find((m) => m.available) ?? p.models[0];
-          onChange({
-            provider: p.id,
-            model: m.id,
-            thinking: m.levels.includes("medium") ? "medium" : m.levels[0],
-          });
-        }}
-      >
-        <option value="" disabled>
-          选择服务商
-        </option>
-        {value && !provider && (
-          <option value={value.provider}>{value.provider} · 已不可用</option>
-        )}
-        {data.providers.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-            {p.configured ? "" : " · 未配置"}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="模型"
-        value={value?.model ?? ""}
-        disabled={disabled || !provider}
-        onChange={(e) => {
-          const m = provider!.models.find((m) => m.id === e.target.value)!;
-          onChange({
-            provider: provider!.id,
-            model: m.id,
-            thinking: m.levels.includes(value!.thinking)
-              ? value!.thinking
-              : m.levels[0],
-          });
-        }}
-      >
-        <option value="" disabled>
-          选择模型
-        </option>
-        {value && !model && (
-          <option value={value.model}>{value.model} · 请重新选择</option>
-        )}
-        {provider?.models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.name}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="推理等级"
-        value={value?.thinking ?? "off"}
-        disabled={disabled || !model}
-        onChange={(e) =>
-          value &&
-          onChange({
-            ...value,
-            thinking: e.target.value as Selection["thinking"],
-          })
-        }
-      >
-        {(model?.levels ?? ["off"]).map((level) => (
-          <option key={level} value={level}>
-            推理 · {thinkingLabels[level]}
-          </option>
-        ))}
-      </select>
-    </div>
+    <>
+      <dt>{label}</dt>
+      <dd>
+        <span>{path}</span>
+        <button
+          className="icon"
+          aria-label={`在文件管理器中打开${label}`}
+          title="在文件管理器中打开"
+          onClick={onOpen}
+        >
+          <FolderOpen size={13} />
+        </button>
+      </dd>
+    </>
   );
 }
 
@@ -882,12 +591,14 @@ function SettingsPage({
   refresh,
   onBack,
   onError,
+  onSuccess,
 }: {
   data: Bootstrap;
   save: (patch: Partial<Settings>) => Promise<void>;
   refresh: () => Promise<Bootstrap>;
   onBack: () => void;
   onError: (error: string) => void;
+  onSuccess: (message: string) => void;
 }) {
   const [selectedProvider, setSelectedProvider] = useState(
     data.settings.defaults?.provider ??
@@ -901,9 +612,12 @@ function SettingsPage({
     prompt?: AuthStep;
   }>();
   const [answer, setAnswer] = useState("");
-  const [status, setStatus] = useState("");
   const [testing, setTesting] = useState(false);
   const [query, setQuery] = useState("");
+  const [removeCredential, setRemoveCredential] = useState<{
+    id: string;
+    name: string;
+  }>();
   const [azure, setAzure] = useState({
     baseUrl: "",
     resource: "",
@@ -941,7 +655,6 @@ function SettingsPage({
     const loginId = crypto.randomUUID();
     setAuth({ loginId, steps: [] });
     setAnswer("");
-    setStatus("");
     try {
       await api.invoke("login", { provider: provider.id, type, loginId });
       const next = await refresh();
@@ -953,7 +666,7 @@ function SettingsPage({
           model: m.id,
           thinking: m.levels.includes("medium") ? "medium" : m.levels[0],
         });
-      setStatus("认证成功，凭据已加密保存");
+      onSuccess("认证成功，凭据已加密保存");
       setAuth(undefined);
     } catch (error) {
       setAuth(undefined);
@@ -974,24 +687,53 @@ function SettingsPage({
       </header>
       <div className="settings-scroll">
         <div className="settings-body">
-          <section>
+          <section id="model-service">
             <h2>模型服务</h2>
             <p className="section-description">
               连接你信任的模型。凭据由操作系统加密，只在本机主进程中使用。
             </p>
             <div className="provider-layout">
               <div className="provider-list">
-                <input
-                  aria-label="查找服务商"
-                  placeholder="查找服务商…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                {data.providers
+                <div className="provider-list-head">
+                  <span>服务商</span>
+                  <button
+                    className="ghost small"
+                    title="重新检测所有服务商的本地凭据是否已生效"
+                    onClick={() =>
+                      void refresh()
+                        .then(() => onSuccess("已配置状态已刷新"))
+                        .catch((e) => onError(String(e)))
+                    }
+                  >
+                    <RefreshCw size={12} />
+                    刷新
+                  </button>
+                </div>
+                <div className="search-input">
+                  <input
+                    aria-label="查找服务商"
+                    placeholder="查找服务商…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                  {query && (
+                    <button
+                      className="icon clear"
+                      aria-label="清除搜索"
+                      onClick={() => setQuery("")}
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                {[...data.providers]
                   .filter((p) =>
                     `${p.name} ${p.id}`
                       .toLowerCase()
                       .includes(query.toLowerCase()),
+                  )
+                  .sort(
+                    (a, b) => Number(b.configured) - Number(a.configured),
                   )
                   .map((p) => (
                     <button
@@ -1022,11 +764,9 @@ function SettingsPage({
                           provider.configured ? "badge configured" : "badge"
                         }
                       >
+                        {provider.configured && <CheckCircle2 size={11} />}
                         {provider.configured ? "已配置" : "未配置"}
                       </span>
-                    </div>
-                    <div className="verification">
-                      Pi 内置 · WorkLens 尚未实测
                     </div>
                     {provider.credentialError && (
                       <p role="alert" className="error">
@@ -1040,63 +780,90 @@ function SettingsPage({
                         {provider.connection.message}
                       </p>
                     )}
-                    <p className="provider-help">
-                      认证方式由 Pi
-                      提供。选择下方方式，按提示完成配置。替换凭据时请重新输入。
+                    <h4 className="detail-label">认证方式</h4>
+                    <p className="subtle auth-methods-hint">
+                      {provider.methods.length > 1
+                        ? "以下方式二选一即可，无需同时配置。"
+                        : "选择以下方式完成连接。"}
                     </p>
                     <div className="auth-methods">
-                      {provider.methods.map((method) =>
-                        method.interactive ? (
-                          <button
-                            key={method.type}
-                            disabled={!!auth}
-                            onClick={() => void login(method.type)}
-                          >
-                            {method.type === "oauth" ? "登录" : "配置"} ·{" "}
-                            {method.name}
-                          </button>
-                        ) : (
-                          <div key={method.type} className="ambient">
-                            <strong>{method.name}</strong>
-                            <p>
-                              此服务使用外部环境凭据。配置服务商要求的系统环境或凭据文件后，点击刷新状态。
-                            </p>
-                          </div>
-                        ),
-                      )}
+                      {[...provider.methods]
+                        .sort(
+                          (a, b) => Number(b.interactive) - Number(a.interactive),
+                        )
+                        .map((method, index) => (
+                          <Fragment key={method.type}>
+                            {index > 0 && (
+                              <div className="auth-divider">或</div>
+                            )}
+                            {method.interactive ? (
+                              <button
+                                disabled={!!auth}
+                                onClick={() => void login(method.type)}
+                              >
+                                {method.type === "oauth" ? "登录" : "配置"} ·{" "}
+                                {method.name}
+                              </button>
+                            ) : (
+                              <div className="ambient">
+                                <strong>{method.name}（可选替代方式）</strong>
+                                <p>
+                                  适合已经在系统环境变量或凭据文件中配置好密钥的场景。设置好后点击左侧"刷新"检测。
+                                </p>
+                              </div>
+                            )}
+                          </Fragment>
+                        ))}
                     </div>
+                    <h4 className="detail-label">操作</h4>
                     <div className="actions">
                       <button
-                        onClick={() =>
-                          void refresh()
-                            .then(() => setStatus("模型与认证状态已刷新"))
-                            .catch((e) => onError(String(e)))
-                        }
-                      >
-                        刷新状态
-                      </button>
-                      <button
-                        onClick={() =>
+                        title="重新从该服务商拉取最新的可用模型列表"
+                        onClick={() => {
+                          const beforeIds = new Set(
+                            provider.models
+                              .filter((m) => m.available)
+                              .map((m) => m.id),
+                          );
                           void api
                             .invoke("refreshModels", { provider: provider.id })
-                            .then((message) => {
-                              setStatus(message);
-                              return refresh();
+                            .then(() => refresh())
+                            .then((next) => {
+                              const updated = next.providers.find(
+                                (p) => p.id === provider.id,
+                              );
+                              const afterIds = new Set(
+                                (updated?.models ?? [])
+                                  .filter((m) => m.available)
+                                  .map((m) => m.id),
+                              );
+                              const added = [...afterIds].filter(
+                                (id) => !beforeIds.has(id),
+                              ).length;
+                              const removed = [...beforeIds].filter(
+                                (id) => !afterIds.has(id),
+                              ).length;
+                              onSuccess(
+                                `现有 ${afterIds.size} 个可用模型` +
+                                  (added || removed
+                                    ? `（新增 ${added} 个，减少 ${removed} 个）`
+                                    : "（无变化）"),
+                              );
                             })
-                            .catch((e) => onError(String(e)))
-                        }
+                            .catch((e) => onError(String(e)));
+                        }}
                       >
-                        刷新模型目录
+                        <RefreshCw size={14} />
+                        重新获取模型列表
                       </button>
                       {(provider.configured || provider.credentialError) && (
                         <button
                           className="danger"
                           onClick={() =>
-                            void api
-                              .invoke("logout", { provider: provider.id })
-                              .then(refresh)
-                              .then(() => setStatus("已删除此服务的本地凭据"))
-                              .catch((e) => onError(String(e)))
+                            setRemoveCredential({
+                              id: provider.id,
+                              name: provider.name,
+                            })
                           }
                         >
                           移除凭据
@@ -1151,7 +918,7 @@ function SettingsPage({
                           onClick={() =>
                             void api
                               .invoke("azure", azure)
-                              .then(() => setStatus("Azure 配置已加密保存"))
+                              .then(() => onSuccess("Azure 配置已加密保存"))
                               .catch((e) => onError(String(e)))
                           }
                         >
@@ -1167,13 +934,18 @@ function SettingsPage({
           <section>
             <h2>默认模型</h2>
             <p className="section-description">
-              用于新会话。每个会话都可以独立选择模型与推理等级。
+              用于新会话。每个会话都可以在对话输入框旁独立切换模型与推理等级。
             </p>
             <div className="settings-card">
-              <ModelPicker
+              <ModelMenu
                 data={data}
                 value={defaults}
                 onChange={setDefaults}
+                onManage={() =>
+                  document
+                    .getElementById("model-service")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
               />
               {model && (
                 <div className="model-capabilities">
@@ -1191,7 +963,7 @@ function SettingsPage({
                   onClick={() =>
                     defaults &&
                     void save({ defaults })
-                      .then(() => setStatus("默认模型已保存"))
+                      .then(() => onSuccess("默认模型已保存"))
                       .catch((e) => onError(String(e)))
                   }
                 >
@@ -1203,10 +975,9 @@ function SettingsPage({
                   onClick={() => {
                     if (!defaults) return;
                     setTesting(true);
-                    setStatus("正在执行受限文本连接测试…");
                     void api
                       .invoke("test", defaults)
-                      .then(setStatus)
+                      .then(onSuccess)
                       .catch((e) => onError(String(e)))
                       .finally(() => setTesting(false));
                   }}
@@ -1245,30 +1016,42 @@ function SettingsPage({
           </section>
           <section>
             <h2>本地数据与隐私</h2>
+            <p className="section-description">
+              所有对话记录、模型凭据和设置都只保存在本机磁盘上，不会上传到任何服务器。
+            </p>
             <div className="settings-card data-info">
               <dl>
-                <dt>数据根目录</dt>
-                <dd>{data.paths.root}</dd>
-                <dt>初始运行目录</dt>
-                <dd>{data.paths.runtime}</dd>
-                <dt>会话历史</dt>
-                <dd>{data.paths.sessions}</dd>
-                <dt>设置与加密凭据</dt>
-                <dd>{data.paths.userData}</dd>
+                {(
+                  [
+                    ["数据根目录", "root"],
+                    ["初始运行目录", "runtime"],
+                    ["会话历史", "sessions"],
+                    ["设置与加密凭据", "userData"],
+                  ] as const
+                ).map(([label, which]) => (
+                  <PathRow
+                    key={which}
+                    label={label}
+                    path={data.paths[which]}
+                    onOpen={() =>
+                      void api
+                        .invoke("showPath", { which })
+                        .catch((e) => onError(String(e)))
+                    }
+                  />
+                ))}
               </dl>
             </div>
-            {data.diagnostics.map((diagnostic, i) => (
-              <p key={i} className="error">
-                {diagnostic}
-              </p>
-            ))}
+            {data.diagnostics.length > 0 && (
+              <div className="data-diagnostics">
+                {data.diagnostics.map((diagnostic, i) => (
+                  <p key={i} className="error">
+                    {diagnostic}
+                  </p>
+                ))}
+              </div>
+            )}
           </section>
-          {status && (
-            <div role="status" className="settings-status">
-              <CheckCircle2 size={17} />
-              {status}
-            </div>
-          )}
         </div>
       </div>
       {auth && (
@@ -1357,6 +1140,37 @@ function SettingsPage({
               等待认证流程…
             </p>
           )}
+        </Modal>
+      )}
+      {removeCredential && (
+        <Modal
+          title="移除本地凭据"
+          onClose={() => setRemoveCredential(undefined)}
+        >
+          <p>
+            将删除「{removeCredential.name}
+            」在本机保存的加密凭据，需要重新登录或重新配置才能再次使用该服务。不会影响其他已配置的服务商。
+          </p>
+          <div className="actions">
+            <button onClick={() => setRemoveCredential(undefined)}>
+              取消
+            </button>
+            <button
+              className="danger-button"
+              onClick={() =>
+                void api
+                  .invoke("logout", { provider: removeCredential.id })
+                  .then(refresh)
+                  .then(() => {
+                    onSuccess(`已删除「${removeCredential.name}」的本地凭据`);
+                    setRemoveCredential(undefined);
+                  })
+                  .catch((e) => onError(String(e)))
+              }
+            >
+              确认移除
+            </button>
+          </div>
         </Modal>
       )}
     </div>

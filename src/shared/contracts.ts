@@ -164,6 +164,10 @@ export interface Requests {
   external: { input: { url: string }; output: void };
   dismissRecovery: { input: { runId: string }; output: void };
   refreshModels: { input: { provider: string }; output: string };
+  showPath: {
+    input: { which: "root" | "runtime" | "sessions" | "userData" };
+    output: void;
+  };
 }
 export interface WorkLensAPI {
   invoke<K extends keyof Requests>(

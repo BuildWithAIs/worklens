@@ -158,6 +158,9 @@ else {
               case "external":
                 await shell.openExternal(externalUrl(input.url));
                 break;
+              case "showPath":
+                await shell.openPath(paths[input.which as keyof typeof paths]);
+                break;
               case "dismissRecovery":
                 await agents!.dismissRecovery(input.runId);
                 break;
