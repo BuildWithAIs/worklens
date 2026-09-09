@@ -1,8 +1,8 @@
 # WorkLens
 
-WorkLens is a working agent built to serve employees at relatively large enterprises and to genuinely "understand" them.
+English | [简体中文](README.zh-CN.md)
 
-[中文说明](README.zh-CN.md)
+WorkLens is a working agent built to serve employees at relatively large enterprises and to genuinely "understand" them.
 
 Built with Electron, React, TypeScript, Tailwind CSS, and Pi.
 

@@ -1,5 +1,7 @@
 # WorkLens
 
+[English](README.md) | 简体中文
+
 WorkLens 是一个 working agent，旨在开发一个适合在相对大型的企业工作的员工并且非常“懂”他们的 Agent。
 
 基于 Electron、React、TypeScript、Tailwind CSS 和 Pi 进行开发。
