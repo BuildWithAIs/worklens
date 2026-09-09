@@ -16,10 +16,16 @@ const thinkingLabels: Record<Thinking, string> = {
   max: "最高",
 };
 
-function availableModels(data: Bootstrap) {
+function availableModels(data: Bootstrap, value?: Selection) {
+  const hidden = new Set(data.settings.hiddenModels ?? []);
   return data.providers.flatMap((provider) =>
     provider.models
-      .filter((model) => model.available)
+      .filter(
+        (model) =>
+          model.available &&
+          (!hidden.has(`${provider.id}/${model.id}`) ||
+            (value?.provider === provider.id && value?.model === model.id)),
+      )
       .map((model) => ({ ...model, providerId: provider.id, providerName: provider.name })),
   );
 }
@@ -37,7 +43,7 @@ export function ModelMenu({
   onChange: (value: Selection) => void;
   onManage: () => void;
 }) {
-  const models = availableModels(data);
+  const models = availableModels(data, value);
   const current = models.find(
     (m) => m.id === value?.model && m.providerId === value?.provider,
   );
@@ -112,7 +118,7 @@ export function ModelMenu({
           </div>
         )}
         <button className="model-menu-manage" onClick={onManage}>
-          管理模型服务
+          管理模型
           <ChevronRight size={13} />
         </button>
       </PopoverContent>

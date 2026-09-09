@@ -33,50 +33,61 @@ export class ProviderService {
       signal: AbortSignal.timeout(15000),
     });
     const keys = new Set(available.map((m) => `${m.provider}/${m.id}`));
-    return this.runtime
-      .getProviders()
-      .filter((provider) => this.runtime.getModels(provider.id).length > 0)
-      .map((provider) => ({
-        id: provider.id,
-        name: provider.name,
-        configured: this.runtime.hasConfiguredAuth(provider.id),
-        credentialError: this.credentials.diagnosticFor(provider.id),
-        connection: this.connections.get(provider.id),
-        methods: [
-          ...(provider.auth.apiKey
-            ? [
-                {
-                  type: "api_key" as const,
-                  name: provider.auth.apiKey.name,
-                  interactive: !!provider.auth.apiKey.login,
-                },
-              ]
-            : []),
-          ...(provider.auth.oauth
-            ? [
-                {
-                  type: "oauth" as const,
-                  name:
-                    provider.auth.oauth.loginLabel ?? provider.auth.oauth.name,
-                  interactive: true,
-                },
-              ]
-            : []),
-        ],
-        models: this.runtime.getModels(provider.id).map((model) => ({
-          id: model.id,
-          name: model.name,
-          provider: model.provider,
-          reasoning: !!model.reasoning,
-          image: model.input.includes("image"),
-          contextWindow: model.contextWindow,
-          levels: getSupportedThinkingLevels(model),
-          available: keys.has(`${model.provider}/${model.id}`),
-        })),
-      }));
+    return Promise.all(
+      this.runtime
+        .getProviders()
+        .filter((provider) => this.runtime.getModels(provider.id).length > 0)
+        .map(async (provider) => {
+          const credential = await this.credentials.read(provider.id);
+          return {
+            id: provider.id,
+            name: provider.name,
+            configured: this.runtime.hasConfiguredAuth(provider.id),
+            credentialType: credential?.type,
+            credentialHint:
+              credential?.type === "api_key" && credential.key
+                ? `••••${credential.key.slice(-4)}`
+                : undefined,
+            credentialError: this.credentials.diagnosticFor(provider.id),
+            connection: this.connections.get(provider.id),
+            methods: [
+              ...(provider.auth.apiKey
+                ? [
+                    {
+                      type: "api_key" as const,
+                      name: provider.auth.apiKey.name,
+                      interactive: !!provider.auth.apiKey.login,
+                    },
+                  ]
+                : []),
+              ...(provider.auth.oauth
+                ? [
+                    {
+                      type: "oauth" as const,
+                      name:
+                        provider.auth.oauth.loginLabel ??
+                        provider.auth.oauth.name,
+                      interactive: true,
+                    },
+                  ]
+                : []),
+            ],
+            models: this.runtime.getModels(provider.id).map((model) => ({
+              id: model.id,
+              name: model.name,
+              provider: model.provider,
+              reasoning: !!model.reasoning,
+              image: model.input.includes("image"),
+              contextWindow: model.contextWindow,
+              levels: getSupportedThinkingLevels(model),
+              available: keys.has(`${model.provider}/${model.id}`),
+            })),
+          };
+        }),
+    );
   }
   async refreshModels(provider: string) {
-    if (!this.runtime.getProvider(provider)) throw new Error("未知服务商");
+    if (!this.runtime.getProvider(provider)) throw new Error("未知供应商");
     const result = await this.runtime.refresh({
       providers: [provider],
       allowNetwork: true,
@@ -88,7 +99,7 @@ export class ProviderService {
   }
   async login(provider: string, type: "api_key" | "oauth", loginId: string) {
     if (this.logins.has(loginId)) throw new Error("认证已在进行");
-    if (!this.runtime.getProvider(provider)) throw new Error("未知服务商");
+    if (!this.runtime.getProvider(provider)) throw new Error("未知供应商");
     const login = {
       controller: new AbortController(),
       pending: new Map<
@@ -159,6 +170,7 @@ export class ProviderService {
             });
         },
       });
+      this.connections.delete(provider);
       this.emit({
         loginId,
         type: "complete",
@@ -180,6 +192,9 @@ export class ProviderService {
   }
   cancel(loginId: string) {
     this.logins.get(loginId)?.controller.abort();
+  }
+  clearConnection(provider: string) {
+    this.connections.delete(provider);
   }
   shutdown() {
     for (const login of this.logins.values()) login.controller.abort();
@@ -239,7 +254,7 @@ export class ProviderService {
       const category = /401|403|auth|credential|key/i.test(text)
         ? "认证失败，请重新配置凭据"
         : /429|rate.?limit/i.test(text)
-          ? "服务商限流，请稍后重试"
+          ? "供应商限流，请稍后重试"
           : /timeout|abort/i.test(text)
             ? "连接超时，请检查网络或服务地址"
             : /404|model|deployment/i.test(text)

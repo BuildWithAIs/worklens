@@ -12,9 +12,11 @@ import {
   LoaderCircle,
   RefreshCw,
   FolderOpen,
+  Eye,
+  EyeOff,
+  Zap,
 } from "lucide-react";
 import { AgentThread } from "@/components/worklens/AgentThread";
-import { ModelMenu } from "@/components/worklens/ModelMenu";
 import type {
   AuthStep,
   Bootstrap,
@@ -213,6 +215,7 @@ export function App() {
   }
   async function changeModel(next: Selection) {
     setSelection(next);
+    void settings({ defaults: next }).catch(() => {});
     if (!current) return;
     try {
       const view = await api.invoke("model", { id: current, selection: next });
@@ -389,7 +392,16 @@ export function App() {
                 data,
                 selection,
                 onChange: changeModel,
-                onManage: () => setPage("settings"),
+                onManage: () => {
+                  setPage("settings");
+                  requestAnimationFrame(() =>
+                    requestAnimationFrame(() =>
+                      document
+                        .getElementById("models")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                    ),
+                  );
+                },
               }}
             />
           </>
@@ -605,15 +617,16 @@ function SettingsPage({
       data.providers.find((p) => p.configured)?.id ??
       data.providers[0]?.id,
   );
-  const [defaults, setDefaults] = useState(data.settings.defaults);
   const [auth, setAuth] = useState<{
     loginId: string;
     steps: AuthStep[];
     prompt?: AuthStep;
   }>();
   const [answer, setAnswer] = useState("");
-  const [testing, setTesting] = useState(false);
+  const cancelledLogins = useRef(new Set<string>());
+  const [testingKeys, setTestingKeys] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [modelQuery, setModelQuery] = useState("");
   const [removeCredential, setRemoveCredential] = useState<{
     id: string;
     name: string;
@@ -625,9 +638,10 @@ function SettingsPage({
     deployments: "",
   });
   const provider = data.providers.find((p) => p.id === selectedProvider);
-  const model = data.providers
-    .find((p) => p.id === defaults?.provider)
-    ?.models.find((m) => m.id === defaults?.model);
+  const modelProviders = data.providers.filter(
+    (p) => p.configured || p.models.some((m) => m.available),
+  );
+  const hiddenModelSet = new Set(data.settings.hiddenModels ?? []);
   useEffect(
     () =>
       api.onAuth((step) => {
@@ -646,7 +660,10 @@ function SettingsPage({
   );
   useEffect(
     () => () => {
-      if (auth) void api.invoke("authCancel", { loginId: auth.loginId });
+      if (auth) {
+        cancelledLogins.current.add(auth.loginId);
+        void api.invoke("authCancel", { loginId: auth.loginId });
+      }
     },
     [auth?.loginId],
   );
@@ -660,16 +677,42 @@ function SettingsPage({
       const next = await refresh();
       const p = next.providers.find((p) => p.id === provider.id);
       const m = p?.models.find((m) => m.available);
-      if (!defaults && m)
-        setDefaults({
-          provider: provider.id,
-          model: m.id,
-          thinking: m.levels.includes("medium") ? "medium" : m.levels[0],
+      if (!next.settings.defaults && m)
+        await save({
+          defaults: {
+            provider: provider.id,
+            model: m.id,
+            thinking: m.levels.includes("medium") ? "medium" : m.levels[0],
+          },
         });
-      onSuccess("认证成功，凭据已加密保存");
+      onSuccess("凭据已加密保存");
       setAuth(undefined);
     } catch (error) {
       setAuth(undefined);
+      if (!cancelledLogins.current.delete(loginId)) onError(String(error));
+    }
+  }
+  async function refreshModels() {
+    if (!provider) return;
+    const beforeIds = new Set(
+      provider.models.filter((m) => m.available).map((m) => m.id),
+    );
+    try {
+      await api.invoke("refreshModels", { provider: provider.id });
+      const next = await refresh();
+      const updated = next.providers.find((p) => p.id === provider.id);
+      const afterIds = new Set(
+        (updated?.models ?? []).filter((m) => m.available).map((m) => m.id),
+      );
+      const added = [...afterIds].filter((id) => !beforeIds.has(id)).length;
+      const removed = [...beforeIds].filter((id) => !afterIds.has(id)).length;
+      onSuccess(
+        `现有 ${afterIds.size} 个可用模型` +
+          (added || removed
+            ? `（新增 ${added} 个，减少 ${removed} 个）`
+            : "（无变化）"),
+      );
+    } catch (error) {
       onError(String(error));
     }
   }
@@ -679,29 +722,26 @@ function SettingsPage({
         <button className="icon" aria-label="返回对话" onClick={onBack}>
           <ArrowLeft size={20} />
         </button>
-        <div>
-          <span className="eyebrow">按你的习惯工作</span>
-          <h1>设置</h1>
-        </div>
+        <h1>设置</h1>
         <span className="version">v{data.version}</span>
       </header>
       <div className="settings-scroll">
         <div className="settings-body">
           <section id="model-service">
-            <h2>模型服务</h2>
+            <h2>模型供应商</h2>
             <p className="section-description">
-              连接你信任的模型。凭据由操作系统加密，只在本机主进程中使用。
+              连接你信任的供应商，凭据由操作系统加密，仅在本机主进程中使用。
             </p>
             <div className="provider-layout">
               <div className="provider-list">
                 <div className="provider-list-head">
-                  <span>服务商</span>
+                  <span>供应商</span>
                   <button
                     className="ghost small"
-                    title="重新检测所有服务商的本地凭据是否已生效"
+                    title="重新加载供应商列表"
                     onClick={() =>
                       void refresh()
-                        .then(() => onSuccess("已配置状态已刷新"))
+                        .then(() => onSuccess("供应商列表已刷新"))
                         .catch((e) => onError(String(e)))
                     }
                   >
@@ -711,8 +751,8 @@ function SettingsPage({
                 </div>
                 <div className="search-input">
                   <input
-                    aria-label="查找服务商"
-                    placeholder="查找服务商…"
+                    aria-label="查找供应商"
+                    placeholder="查找供应商…"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
@@ -750,23 +790,23 @@ function SettingsPage({
                 {provider && (
                   <>
                     <div className="provider-heading">
-                      <div className="provider-monogram">
-                        {provider.name.slice(0, 1)}
-                      </div>
                       <div>
                         <h3>{provider.name}</h3>
-                        <span className="subtle">
+                        <span className="subtle model-count">
                           {provider.models.length} 个模型
+                          <button
+                            className="ghost small"
+                            title="重新从该供应商拉取最新的可用模型列表"
+                            onClick={() => void refreshModels()}
+                          >
+                            <RefreshCw size={11} />
+                            刷新
+                          </button>
                         </span>
                       </div>
-                      <span
-                        className={
-                          provider.configured ? "badge configured" : "badge"
-                        }
-                      >
-                        {provider.configured && <CheckCircle2 size={11} />}
-                        {provider.configured ? "已配置" : "未配置"}
-                      </span>
+                      {!provider.configured && (
+                        <span className="badge">未配置</span>
+                      )}
                     </div>
                     {provider.credentialError && (
                       <p role="alert" className="error">
@@ -774,18 +814,44 @@ function SettingsPage({
                       </p>
                     )}
                     {provider.connection && (
-                      <p
-                        className={provider.connection.ok ? "subtle" : "error"}
+                      <div
+                        className={
+                          provider.connection.ok
+                            ? "connection-note"
+                            : "connection-note error"
+                        }
                       >
-                        {provider.connection.message}
-                      </p>
+                        <p>
+                          <span className="connection-note-time">
+                            上次测试于{" "}
+                            {new Date(
+                              provider.connection.checkedAt,
+                            ).toLocaleTimeString("zh-CN", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            ：
+                          </span>
+                          {provider.connection.message}
+                        </p>
+                        <button
+                          className="icon"
+                          aria-label="清除测试结果"
+                          title="清除测试结果"
+                          onClick={() =>
+                            void api
+                              .invoke("clearConnection", {
+                                provider: provider.id,
+                              })
+                              .then(() => refresh())
+                              .catch((e) => onError(String(e)))
+                          }
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
                     )}
-                    <h4 className="detail-label">认证方式</h4>
-                    <p className="subtle auth-methods-hint">
-                      {provider.methods.length > 1
-                        ? "以下方式二选一即可，无需同时配置。"
-                        : "选择以下方式完成连接。"}
-                    </p>
+                    <h4 className="detail-label">凭据</h4>
                     <div className="auth-methods">
                       {[...provider.methods]
                         .sort(
@@ -796,7 +862,37 @@ function SettingsPage({
                             {index > 0 && (
                               <div className="auth-divider">或</div>
                             )}
-                            {method.interactive ? (
+                            {method.interactive &&
+                            method.type === provider.credentialType ? (
+                              <div className="configured-method">
+                                <span>
+                                  <CheckCircle2 size={14} />
+                                  {method.name}
+                                </span>
+                                <button
+                                  className="icon"
+                                  aria-label={"重新配置 " + method.name}
+                                  title="重新配置"
+                                  disabled={!!auth}
+                                  onClick={() => void login(method.type)}
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button
+                                  className="icon danger"
+                                  aria-label={"移除 " + method.name}
+                                  title="移除凭据"
+                                  onClick={() =>
+                                    setRemoveCredential({
+                                      id: provider.id,
+                                      name: provider.name,
+                                    })
+                                  }
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ) : method.interactive ? (
                               <button
                                 disabled={!!auth}
                                 onClick={() => void login(method.type)}
@@ -815,61 +911,28 @@ function SettingsPage({
                           </Fragment>
                         ))}
                     </div>
-                    <h4 className="detail-label">操作</h4>
-                    <div className="actions">
-                      <button
-                        title="重新从该服务商拉取最新的可用模型列表"
-                        onClick={() => {
-                          const beforeIds = new Set(
-                            provider.models
-                              .filter((m) => m.available)
-                              .map((m) => m.id),
-                          );
-                          void api
-                            .invoke("refreshModels", { provider: provider.id })
-                            .then(() => refresh())
-                            .then((next) => {
-                              const updated = next.providers.find(
-                                (p) => p.id === provider.id,
-                              );
-                              const afterIds = new Set(
-                                (updated?.models ?? [])
-                                  .filter((m) => m.available)
-                                  .map((m) => m.id),
-                              );
-                              const added = [...afterIds].filter(
-                                (id) => !beforeIds.has(id),
-                              ).length;
-                              const removed = [...beforeIds].filter(
-                                (id) => !afterIds.has(id),
-                              ).length;
-                              onSuccess(
-                                `现有 ${afterIds.size} 个可用模型` +
-                                  (added || removed
-                                    ? `（新增 ${added} 个，减少 ${removed} 个）`
-                                    : "（无变化）"),
-                              );
-                            })
-                            .catch((e) => onError(String(e)));
-                        }}
-                      >
-                        <RefreshCw size={14} />
-                        重新获取模型列表
-                      </button>
-                      {(provider.configured || provider.credentialError) && (
-                        <button
-                          className="danger"
-                          onClick={() =>
-                            setRemoveCredential({
-                              id: provider.id,
-                              name: provider.name,
-                            })
-                          }
-                        >
-                          移除凭据
-                        </button>
-                      )}
-                    </div>
+                    {(provider.credentialError ||
+                      (provider.configured &&
+                        !provider.methods.some(
+                          (m) => m.interactive && m.type === provider.credentialType,
+                        ))) && (
+                      <>
+                        <h4 className="detail-label">操作</h4>
+                        <div className="actions">
+                          <button
+                            className="danger"
+                            onClick={() =>
+                              setRemoveCredential({
+                                id: provider.id,
+                                name: provider.name,
+                              })
+                            }
+                          >
+                            移除凭据
+                          </button>
+                        </div>
+                      </>
+                    )}
                     {provider.id === "azure-openai-responses" && (
                       <details className="azure">
                         <summary>Azure 端点与部署映射</summary>
@@ -931,65 +994,149 @@ function SettingsPage({
               </div>
             </div>
           </section>
-          <section>
-            <h2>默认模型</h2>
+          <section id="models">
+            <h2>可用模型</h2>
             <p className="section-description">
-              用于新会话。每个会话都可以在对话输入框旁独立切换模型与推理等级。
+              在上面「模型供应商」里配置好的都会出现在这里，可以测试，也可以从切换器中隐藏。
             </p>
-            <div className="settings-card">
-              <ModelMenu
-                data={data}
-                value={defaults}
-                onChange={setDefaults}
-                onManage={() =>
-                  document
-                    .getElementById("model-service")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                }
-              />
-              {model && (
-                <div className="model-capabilities">
-                  <span>{model.contextWindow.toLocaleString()} 上下文</span>
-                  <span>{model.reasoning ? "支持推理" : "不支持推理"}</span>
-                  <span>
-                    {model.image ? "支持图片输入（首版仅文本）" : "文本输入"}
-                  </span>
-                </div>
-              )}
-              <div className="actions">
+            {!modelProviders.length ? (
+              <p className="subtle">
+                还没有可用模型，
                 <button
-                  className="primary"
-                  disabled={!defaults}
+                  className="link"
                   onClick={() =>
-                    defaults &&
-                    void save({ defaults })
-                      .then(() => onSuccess("默认模型已保存"))
-                      .catch((e) => onError(String(e)))
+                    document
+                      .getElementById("model-service")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
                   }
                 >
-                  <Check size={15} />
-                  保存默认模型
+                  去「模型供应商」连接一个
                 </button>
-                <button
-                  disabled={!model?.available || testing}
-                  onClick={() => {
-                    if (!defaults) return;
-                    setTesting(true);
-                    void api
-                      .invoke("test", defaults)
-                      .then(onSuccess)
-                      .catch((e) => onError(String(e)))
-                      .finally(() => setTesting(false));
-                  }}
-                >
-                  {testing && <LoaderCircle className="spin" size={15} />}
-                  测试连接
-                </button>
-              </div>
-              <p className="subtle">
-                连接测试会发送一次简短模型请求，不调用本地工具。
               </p>
-            </div>
+            ) : (
+              <>
+                <div className="search-input model-search">
+                  <input
+                    aria-label="查找模型"
+                    placeholder="按名称查找模型…"
+                    value={modelQuery}
+                    onChange={(e) => setModelQuery(e.target.value)}
+                  />
+                  {modelQuery && (
+                    <button
+                      className="icon clear"
+                      aria-label="清除搜索"
+                      onClick={() => setModelQuery("")}
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                {modelProviders
+                  .map((p) => ({
+                    ...p,
+                    models: p.models.filter((m) =>
+                      m.name.toLowerCase().includes(modelQuery.toLowerCase()),
+                    ),
+                  }))
+                  .filter((p) => p.models.length > 0)
+                  .map((p) => (
+                    <div className="settings-card model-group" key={p.id}>
+                      <div className="model-group-head">
+                        <span>{p.name}</span>
+                        <span className="subtle">
+                          {p.models.filter((m) => m.available).length}/
+                          {p.models.length} 可用
+                        </span>
+                      </div>
+                      <div className="model-rows">
+                        {p.models.map((m) => {
+                          const key = `${p.id}/${m.id}`;
+                          const isTesting = testingKeys.has(key);
+                          const hidden = hiddenModelSet.has(key);
+                          return (
+                            <div className="model-row" key={key}>
+                              <div className="model-row-info">
+                                <span className="model-row-name">
+                                  {m.name}
+                                </span>
+                                <span className="model-row-caps">
+                                  {m.contextWindow.toLocaleString()} 上下文
+                                  {m.reasoning ? " · 支持推理" : ""}
+                                  {m.image ? " · 支持图片输入" : ""}
+                                </span>
+                              </div>
+                              {!m.available && (
+                                <span className="badge">不可用</span>
+                              )}
+                              <button
+                                className="icon"
+                                disabled={!m.available || isTesting}
+                                aria-label="测试连接"
+                                title="测试连接"
+                                onClick={() => {
+                                  setTestingKeys((prev) =>
+                                    new Set(prev).add(key),
+                                  );
+                                  void api
+                                    .invoke("test", {
+                                      provider: p.id,
+                                      model: m.id,
+                                      thinking: m.levels.includes("medium")
+                                        ? "medium"
+                                        : m.levels[0],
+                                    })
+                                    .then(onSuccess)
+                                    .catch((e) => onError(String(e)))
+                                    .finally(() =>
+                                      setTestingKeys((prev) => {
+                                        const next = new Set(prev);
+                                        next.delete(key);
+                                        return next;
+                                      }),
+                                    );
+                                }}
+                              >
+                                {isTesting ? (
+                                  <LoaderCircle className="spin" size={14} />
+                                ) : (
+                                  <Zap size={14} />
+                                )}
+                              </button>
+                              <button
+                                className="icon"
+                                disabled={!m.available}
+                                aria-label={
+                                  hidden
+                                    ? "在切换器中显示此模型"
+                                    : "在切换器中隐藏此模型"
+                                }
+                                title={
+                                  hidden ? "已隐藏，点击显示" : "点击在切换器中隐藏"
+                                }
+                                onClick={() => {
+                                  const next = new Set(hiddenModelSet);
+                                  if (next.has(key)) next.delete(key);
+                                  else next.add(key);
+                                  void save({
+                                    hiddenModels: [...next],
+                                  }).catch((e) => onError(String(e)));
+                                }}
+                              >
+                                {hidden ? (
+                                  <EyeOff size={14} />
+                                ) : (
+                                  <Eye size={14} />
+                                )}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+              </>
+            )}
           </section>
           <section>
             <h2>外观</h2>
@@ -1056,8 +1203,9 @@ function SettingsPage({
       </div>
       {auth && (
         <Modal
-          title={`连接 ${provider?.name ?? "模型服务"}`}
+          title={`连接 ${provider?.name ?? "供应商"}`}
           onClose={() => {
+            cancelledLogins.current.add(auth.loginId);
             void api.invoke("authCancel", { loginId: auth.loginId });
             setAuth(undefined);
           }}
@@ -1109,6 +1257,7 @@ function SettingsPage({
                 {auth.prompt.type === "select" ? (
                   <select
                     autoFocus
+                    required
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                   >
@@ -1122,16 +1271,25 @@ function SettingsPage({
                 ) : (
                   <input
                     autoFocus
+                    required
                     type={auth.prompt.type === "secret" ? "password" : "text"}
                     autoComplete="off"
-                    placeholder={auth.prompt.placeholder}
+                    placeholder={
+                      auth.prompt.type === "secret" && provider?.credentialHint
+                        ? `当前 ${provider.credentialHint}，输入新值以替换`
+                        : auth.prompt.placeholder
+                    }
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                   />
                 )}
               </label>
-              <button className="primary" type="submit">
-                继续
+              <button
+                className="primary"
+                type="submit"
+                disabled={!answer.trim()}
+              >
+                确定
               </button>
             </form>
           ) : (
@@ -1149,7 +1307,7 @@ function SettingsPage({
         >
           <p>
             将删除「{removeCredential.name}
-            」在本机保存的加密凭据，需要重新登录或重新配置才能再次使用该服务。不会影响其他已配置的服务商。
+            」在本机保存的加密凭据，需要重新登录或重新配置才能再次使用。不会影响其他已配置的供应商。
           </p>
           <div className="actions">
             <button onClick={() => setRemoveCredential(undefined)}>

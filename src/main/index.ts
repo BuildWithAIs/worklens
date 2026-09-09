@@ -129,12 +129,16 @@ else {
                 await runtime.logout(input.provider, {
                   signal: AbortSignal.timeout(15000),
                 });
+                providers!.clearConnection(input.provider);
                 break;
               case "azure":
                 await providers!.azure(input);
                 break;
               case "test":
                 value = await providers!.test(input);
+                break;
+              case "clearConnection":
+                providers!.clearConnection(input.provider);
                 break;
               case "open":
                 value = await agents!.open(input.id);
@@ -212,6 +216,9 @@ else {
         const ownedWindow = window;
         let closing = false;
         let readyToClose = false;
+        ownedWindow.on("closed", () => {
+          if (window === ownedWindow) window = undefined;
+        });
         ownedWindow.on("close", (event) => {
           if (readyToClose) return;
           event.preventDefault();
