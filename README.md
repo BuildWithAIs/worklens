@@ -77,7 +77,7 @@ npx playwright test tests/e2e/packaged.spec.ts
 
 安装文件输出到 `release/`。构建默认不会上传、发布或自动更新应用。正式分发前需要自己的代码签名、macOS 公证和干净环境安装验收。
 
-详见 [架构决策](docs/architecture.md)、[测试与交付状态](docs/verification.md) 和 [PRD 交付核对](docs/prd-audit.md)。
+详见 [架构决策](docs/architecture.md)、[UI 技术方案与路线](docs/ui-architecture-and-roadmap.md)、[测试与交付状态](docs/verification.md) 和 [PRD 交付核对](docs/prd-audit.md)。
 
 ## 源码结构
 

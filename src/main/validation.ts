@@ -71,6 +71,9 @@ export const schemas = {
   cancel: z.object({ conversationId: id, runId: id }).strict(),
   model: z.object({ id, selection }).strict(),
   external: z.object({ url: z.string().url().max(10000) }).strict(),
+  showPath: z
+    .object({ which: z.enum(["root", "runtime", "sessions", "userData"]) })
+    .strict(),
 };
 export function externalUrl(value: string) {
   const url = new URL(value);
