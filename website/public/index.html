@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WorkLens · 让工作，从这里继续</title>
+    <meta
+      name="description"
+      content="WorkLens 是本地优先的桌面工作 Agent。连接你选择的模型，处理本地文件与任务，在独立会话中继续工作。开源，早期预览。"
+    />
+    <meta name="generator" content="Kami" />
+    <meta name="theme-color" content="#f5f4ed" />
+    <link rel="canonical" href="https://worklens.buildwithais.com/" />
+    <link rel="icon" type="image/png" href="/assets/icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="WorkLens · 让工作，从这里继续" />
+    <meta
+      property="og:description"
+      content="本地优先的桌面工作 Agent。你选择模型，让任务在自己的电脑上推进。"
+    />
+    <meta property="og:url" content="https://worklens.buildwithais.com/" />
+    <meta
+      property="og:image"
+      content="https://worklens.buildwithais.com/assets/worklens.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f5f4ed;
+        --surface: #faf9f5;
+        --ink: #20201e;
+        --muted: #605f58;
+        --line: #dedcd2;
+        --brand: #1b365d;
+        --serif:
+          Georgia, "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC",
+          "SimSun", serif;
+        --sans:
+          system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 32px;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+      }
+      a {
+        color: inherit;
+        text-underline-offset: 5px;
+      }
+      a:hover {
+        color: var(--brand);
+      }
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--brand);
+        outline-offset: 6px;
+        border-radius: 4px;
+      }
+      .skip {
+        position: absolute;
+        left: 20px;
+        top: -80px;
+        padding: 12px 20px;
+        background: var(--surface);
+        z-index: 2;
+      }
+      .skip:focus {
+        top: 12px;
+      }
+      .wrap {
+        width: min(1120px, calc(100% - 96px));
+        margin-inline: auto;
+      }
+      header {
+        min-height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line);
+        gap: 24px;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 11px;
+        text-decoration: none;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.7px;
+      }
+      .brand img {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+      }
+      nav {
+        display: flex;
+        gap: 32px;
+        align-items: center;
+        font-size: 14px;
+      }
+      nav a {
+        text-decoration: none;
+        padding-block: 12px;
+      }
+      .nav-source {
+        border-bottom: 1px solid var(--ink);
+      }
+      .hero {
+        padding: 80px 0 52px;
+        text-align: center;
+      }
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 1.8px;
+        text-transform: uppercase;
+      }
+      .eyebrow::before {
+        content: "";
+        width: 20px;
+        height: 2px;
+        background: var(--brand);
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-family: var(--serif);
+        font-size: clamp(42px, 5.8vw, 72px);
+        font-weight: 500;
+        line-height: 1.23;
+        letter-spacing: -1.5px;
+        margin: 24px 0;
+        text-wrap: balance;
+      }
+      h1 span {
+        color: var(--brand);
+      }
+      .lead {
+        max-width: 630px;
+        margin: auto;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.8;
+        text-wrap: pretty;
+      }
+      .actions {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 30px;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        padding: 12px 24px;
+        min-height: 48px;
+        border: 1px solid var(--brand);
+        border-radius: 999px;
+        text-decoration: none;
+        font-size: 14px;
+        transition:
+          background 0.18s,
+          transform 0.18s;
+      }
+      .primary {
+        color: var(--surface);
+        background: var(--brand);
+      }
+      .primary:hover {
+        background: #294b79;
+        color: var(--surface);
+        transform: translateY(-1px);
+      }
+      .secondary:hover {
+        background: #e8e6dc;
+        transform: translateY(-1px);
+      }
+      .note {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 18px;
+      }
+      figure {
+        margin: 0;
+      }
+      .product-frame {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 8px;
+        background: #e8e6dc;
+        box-shadow: 0 16px 48px #2927190a;
+      }
+      .product-frame img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 8px;
+      }
+      figcaption {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        font-size: 12px;
+        color: var(--muted);
+        padding: 16px 2px 0;
+      }
+      section.content {
+        padding-top: 88px;
+      }
+      .section-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 24px;
+        margin-bottom: 32px;
+      }
+      .overline {
+        font-size: 12px;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      h2 {
+        font-family: var(--serif);
+        font-size: 34px;
+        font-weight: 500;
+        line-height: 1.35;
+        text-wrap: balance;
+      }
+      .section-aside {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .features {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 32px;
+      }
+      .feature {
+        border-top: 1px solid var(--line);
+        padding-top: 24px;
+      }
+      .number {
+        color: var(--brand);
+        font-family: Georgia, serif;
+        font-size: 14px;
+      }
+      h3 {
+        font-size: 18px;
+        font-weight: 500;
+        margin: 16px 0 12px;
+      }
+      .feature p {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.9;
+      }
+      .start {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 40px;
+        display: grid;
+        grid-template-columns: 1fr 1.1fr;
+        gap: 48px;
+      }
+      .start p {
+        color: var(--muted);
+        font-size: 14px;
+        margin-top: 18px;
+      }
+      .start a {
+        display: inline-block;
+        margin-top: 20px;
+        font-size: 14px;
+        color: var(--brand);
+      }
+      .steps {
+        padding: 0;
+        margin: 0;
+        list-style: none;
+        counter-reset: step;
+      }
+      .steps li {
+        counter-increment: step;
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        column-gap: 16px;
+        padding: 17px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .steps li:first-child {
+        padding-top: 0;
+      }
+      .steps li:last-child {
+        border: 0;
+        padding-bottom: 0;
+      }
+      .steps li::before {
+        content: "0" counter(step);
+        color: var(--brand);
+        font:
+          14px/28px Georgia,
+          serif;
+      }
+      .steps strong {
+        display: block;
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .steps span {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .faq {
+        display: grid;
+        grid-template-columns: 0.8fr 1.2fr;
+        gap: 64px;
+      }
+      details {
+        border-bottom: 1px solid var(--line);
+      }
+      details:first-child {
+        border-top: 1px solid var(--line);
+      }
+      summary {
+        cursor: pointer;
+        padding: 20px 28px 20px 0;
+        font-size: 15px;
+        position: relative;
+        list-style: none;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      summary::after {
+        content: "+";
+        position: absolute;
+        right: 2px;
+        color: var(--brand);
+        font-size: 20px;
+        top: 14px;
+      }
+      details[open] summary::after {
+        content: "−";
+      }
+      details p {
+        color: var(--muted);
+        font-size: 14px;
+        padding-bottom: 20px;
+        line-height: 1.9;
+      }
+      footer {
+        margin-top: 88px;
+        padding: 32px 0;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+      footer .brand {
+        font-size: 18px;
+      }
+      footer p,
+      footer a:not(.brand) {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .footer-links {
+        display: flex;
+        gap: 22px;
+        margin-bottom: 4px;
+        justify-content: flex-end;
+      }
+      @media (max-width: 880px) {
+        .wrap {
+          width: calc(100% - 48px);
+        }
+        .hero {
+          padding-top: 60px;
+        }
+        section.content {
+          padding-top: 64px;
+        }
+        .features {
+          gap: 24px;
+        }
+        .start {
+          padding: 28px;
+          gap: 30px;
+        }
+        .faq {
+          gap: 30px;
+          grid-template-columns: 0.7fr 1.3fr;
+        }
+        h2 {
+          font-size: 28px;
+        }
+        footer {
+          margin-top: 64px;
+        }
+      }
+      @media (max-width: 600px) {
+        .wrap {
+          width: calc(100% - 40px);
+        }
+        header {
+          min-height: 80px;
+          gap: 14px;
+        }
+        nav {
+          gap: 18px;
+          font-size: 13px;
+        }
+        nav .desktop-link {
+          display: none;
+        }
+        .brand {
+          font-size: 20px;
+        }
+        .hero {
+          text-align: left;
+          padding: 48px 0 32px;
+        }
+        .eyebrow {
+          justify-content: flex-start;
+          font-size: 10px;
+          letter-spacing: 1.2px;
+        }
+        h1 {
+          font-size: 42px;
+          letter-spacing: -1px;
+          margin: 22px 0;
+        }
+        .lead {
+          font-size: 16px;
+        }
+        .actions {
+          justify-content: flex-start;
+          gap: 10px;
+          margin-top: 25px;
+        }
+        .button {
+          padding: 11px 18px;
+          gap: 12px;
+          font-size: 13px;
+        }
+        .note {
+          font-size: 11px;
+        }
+        .product-frame {
+          padding: 4px;
+          border-radius: 9px;
+        }
+        .product-frame img {
+          border-radius: 5px;
+        }
+        figcaption {
+          font-size: 11px;
+        }
+        figcaption span:last-child {
+          display: none;
+        }
+        section.content {
+          padding-top: 52px;
+        }
+        .section-top {
+          display: block;
+          margin-bottom: 24px;
+        }
+        .section-aside {
+          margin-top: 14px;
+          font-size: 13px;
+        }
+        h2 {
+          font-size: 28px;
+        }
+        .features,
+        .start,
+        .faq {
+          grid-template-columns: 1fr;
+          gap: 28px;
+        }
+        .feature {
+          padding-top: 18px;
+        }
+        h3 {
+          margin: 8px 0;
+        }
+        .start {
+          padding: 24px;
+          border-radius: 12px;
+        }
+        .start p {
+          margin-top: 12px;
+        }
+        footer {
+          margin-top: 52px;
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 20px;
+        }
+        .footer-links {
+          justify-content: flex-start;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        .button {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">跳转到正文</a>
+    <div class="wrap">
+      <header>
+        <a class="brand" href="/" aria-label="WorkLens 首页"
+          ><img
+            src="/assets/icon.png"
+            width="34"
+            height="34"
+            alt=""
+          />WorkLens</a
+        >
+        <nav aria-label="主导航">
+          <a class="desktop-link" href="#features">产品能力</a
+          ><a href="#start">开始使用</a
+          ><a class="nav-source" href="https://github.com/BuildWithAIs/worklens"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </nav>
+      </header>
+      <main id="main">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="eyebrow">本地优先的桌面工作 Agent</div>
+          <h1 id="hero-title">让工作，<br /><span>从这里继续。</span></h1>
+          <p class="lead">
+            把任务交给 WorkLens，在自己的电脑上推进。<br />连接你选择的模型，处理文件、执行任务，让每段工作都有迹可循。
+          </p>
+          <div class="actions">
+            <a class="button primary" href="#start"
+              >从源码开始 <span aria-hidden="true">→</span></a
+            ><a
+              class="button secondary"
+              href="https://github.com/BuildWithAIs/worklens"
+              >查看 GitHub <span aria-hidden="true">↗</span></a
+            >
+          </div>
+          <p class="note">早期预览 · 开源项目 · 暂未提供公开安装包</p>
+        </section>
+        <figure>
+          <div class="product-frame">
+            <a
+              href="/assets/worklens.png"
+              aria-label="查看完整 WorkLens 桌面界面截图"
+              ><img
+                src="/assets/worklens.png"
+                width="1440"
+                height="900"
+                alt="WorkLens 桌面应用的新会话界面，左侧是历史会话，右侧是任务输入与模型选择区域。"
+                fetchpriority="high"
+            /></a>
+          </div>
+          <figcaption>
+            <span>一个安静的工作界面，从一条任务开始。</span
+            ><span>实际应用截图 · 隔离测试环境</span>
+          </figcaption>
+        </figure>
+        <section id="features" class="content" aria-labelledby="features-title">
+          <div class="section-top">
+            <div>
+              <p class="overline">01 / 为日常工作而做</p>
+              <h2 id="features-title">从对话到行动。</h2>
+            </div>
+            <p class="section-aside">面向需要处理文件、资料与日常任务的你。</p>
+          </div>
+          <div class="features">
+            <article class="feature">
+              <span class="number">01</span>
+              <h3>任务在本机推进</h3>
+              <p>
+                读取和编辑本地文件，执行命令。工具执行结果留在会话里，方便回看任务做了什么、进行到了哪里。
+              </p>
+            </article>
+            <article class="feature">
+              <span class="number">02</span>
+              <h3>每项工作各有上下文</h3>
+              <p>
+                为不同任务建立独立会话，在多段工作之间切换。会话历史保存在本机，下次打开还能继续。
+              </p>
+            </article>
+            <article class="feature">
+              <span class="number">03</span>
+              <h3>模型由你选择</h3>
+              <p>
+                连接自己的模型服务，设置默认模型，也可按会话切换模型与推理等级。凭据通过操作系统加密保存。
+              </p>
+            </article>
+          </div>
+        </section>
+        <section id="start" class="content" aria-labelledby="start-title">
+          <div class="start">
+            <div>
+              <p class="overline">02 / 开始使用</p>
+              <h2 id="start-title">带上你的模型，<br />开始第一项工作。</h2>
+              <p>
+                当前适合愿意从源码运行的早期使用者。<br />需要 Node.js
+                24、npm，以及可用的模型服务账号。
+              </p>
+              <a
+                href="https://github.com/BuildWithAIs/worklens/blob/main/README.zh-CN.md#本地运行"
+                >查看完整安装说明 <span aria-hidden="true">↗</span></a
+              >
+            </div>
+            <ol class="steps">
+              <li>
+                <div>
+                  <strong>获取源码并启动</strong
+                  ><span>按仓库说明安装依赖，启动桌面应用。</span>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <strong>连接你的模型服务</strong
+                  ><span>在设置中完成认证，保存默认模型并测试连接。</span>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <strong>描述一个具体任务</strong
+                  ><span>新建会话，给出目标和文件路径，查看执行过程。</span>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </section>
+        <section class="content faq" aria-labelledby="faq-title">
+          <div>
+            <p class="overline">03 / 你可能想知道</p>
+            <h2 id="faq-title">开始前，<br />了解这几件事。</h2>
+          </div>
+          <div>
+            <details open>
+              <summary>WorkLens 是什么？</summary>
+              <p>
+                它是运行在电脑上的工作
+                Agent，围绕对话组织本地文件处理与任务执行。项目面向中大型企业员工的日常工作，目前处于早期开发阶段。
+              </p>
+            </details>
+            <details>
+              <summary>本地优先，意味着完全离线吗？</summary>
+              <p>
+                不意味着完全离线。会话历史与设置保存在本机，凭据由操作系统加密；使用远程模型时，请求内容及相关上下文仍会发送给你选择的模型服务商。本地工具以你的系统用户权限运行。
+              </p>
+            </details>
+            <details>
+              <summary>使用需要付费吗？</summary>
+              <p>
+                项目以 MIT
+                协议开放源码。模型服务需要你自行配置，相关费用与使用条款由所选服务商决定。
+              </p>
+            </details>
+            <details>
+              <summary>已支持企业服务连接和长期记忆吗？</summary>
+              <p>
+                Jira、Confluence、GitHub
+                等企业工作场景是产品的方向，目前没有内置这些服务的一键连接。长期记忆也仍在规划中，当前提供的是本机会话历史。
+              </p>
+            </details>
+          </div>
+        </section>
+      </main>
+      <footer>
+        <div>
+          <a class="brand" href="/">WorkLens</a>
+          <p>让注意力，回到工作本身。</p>
+        </div>
+        <div>
+          <div class="footer-links">
+            <a href="https://github.com/BuildWithAIs/worklens">源码</a
+            ><a href="https://github.com/BuildWithAIs/worklens/issues"
+              >反馈问题</a
+            ><a
+              href="https://github.com/BuildWithAIs/worklens/blob/main/LICENSE"
+              >MIT License</a
+            >
+          </div>
+          <p>由 BuildWithAIs 开发 · 基于 Pi 构建</p>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -2,6 +2,8 @@
 
 English | [简体中文](README.zh-CN.md)
 
+[Website](https://worklens.buildwithais.com/) · [Website deployment](website/README.md)
+
 WorkLens is a local-first work agent for employees at larger companies — especially teams that rely on Jira, Confluence, GitHub, and similar enterprise services. Memory is on the roadmap, and it will make WorkLens understand you better over time.
 
 Built with Electron, React, TypeScript, Tailwind CSS, and Pi.
