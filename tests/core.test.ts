@@ -68,6 +68,36 @@ async function waitEnd(events: ChatEvent[], id: string) {
   )!;
 }
 describe("PRD 012, 061, 062: process and credential boundaries", () => {
+  test("Copilot catalog IDs stay distinct after OAuth credential redaction", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "worklens-copilot-ids-"));
+    const store = new SecureCredentials(directory, {
+      isEncryptionAvailable: () => true,
+      encryptString: (value: string) => Buffer.from(value),
+      decryptString: (value: Buffer) => value.toString(),
+    });
+    const ids = ["claude-sonnet-4.5", "gpt-5.1-codex", "gemini-3-pro-preview"];
+    await store.modify("github-copilot", async () => ({
+      type: "oauth",
+      access: "private-access-token",
+      refresh: "private-refresh-token",
+      expires: 9999999999999,
+      availableModelIds: ids,
+    }));
+    const dto = {
+      models: ids.map((id) => ({ id })),
+      hiddenModels: [`github-copilot/${ids[1]}`],
+    };
+    expect(redactStrings(dto, (text) => store.redact(text))).toEqual(dto);
+    expect(
+      store.redact("private-access-token private-refresh-token"),
+    ).not.toMatch(/private-/);
+    expect(store.redact("AWS credentials or bearer token")).toBe(
+      "AWS credentials or bearer token",
+    );
+    expect(
+      store.redact("Authorization: Bearer private-access-token"),
+    ).not.toContain("private-access-token");
+  });
   test("credential read-modify-write is serialized without plaintext at rest", async () => {
     const directory = await mkdtemp(join(tmpdir(), "worklens-secrets-"));
     const encryption = {
@@ -158,9 +188,9 @@ describe("PRD 012, 061, 062: process and credential boundaries", () => {
       null,
       true,
       {
-        text: "[已隐藏]",
-        args: '{"secret":"[已隐藏]"}',
-        error: "[已隐藏] [已隐藏]",
+        text: "[redacted]",
+        args: '{"secret":"[redacted]"}',
+        error: "[redacted] [redacted]",
       },
     ]);
   });

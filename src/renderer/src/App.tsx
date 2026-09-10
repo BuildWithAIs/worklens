@@ -1,24 +1,31 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus,
+  MoreHorizontal,
   Settings as SettingsIcon,
-  ArrowLeft,
-  Check,
   X,
   Trash2,
   Pencil,
-  ShieldAlert,
-  CheckCircle2,
   LoaderCircle,
-  RefreshCw,
-  FolderOpen,
-  Eye,
-  EyeOff,
-  Zap,
 } from "lucide-react";
+import {
+  SettingsPage,
+  type SettingsSection,
+} from "@/components/worklens/SettingsPage";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
+import { systemText } from "@/lib/system-text";
+import { useLocale } from "@/lib/locale";
 import { AgentThread } from "@/components/worklens/AgentThread";
 import type {
-  AuthStep,
   Bootstrap,
   ConversationView,
   Phase,
@@ -27,21 +34,25 @@ import type {
 } from "../../shared/contracts";
 
 const api = window.worklens;
-const labels: Record<Phase, string> = {
-  idle: "就绪",
-  generating: "正在生成",
-  tool: "正在执行工具",
-  compacting: "正在压缩上下文",
-  retrying: "等待重试",
-  stopping: "正在停止",
-  completed: "已完成",
-  cancelled: "已取消",
-  failed: "运行失败",
+const isMac = /Mac/i.test(navigator.platform);
+const labels: Record<Phase, [string, string]> = {
+  idle: ["Ready", "就绪"],
+  generating: ["Generating", "正在生成"],
+  tool: ["Running tool", "正在执行工具"],
+  compacting: ["Compacting context", "正在压缩上下文"],
+  retrying: ["Retrying", "等待重试"],
+  stopping: ["Stopping", "正在停止"],
+  completed: ["Completed", "已完成"],
+  cancelled: ["Cancelled", "已取消"],
+  failed: ["Failed", "运行失败"],
 };
 const active = (phase?: Phase) =>
   !!phase &&
   ["generating", "tool", "compacting", "retrying", "stopping"].includes(phase);
 export function App() {
+  const { t, language } = useLocale();
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSection>("providers");
   const [data, setData] = useState<Bootstrap>();
   const [views, setViews] = useState<Record<string, ConversationView>>({});
   const [current, setCurrent] = useState<string>();
@@ -62,10 +73,39 @@ export function App() {
     [],
   );
   useEffect(() => {
-    if (notice?.type !== "success") return;
-    const timer = setTimeout(() => setNotice(undefined), 3200);
-    return () => clearTimeout(timer);
-  }, [notice]);
+    if (!notice) return;
+    const needsSettings =
+      notice.type === "error" && /模型尚未配置|模型.*不可用/.test(notice.text);
+    let disposed = false;
+    const id = toast.add({
+      title: needsSettings
+        ? t(
+            "Connect a provider to start chatting.",
+            "请先选择并连接一个可用模型。",
+          )
+        : systemText(notice.text.replace(/^Error: /, ""), language),
+      onClose: () => {
+        if (!disposed)
+          setNotice((current) => (current === notice ? undefined : current));
+      },
+      type: notice.type,
+      timeout: notice.type === "error" ? 0 : 3200,
+      priority: notice.type === "error" ? "high" : "low",
+      actionProps: needsSettings
+        ? {
+            children: t("Open settings", "前往设置"),
+            onClick: () => {
+              setPage("settings");
+              setNotice(undefined);
+            },
+          }
+        : undefined,
+    });
+    return () => {
+      disposed = true;
+      toast.close(id);
+    };
+  }, [notice, language, t]);
   const [pendingSends, setPendingSends] = useState(new Set<string>());
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
   const navigation = useRef(0);
@@ -177,6 +217,7 @@ export function App() {
   }
   async function settings(patch: Partial<Settings>) {
     const result = await api.invoke("settings", patch);
+    if (patch.defaults && !current) setSelection(patch.defaults);
     setData((previous) =>
       previous ? { ...previous, settings: result } : previous,
     );
@@ -253,8 +294,15 @@ export function App() {
       <main className="loading">
         <div className="brand-mark">W</div>
         <h1>WorkLens</h1>
-        <p>{error || "正在准备你的本地工作助手…"}</p>
-        {error && <button onClick={() => location.reload()}>重新加载</button>}
+        <p>
+          {systemText(error, language) ||
+            t("Preparing your workspace…", "正在准备你的本地工作助手…")}
+        </p>
+        {error && (
+          <button onClick={() => location.reload()}>
+            {t("Reload", "重新加载")}
+          </button>
+        )}
       </main>
     );
   const availableModel = data.providers
@@ -266,26 +314,42 @@ export function App() {
         <div className="brand">
           <div className="brand-mark">W</div>
           <span>
-            WorkLens<small>你的本地工作助手</small>
+            WorkLens
+            <small>{t("Your local workspace", "你的本地工作助手")}</small>
           </span>
         </div>
-        <button className="new-chat" onClick={newConversation}>
+        <Button
+          variant="outline"
+          className="new-chat"
+          onClick={newConversation}
+          aria-keyshortcuts={isMac ? "Meta+N" : "Control+N"}
+        >
           <Plus size={17} />
-          新建会话<kbd>⌘ / Ctrl N</kbd>
-        </button>
+          {t("New chat", "新建会话")}
+          <kbd aria-hidden="true">{isMac ? "⌘ N" : "Ctrl N"}</kbd>
+        </Button>
         <div className="section-label">
-          历史会话 <span>{data.conversations.length || ""}</span>
+          {t("History", "历史会话")}{" "}
+          <span>{data.conversations.length || ""}</span>
         </div>
-        <nav aria-label="会话列表" className="conversation-list">
+        <nav
+          aria-label={t("Conversations", "会话列表")}
+          className="conversation-list"
+        >
           {!data.conversations.length && (
-            <p className="sidebar-empty">暂无历史会话</p>
+            <p className="sidebar-empty">
+              {t("No conversations yet", "暂无历史会话")}
+            </p>
           )}
           {data.conversations.map((conversation) => (
             <div
               key={conversation.id}
-              className={`conversation-item ${current === conversation.id && page === "chat" ? "selected" : ""}`}
+              className={`conversation-item ${current === conversation.id ? "selected" : ""}`}
             >
-              <button
+              <Button
+                variant="ghost"
+                aria-current={current === conversation.id ? "page" : undefined}
+                title={conversation.title}
                 className="conversation-open"
                 onClick={() => void open(conversation.id)}
               >
@@ -293,166 +357,143 @@ export function App() {
                   {active(conversation.phase) && (
                     <LoaderCircle size={13} className="spin" />
                   )}
-                  {conversation.title}
+                  <span className="truncate">{conversation.title}</span>
                 </span>
-                <span className="conversation-meta">
-                  {active(conversation.phase)
-                    ? labels[conversation.phase]
-                    : (conversation.selection?.model ?? "未选择模型")}{" "}
-                  ·{" "}
-                  {new Date(conversation.updatedAt).toLocaleDateString(
-                    "zh-CN",
-                    { month: "numeric", day: "numeric" },
-                  )}
-                </span>
-              </button>
+              </Button>
               <div className="conversation-actions">
-                <button
-                  className="icon"
-                  aria-label={"重命名 " + conversation.title}
-                  title="重命名会话"
-                  onClick={() =>
-                    setDialog({
-                      type: "rename",
-                      id: conversation.id,
-                      title: conversation.title,
-                    })
-                  }
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  className="icon danger"
-                  aria-label={"删除 " + conversation.title}
-                  title="删除会话"
-                  onClick={() =>
-                    setDialog({
-                      type: "delete",
-                      id: conversation.id,
-                      title: conversation.title,
-                    })
-                  }
-                >
-                  <Trash2 size={14} />
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={
+                          t("Conversation options: ", "会话选项：") +
+                          conversation.title
+                        }
+                      />
+                    }
+                  >
+                    <MoreHorizontal size={16} />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" side="right">
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          setDialog({
+                            type: "rename",
+                            id: conversation.id,
+                            title: conversation.title,
+                          })
+                        }
+                      >
+                        <Pencil size={14} />
+                        {t("Rename", "重命名")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() =>
+                          setDialog({
+                            type: "delete",
+                            id: conversation.id,
+                            title: conversation.title,
+                          })
+                        }
+                      >
+                        <Trash2 size={14} />
+                        {t("Delete", "删除")}
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <button
-            className={
-              page === "settings"
-                ? "sidebar-settings selected"
-                : "sidebar-settings"
-            }
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
             onClick={() => setPage("settings")}
           >
-            <SettingsIcon size={18} />
-            设置
-          </button>
+            <SettingsIcon />
+            {t("Settings", "设置")}
+          </Button>
         </div>
       </aside>
       <main className="main-content">
-        {page === "settings" ? (
-          <SettingsPage
-            data={data}
-            save={settings}
-            refresh={refresh}
-            onBack={() => setPage("chat")}
-            onError={notifyError}
-            onSuccess={notifySuccess}
-          />
-        ) : (
-          <>
-            <header className="chat-header">
-              <div>
-                <span className="eyebrow">本地对话</span>
-                <h1>{currentView?.title ?? "新的开始"}</h1>
-              </div>
-              {currentView && (
-                <span
-                  role="status"
-                  className={busy ? "run-status running" : "run-status"}
-                >
-                  {busy && <LoaderCircle className="spin" size={13} />}{" "}
-                  {currentView.statusDetail ?? labels[currentView.phase]}
-                </span>
-              )}
-            </header>
-            <AgentThread
-              key={current ?? draftId}
-              view={currentView}
-              canSend={!!availableModel?.available && !sending}
-              draft={text}
-              onDraftLoaded={() => setText("")}
-              onSend={sendText}
-              onCancel={cancelCurrent}
-              modelMenu={{
-                data,
-                selection,
-                onChange: changeModel,
-                onManage: () => {
-                  setPage("settings");
-                  requestAnimationFrame(() =>
-                    requestAnimationFrame(() =>
-                      document
-                        .getElementById("models")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-                    ),
-                  );
-                },
-              }}
-            />
-          </>
-        )}
-      </main>
-      {notice && (
-        <div
-          role={notice.type === "error" ? "alert" : "status"}
-          className={`toast ${notice.type}`}
-        >
-          {notice.type === "error" ? (
-            <ShieldAlert size={17} />
-          ) : (
-            <CheckCircle2 size={17} />
-          )}
-          <span>
-            {notice.type === "error" &&
-            /模型尚未配置|模型.*不可用/.test(notice.text)
-              ? "请先选择并连接一个可用模型。"
-              : notice.text.replace(/^Error: /, "")}
-          </span>
-          {notice.type === "error" &&
-            /模型尚未配置|模型.*不可用/.test(notice.text) && (
-              <button
-                className="toast-action"
-                onClick={() => {
-                  setPage("settings");
-                  setNotice(undefined);
-                }}
+        <>
+          <header className="chat-header">
+            <div>
+              <h1>{currentView?.title ?? t("New conversation", "新的开始")}</h1>
+            </div>
+            {currentView && busy && (
+              <span
+                role="status"
+                className={busy ? "run-status running" : "run-status"}
               >
-                前往设置
-              </button>
+                {busy && <LoaderCircle className="spin" size={13} />}{" "}
+                {currentView.statusDetail
+                  ? systemText(currentView.statusDetail, language)
+                  : t(...labels[currentView.phase])}
+              </span>
             )}
-          <button
-            className="icon"
-            aria-label="关闭提示"
-            onClick={() => setNotice(undefined)}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
+          </header>
+          <AgentThread
+            key={current ?? draftId}
+            view={currentView}
+            canSend={!!availableModel?.available && !sending}
+            draft={text}
+            onDraftLoaded={() => setText("")}
+            onSend={sendText}
+            onCancel={cancelCurrent}
+            modelMenu={{
+              data,
+              selection,
+              onChange: changeModel,
+              onManage: () => {
+                setPage("settings");
+                setSettingsSection("models");
+              },
+            }}
+          />
+        </>
+      </main>
+      <Dialog
+        open={page === "settings"}
+        onOpenChange={(open) => {
+          if (!open) setPage("chat");
+        }}
+      >
+        <DialogContent
+          className="settings-shell-dialog"
+          showCloseButton={false}
+          aria-describedby={undefined}
+        >
+          <DialogTitle className="sr-only">{t("Settings", "设置")}</DialogTitle>
+          {page === "settings" && (
+            <SettingsPage
+              data={data}
+              initialSection={settingsSection}
+              save={settings}
+              refresh={refresh}
+              onBack={() => setPage("chat")}
+              onError={notifyError}
+              onSuccess={notifySuccess}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
       {showRecovery && data.recoveries.length > 0 && (
         <Modal
-          title="上次有任务意外中断"
+          title={t("An earlier task was interrupted", "上次有任务意外中断")}
           onClose={() => setShowRecovery(false)}
         >
           <p>
-            历史和已完成的工具结果仍由 Pi
-            保存。工具可能已产生副作用，请先核对；WorkLens
-            不会自动重新执行任务。
+            {t(
+              "History and completed tool results are preserved. Review any changes before continuing; interrupted tasks do not restart automatically.",
+              "历史与工具结果已保留。请核对工具产生的更改后再继续；中断任务不会自动重新执行。",
+            )}
           </p>
           {data.recoveries.map((item) => (
             <div className="recovery-item" key={item.runId}>
@@ -474,7 +515,7 @@ export function App() {
                     })
                   }
                 >
-                  载入草稿，核对后继续
+                  {t("Load draft for review", "载入草稿，核对后继续")}
                 </button>
                 <button
                   className="danger"
@@ -485,7 +526,7 @@ export function App() {
                       .catch((e) => notifyError(String(e)))
                   }
                 >
-                  已核对，清除此恢复记录
+                  {t("Dismiss recovery record", "已核对，清除此恢复记录")}
                 </button>
               </div>
             </div>
@@ -494,17 +535,23 @@ export function App() {
       )}
       {dialog && (
         <Modal
-          title={dialog.type === "delete" ? "⚠ 永久删除会话" : "重命名会话"}
+          title={
+            dialog.type === "delete"
+              ? t("Delete conversation permanently", "⚠ 永久删除会话")
+              : t("Rename conversation", "重命名会话")
+          }
           onClose={() => setDialog(undefined)}
         >
           {dialog.type === "delete" ? (
             <p>
-              将永久删除「{dialog.title}
-              」及其会话记录，无法恢复。若它正在运行，会先停止；已修改的本地文件会保留。
+              {t(
+                `Delete “${dialog.title}” and its history permanently? Running tasks will stop. Changes to local files will remain.`,
+                `永久删除「${dialog.title}」及其记录？正在运行的任务会停止，已修改的本地文件会保留。`,
+              )}
             </p>
           ) : (
             <input
-              aria-label="会话名称"
+              aria-label={t("Conversation name", "会话名称")}
               autoFocus
               value={dialog.title}
               maxLength={120}
@@ -512,7 +559,9 @@ export function App() {
             />
           )}
           <div className="actions">
-            <button onClick={() => setDialog(undefined)}>取消</button>
+            <button onClick={() => setDialog(undefined)}>
+              {t("Cancel", "取消")}
+            </button>
             <button
               className={dialog.type === "delete" ? "danger-button" : "primary"}
               disabled={!dialog.title.trim()}
@@ -536,7 +585,9 @@ export function App() {
                   .catch((e) => notifyError(String(e)))
               }
             >
-              {dialog.type === "delete" ? "永久删除" : "保存名称"}
+              {dialog.type === "delete"
+                ? t("Delete permanently", "永久删除")
+                : t("Save name", "保存名称")}
             </button>
           </div>
         </Modal>
@@ -554,783 +605,24 @@ function Modal({
   children: React.ReactNode;
   onClose: () => void;
 }) {
+  const { t } = useLocale();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     ref.current?.showModal();
   }, []);
   return (
-    <dialog ref={ref} className="modal" onCancel={onClose}>
+    <dialog ref={ref} className="modal" aria-label={title} onCancel={onClose}>
       <div className="modal-heading">
         <h2>{title}</h2>
-        <button className="icon" aria-label="关闭对话框" onClick={onClose}>
+        <button
+          className="icon"
+          aria-label={t("Close dialog", "关闭对话框")}
+          onClick={onClose}
+        >
           <X size={18} />
         </button>
       </div>
       {children}
     </dialog>
-  );
-}
-function PathRow({
-  label,
-  path,
-  onOpen,
-}: {
-  label: string;
-  path: string;
-  onOpen: () => void;
-}) {
-  return (
-    <>
-      <dt>{label}</dt>
-      <dd>
-        <span>{path}</span>
-        <button
-          className="icon"
-          aria-label={`在文件管理器中打开${label}`}
-          title="在文件管理器中打开"
-          onClick={onOpen}
-        >
-          <FolderOpen size={13} />
-        </button>
-      </dd>
-    </>
-  );
-}
-
-function SettingsPage({
-  data,
-  save,
-  refresh,
-  onBack,
-  onError,
-  onSuccess,
-}: {
-  data: Bootstrap;
-  save: (patch: Partial<Settings>) => Promise<void>;
-  refresh: () => Promise<Bootstrap>;
-  onBack: () => void;
-  onError: (error: string) => void;
-  onSuccess: (message: string) => void;
-}) {
-  const [selectedProvider, setSelectedProvider] = useState(
-    data.settings.defaults?.provider ??
-      data.providers.find((p) => p.configured)?.id ??
-      data.providers[0]?.id,
-  );
-  const [auth, setAuth] = useState<{
-    loginId: string;
-    steps: AuthStep[];
-    prompt?: AuthStep;
-  }>();
-  const [answer, setAnswer] = useState("");
-  const cancelledLogins = useRef(new Set<string>());
-  const [testingKeys, setTestingKeys] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
-  const [modelQuery, setModelQuery] = useState("");
-  const [removeCredential, setRemoveCredential] = useState<{
-    id: string;
-    name: string;
-  }>();
-  const [azure, setAzure] = useState({
-    baseUrl: "",
-    resource: "",
-    apiVersion: "",
-    deployments: "",
-  });
-  const provider = data.providers.find((p) => p.id === selectedProvider);
-  const modelProviders = data.providers.filter(
-    (p) => p.configured || p.models.some((m) => m.available),
-  );
-  const hiddenModelSet = new Set(data.settings.hiddenModels ?? []);
-  useEffect(
-    () =>
-      api.onAuth((step) => {
-        setAuth((previous) => {
-          if (!previous || previous.loginId !== step.loginId) return previous;
-          if (step.type === "prompt_cancelled")
-            return { ...previous, prompt: undefined };
-          if (step.promptId) {
-            setAnswer("");
-            return { ...previous, prompt: step };
-          }
-          return { ...previous, steps: [...previous.steps.slice(-8), step] };
-        });
-      }),
-    [],
-  );
-  useEffect(
-    () => () => {
-      if (auth) {
-        cancelledLogins.current.add(auth.loginId);
-        void api.invoke("authCancel", { loginId: auth.loginId });
-      }
-    },
-    [auth?.loginId],
-  );
-  async function login(type: "api_key" | "oauth") {
-    if (!provider) return;
-    const loginId = crypto.randomUUID();
-    setAuth({ loginId, steps: [] });
-    setAnswer("");
-    try {
-      await api.invoke("login", { provider: provider.id, type, loginId });
-      const next = await refresh();
-      const p = next.providers.find((p) => p.id === provider.id);
-      const m = p?.models.find((m) => m.available);
-      if (!next.settings.defaults && m)
-        await save({
-          defaults: {
-            provider: provider.id,
-            model: m.id,
-            thinking: m.levels.includes("medium") ? "medium" : m.levels[0],
-          },
-        });
-      onSuccess("凭据已加密保存");
-      setAuth(undefined);
-    } catch (error) {
-      setAuth(undefined);
-      if (!cancelledLogins.current.delete(loginId)) onError(String(error));
-    }
-  }
-  async function refreshModels() {
-    if (!provider) return;
-    const beforeIds = new Set(
-      provider.models.filter((m) => m.available).map((m) => m.id),
-    );
-    try {
-      await api.invoke("refreshModels", { provider: provider.id });
-      const next = await refresh();
-      const updated = next.providers.find((p) => p.id === provider.id);
-      const afterIds = new Set(
-        (updated?.models ?? []).filter((m) => m.available).map((m) => m.id),
-      );
-      const added = [...afterIds].filter((id) => !beforeIds.has(id)).length;
-      const removed = [...beforeIds].filter((id) => !afterIds.has(id)).length;
-      onSuccess(
-        `现有 ${afterIds.size} 个可用模型` +
-          (added || removed
-            ? `（新增 ${added} 个，减少 ${removed} 个）`
-            : "（无变化）"),
-      );
-    } catch (error) {
-      onError(String(error));
-    }
-  }
-  return (
-    <div className="settings-page">
-      <header className="settings-header">
-        <button className="icon" aria-label="返回对话" onClick={onBack}>
-          <ArrowLeft size={20} />
-        </button>
-        <h1>设置</h1>
-        <span className="version">v{data.version}</span>
-      </header>
-      <div className="settings-scroll">
-        <div className="settings-body">
-          <section id="model-service">
-            <h2>模型供应商</h2>
-            <p className="section-description">
-              连接你信任的供应商，凭据由操作系统加密，仅在本机主进程中使用。
-            </p>
-            <div className="provider-layout">
-              <div className="provider-list">
-                <div className="provider-list-head">
-                  <span>供应商</span>
-                  <button
-                    className="ghost small"
-                    title="重新加载供应商列表"
-                    onClick={() =>
-                      void refresh()
-                        .then(() => onSuccess("供应商列表已刷新"))
-                        .catch((e) => onError(String(e)))
-                    }
-                  >
-                    <RefreshCw size={12} />
-                    刷新
-                  </button>
-                </div>
-                <div className="search-input">
-                  <input
-                    aria-label="查找供应商"
-                    placeholder="查找供应商…"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                  {query && (
-                    <button
-                      className="icon clear"
-                      aria-label="清除搜索"
-                      onClick={() => setQuery("")}
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
-                {[...data.providers]
-                  .filter((p) =>
-                    `${p.name} ${p.id}`
-                      .toLowerCase()
-                      .includes(query.toLowerCase()),
-                  )
-                  .sort(
-                    (a, b) => Number(b.configured) - Number(a.configured),
-                  )
-                  .map((p) => (
-                    <button
-                      key={p.id}
-                      className={p.id === selectedProvider ? "selected" : ""}
-                      onClick={() => setSelectedProvider(p.id)}
-                    >
-                      <span>{p.name}</span>
-                      {p.configured && <CheckCircle2 size={14} />}
-                    </button>
-                  ))}
-              </div>
-              <div className="provider-detail">
-                {provider && (
-                  <>
-                    <div className="provider-heading">
-                      <div>
-                        <h3>{provider.name}</h3>
-                        <span className="subtle model-count">
-                          {provider.models.length} 个模型
-                          <button
-                            className="ghost small"
-                            title="重新从该供应商拉取最新的可用模型列表"
-                            onClick={() => void refreshModels()}
-                          >
-                            <RefreshCw size={11} />
-                            刷新
-                          </button>
-                        </span>
-                      </div>
-                      {!provider.configured && (
-                        <span className="badge">未配置</span>
-                      )}
-                    </div>
-                    {provider.credentialError && (
-                      <p role="alert" className="error">
-                        {provider.credentialError}
-                      </p>
-                    )}
-                    {provider.connection && (
-                      <div
-                        className={
-                          provider.connection.ok
-                            ? "connection-note"
-                            : "connection-note error"
-                        }
-                      >
-                        <p>
-                          <span className="connection-note-time">
-                            上次测试于{" "}
-                            {new Date(
-                              provider.connection.checkedAt,
-                            ).toLocaleTimeString("zh-CN", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                            ：
-                          </span>
-                          {provider.connection.message}
-                        </p>
-                        <button
-                          className="icon"
-                          aria-label="清除测试结果"
-                          title="清除测试结果"
-                          onClick={() =>
-                            void api
-                              .invoke("clearConnection", {
-                                provider: provider.id,
-                              })
-                              .then(() => refresh())
-                              .catch((e) => onError(String(e)))
-                          }
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    )}
-                    <h4 className="detail-label">凭据</h4>
-                    <div className="auth-methods">
-                      {[...provider.methods]
-                        .sort(
-                          (a, b) => Number(b.interactive) - Number(a.interactive),
-                        )
-                        .map((method, index) => (
-                          <Fragment key={method.type}>
-                            {index > 0 && (
-                              <div className="auth-divider">或</div>
-                            )}
-                            {method.interactive &&
-                            method.type === provider.credentialType ? (
-                              <div className="configured-method">
-                                <span>
-                                  <CheckCircle2 size={14} />
-                                  {method.name}
-                                </span>
-                                <button
-                                  className="icon"
-                                  aria-label={"重新配置 " + method.name}
-                                  title="重新配置"
-                                  disabled={!!auth}
-                                  onClick={() => void login(method.type)}
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                                <button
-                                  className="icon danger"
-                                  aria-label={"移除 " + method.name}
-                                  title="移除凭据"
-                                  onClick={() =>
-                                    setRemoveCredential({
-                                      id: provider.id,
-                                      name: provider.name,
-                                    })
-                                  }
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            ) : method.interactive ? (
-                              <button
-                                disabled={!!auth}
-                                onClick={() => void login(method.type)}
-                              >
-                                {method.type === "oauth" ? "登录" : "配置"} ·{" "}
-                                {method.name}
-                              </button>
-                            ) : (
-                              <div className="ambient">
-                                <strong>{method.name}（可选替代方式）</strong>
-                                <p>
-                                  适合已经在系统环境变量或凭据文件中配置好密钥的场景。设置好后点击左侧"刷新"检测。
-                                </p>
-                              </div>
-                            )}
-                          </Fragment>
-                        ))}
-                    </div>
-                    {(provider.credentialError ||
-                      (provider.configured &&
-                        !provider.methods.some(
-                          (m) => m.interactive && m.type === provider.credentialType,
-                        ))) && (
-                      <>
-                        <h4 className="detail-label">操作</h4>
-                        <div className="actions">
-                          <button
-                            className="danger"
-                            onClick={() =>
-                              setRemoveCredential({
-                                id: provider.id,
-                                name: provider.name,
-                              })
-                            }
-                          >
-                            移除凭据
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {provider.id === "azure-openai-responses" && (
-                      <details className="azure">
-                        <summary>Azure 端点与部署映射</summary>
-                        <label>
-                          基础地址
-                          <input
-                            value={azure.baseUrl}
-                            onChange={(e) =>
-                              setAzure({ ...azure, baseUrl: e.target.value })
-                            }
-                            placeholder="https://资源名.openai.azure.com"
-                          />
-                        </label>
-                        <label>
-                          资源名（可替代基础地址）
-                          <input
-                            value={azure.resource}
-                            onChange={(e) =>
-                              setAzure({ ...azure, resource: e.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          接口版本（可选）
-                          <input
-                            value={azure.apiVersion}
-                            onChange={(e) =>
-                              setAzure({ ...azure, apiVersion: e.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          模型到部署名称
-                          <input
-                            value={azure.deployments}
-                            onChange={(e) =>
-                              setAzure({
-                                ...azure,
-                                deployments: e.target.value,
-                              })
-                            }
-                            placeholder="gpt-4.1=我的部署名称"
-                          />
-                        </label>
-                        <button
-                          onClick={() =>
-                            void api
-                              .invoke("azure", azure)
-                              .then(() => onSuccess("Azure 配置已加密保存"))
-                              .catch((e) => onError(String(e)))
-                          }
-                        >
-                          保存 Azure 配置
-                        </button>
-                      </details>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </section>
-          <section id="models">
-            <h2>可用模型</h2>
-            <p className="section-description">
-              在上面「模型供应商」里配置好的都会出现在这里，可以测试，也可以从切换器中隐藏。
-            </p>
-            {!modelProviders.length ? (
-              <p className="subtle">
-                还没有可用模型，
-                <button
-                  className="link"
-                  onClick={() =>
-                    document
-                      .getElementById("model-service")
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  }
-                >
-                  去「模型供应商」连接一个
-                </button>
-              </p>
-            ) : (
-              <>
-                <div className="search-input model-search">
-                  <input
-                    aria-label="查找模型"
-                    placeholder="按名称查找模型…"
-                    value={modelQuery}
-                    onChange={(e) => setModelQuery(e.target.value)}
-                  />
-                  {modelQuery && (
-                    <button
-                      className="icon clear"
-                      aria-label="清除搜索"
-                      onClick={() => setModelQuery("")}
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
-                {modelProviders
-                  .map((p) => ({
-                    ...p,
-                    models: p.models.filter((m) =>
-                      m.name.toLowerCase().includes(modelQuery.toLowerCase()),
-                    ),
-                  }))
-                  .filter((p) => p.models.length > 0)
-                  .map((p) => (
-                    <div className="settings-card model-group" key={p.id}>
-                      <div className="model-group-head">
-                        <span>{p.name}</span>
-                        <span className="subtle">
-                          {p.models.filter((m) => m.available).length}/
-                          {p.models.length} 可用
-                        </span>
-                      </div>
-                      <div className="model-rows">
-                        {p.models.map((m) => {
-                          const key = `${p.id}/${m.id}`;
-                          const isTesting = testingKeys.has(key);
-                          const hidden = hiddenModelSet.has(key);
-                          return (
-                            <div className="model-row" key={key}>
-                              <div className="model-row-info">
-                                <span className="model-row-name">
-                                  {m.name}
-                                </span>
-                                <span className="model-row-caps">
-                                  {m.contextWindow.toLocaleString()} 上下文
-                                  {m.reasoning ? " · 支持推理" : ""}
-                                  {m.image ? " · 支持图片输入" : ""}
-                                </span>
-                              </div>
-                              {!m.available && (
-                                <span className="badge">不可用</span>
-                              )}
-                              <button
-                                className="icon"
-                                disabled={!m.available || isTesting}
-                                aria-label="测试连接"
-                                title="测试连接"
-                                onClick={() => {
-                                  setTestingKeys((prev) =>
-                                    new Set(prev).add(key),
-                                  );
-                                  void api
-                                    .invoke("test", {
-                                      provider: p.id,
-                                      model: m.id,
-                                      thinking: m.levels.includes("medium")
-                                        ? "medium"
-                                        : m.levels[0],
-                                    })
-                                    .then(onSuccess)
-                                    .catch((e) => onError(String(e)))
-                                    .finally(() =>
-                                      setTestingKeys((prev) => {
-                                        const next = new Set(prev);
-                                        next.delete(key);
-                                        return next;
-                                      }),
-                                    );
-                                }}
-                              >
-                                {isTesting ? (
-                                  <LoaderCircle className="spin" size={14} />
-                                ) : (
-                                  <Zap size={14} />
-                                )}
-                              </button>
-                              <button
-                                className="icon"
-                                disabled={!m.available}
-                                aria-label={
-                                  hidden
-                                    ? "在切换器中显示此模型"
-                                    : "在切换器中隐藏此模型"
-                                }
-                                title={
-                                  hidden ? "已隐藏，点击显示" : "点击在切换器中隐藏"
-                                }
-                                onClick={() => {
-                                  const next = new Set(hiddenModelSet);
-                                  if (next.has(key)) next.delete(key);
-                                  else next.add(key);
-                                  void save({
-                                    hiddenModels: [...next],
-                                  }).catch((e) => onError(String(e)));
-                                }}
-                              >
-                                {hidden ? (
-                                  <EyeOff size={14} />
-                                ) : (
-                                  <Eye size={14} />
-                                )}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-              </>
-            )}
-          </section>
-          <section>
-            <h2>外观</h2>
-            <div className="theme-options">
-              {(["light", "dark", "system"] as const).map((theme) => (
-                <button
-                  key={theme}
-                  className={data.settings.theme === theme ? "selected" : ""}
-                  onClick={() =>
-                    void save({ theme }).catch((e) => onError(String(e)))
-                  }
-                >
-                  <div className={`theme-preview ${theme}`}>
-                    <span />
-                    <span />
-                  </div>
-                  <span>
-                    {{ light: "浅色", dark: "深色", system: "跟随系统" }[theme]}
-                  </span>
-                  {data.settings.theme === theme && <Check size={14} />}
-                </button>
-              ))}
-            </div>
-          </section>
-          <section>
-            <h2>本地数据与隐私</h2>
-            <p className="section-description">
-              所有对话记录、模型凭据和设置都只保存在本机磁盘上，不会上传到任何服务器。
-            </p>
-            <div className="settings-card data-info">
-              <dl>
-                {(
-                  [
-                    ["数据根目录", "root"],
-                    ["初始运行目录", "runtime"],
-                    ["会话历史", "sessions"],
-                    ["设置与加密凭据", "userData"],
-                  ] as const
-                ).map(([label, which]) => (
-                  <PathRow
-                    key={which}
-                    label={label}
-                    path={data.paths[which]}
-                    onOpen={() =>
-                      void api
-                        .invoke("showPath", { which })
-                        .catch((e) => onError(String(e)))
-                    }
-                  />
-                ))}
-              </dl>
-            </div>
-            {data.diagnostics.length > 0 && (
-              <div className="data-diagnostics">
-                {data.diagnostics.map((diagnostic, i) => (
-                  <p key={i} className="error">
-                    {diagnostic}
-                  </p>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-      </div>
-      {auth && (
-        <Modal
-          title={`连接 ${provider?.name ?? "供应商"}`}
-          onClose={() => {
-            cancelledLogins.current.add(auth.loginId);
-            void api.invoke("authCancel", { loginId: auth.loginId });
-            setAuth(undefined);
-          }}
-        >
-          {auth.steps.map((step, index) => (
-            <div key={index}>
-              <p>{step.message}</p>
-              {step.userCode && (
-                <pre className="device-code">{step.userCode}</pre>
-              )}
-              {step.url && (
-                <button
-                  onClick={() =>
-                    void api
-                      .invoke("external", { url: step.url! })
-                      .catch((e) => onError(String(e)))
-                  }
-                >
-                  在浏览器中继续
-                </button>
-              )}
-            </div>
-          ))}
-          {auth.prompt ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (auth.prompt?.promptId)
-                  void api
-                    .invoke("authReply", {
-                      loginId: auth.loginId,
-                      promptId: auth.prompt.promptId,
-                      value: answer,
-                    })
-                    .then(() => {
-                      setAuth((current) =>
-                        current &&
-                        current.prompt?.promptId === auth.prompt?.promptId
-                          ? { ...current, prompt: undefined }
-                          : current,
-                      );
-                      setAnswer("");
-                    })
-                    .catch((e) => onError(String(e)));
-              }}
-            >
-              <label>
-                {auth.prompt.message}
-                {auth.prompt.type === "select" ? (
-                  <select
-                    autoFocus
-                    required
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                  >
-                    <option value="">请选择</option>
-                    {auth.prompt.options?.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    autoFocus
-                    required
-                    type={auth.prompt.type === "secret" ? "password" : "text"}
-                    autoComplete="off"
-                    placeholder={
-                      auth.prompt.type === "secret" && provider?.credentialHint
-                        ? `当前 ${provider.credentialHint}，输入新值以替换`
-                        : auth.prompt.placeholder
-                    }
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                  />
-                )}
-              </label>
-              <button
-                className="primary"
-                type="submit"
-                disabled={!answer.trim()}
-              >
-                确定
-              </button>
-            </form>
-          ) : (
-            <p className="waiting">
-              <LoaderCircle className="spin" size={16} />
-              等待认证流程…
-            </p>
-          )}
-        </Modal>
-      )}
-      {removeCredential && (
-        <Modal
-          title="移除本地凭据"
-          onClose={() => setRemoveCredential(undefined)}
-        >
-          <p>
-            将删除「{removeCredential.name}
-            」在本机保存的加密凭据，需要重新登录或重新配置才能再次使用。不会影响其他已配置的供应商。
-          </p>
-          <div className="actions">
-            <button onClick={() => setRemoveCredential(undefined)}>
-              取消
-            </button>
-            <button
-              className="danger-button"
-              onClick={() =>
-                void api
-                  .invoke("logout", { provider: removeCredential.id })
-                  .then(refresh)
-                  .then(() => {
-                    onSuccess(`已删除「${removeCredential.name}」的本地凭据`);
-                    setRemoveCredential(undefined);
-                  })
-                  .catch((e) => onError(String(e)))
-              }
-            >
-              确认移除
-            </button>
-          </div>
-        </Modal>
-      )}
-    </div>
   );
 }

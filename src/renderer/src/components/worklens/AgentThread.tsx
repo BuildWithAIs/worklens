@@ -1,18 +1,39 @@
-import { useEffect, useMemo } from "react";
+import { systemText } from "@/lib/system-text";
+import { useLocale } from "@/lib/locale";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from "react";
 import {
   AssistantRuntimeProvider,
   type AppendMessage,
   type ThreadMessageLike,
   type ToolCallMessagePartProps,
   useExternalStoreRuntime,
+  useAuiState,
 } from "@assistant-ui/react";
-import { CheckCircle2, ChevronDown, Clock3, XCircle } from "lucide-react";
-import { Thread } from "@/components/assistant-ui/elements/thread.aui";
+import { ToolFallback } from "@/components/assistant-ui/elements/tool-fallback.aui";
+import {
+  ReasoningRoot,
+  ReasoningTrigger,
+  ReasoningContent,
+  ReasoningText,
+} from "@/components/assistant-ui/elements/reasoning.aui";
+import {
+  Thread,
+  type ThreadGroupPart,
+} from "@/components/assistant-ui/elements/thread.aui";
 import {
   ModelMenuContext,
   type ModelMenuProps,
 } from "@/components/worklens/model-menu-context";
-import type { ConversationView, MessageView } from "../../../../shared/contracts";
+import type {
+  ConversationView,
+  MessageView,
+} from "../../../../shared/contracts";
 
 type Props = {
   view?: ConversationView;
@@ -24,18 +45,31 @@ type Props = {
   modelMenu?: ModelMenuProps;
 };
 
-const activePhases = new Set(["generating", "tool", "compacting", "retrying", "stopping"]);
+const displayMessage = (message: ThreadMessageLike) => message;
 
-function messageStatus(view: ConversationView | undefined, index: number) {
+const activePhases = new Set([
+  "generating",
+  "tool",
+  "compacting",
+  "retrying",
+  "stopping",
+]);
+
+function messageStatus(
+  view: ConversationView | undefined,
+  index: number,
+  language: "en" | "zh",
+) {
   const isLast = index === (view?.messages.length ?? 0) - 1;
-  if (isLast && view && activePhases.has(view.phase)) return { type: "running" as const };
+  if (isLast && view && activePhases.has(view.phase))
+    return { type: "running" as const };
   if (isLast && view?.phase === "cancelled")
     return { type: "incomplete" as const, reason: "cancelled" as const };
   if (isLast && view?.phase === "failed")
     return {
       type: "incomplete" as const,
       reason: "error" as const,
-      error: view.error,
+      error: view.error ? systemText(view.error, language) : undefined,
     };
   return { type: "complete" as const, reason: "stop" as const };
 }
@@ -53,7 +87,10 @@ function parseArgs(value?: string) {
 }
 
 function toolResult(message: MessageView) {
-  if (!message.status || ["pending", "waiting", "running"].includes(message.status))
+  if (
+    !message.status ||
+    ["pending", "waiting", "running"].includes(message.status)
+  )
     return undefined;
   return {
     status: message.status,
@@ -69,14 +106,19 @@ function toolResult(message: MessageView) {
   };
 }
 
-function convertMessage(view: ConversationView | undefined) {
+function convertMessage(
+  view: ConversationView | undefined,
+  language: "en" | "zh",
+) {
   return (message: MessageView, index: number): ThreadMessageLike => {
     if (message.role === "user") {
       return { id: message.id, role: "user", content: message.text };
     }
 
     if (message.role === "tool") {
-      const startedAt = message.startedAt ? Date.parse(message.startedAt) : undefined;
+      const startedAt = message.startedAt
+        ? Date.parse(message.startedAt)
+        : undefined;
       const completedAt =
         startedAt !== undefined && message.elapsed !== undefined
           ? startedAt + message.elapsed
@@ -84,7 +126,7 @@ function convertMessage(view: ConversationView | undefined) {
       return {
         id: message.id,
         role: "assistant",
-        status: messageStatus(view, index),
+        status: messageStatus(view, index, language),
         content: [
           {
             type: "tool-call",
@@ -97,7 +139,12 @@ function convertMessage(view: ConversationView | undefined) {
               message.status ?? "",
             ),
             ...(startedAt !== undefined
-              ? { timing: { startedAt, ...(completedAt ? { completedAt } : {}) } }
+              ? {
+                  timing: {
+                    startedAt,
+                    ...(completedAt ? { completedAt } : {}),
+                  },
+                }
               : {}),
           },
         ],
@@ -108,7 +155,7 @@ function convertMessage(view: ConversationView | undefined) {
     if (message.role === "summary") {
       content.push({
         type: "text",
-        text: `### 上下文摘要\n\n${message.text}`,
+        text: `### Context summary\n\n${message.text}`,
       });
     } else {
       if (message.thinking)
@@ -119,7 +166,7 @@ function convertMessage(view: ConversationView | undefined) {
       id: message.id,
       role: "assistant",
       content,
-      status: messageStatus(view, index),
+      status: messageStatus(view, index, language),
     };
   };
 }
@@ -131,80 +178,73 @@ function submittedText(message: AppendMessage) {
     .trim();
 }
 
-type ToolResult = {
-  status?: string;
-  output?: string;
-  targetPath?: string;
-  shellCwd?: string;
-  timeoutSeconds?: number;
-  exitCode?: number | null;
-  startedAt?: string;
-  elapsed?: number;
-};
-
-function WorkLensTool({ toolName, argsText, result, status, isError }: ToolCallMessagePartProps) {
-  const detail =
-    result && typeof result === "object" && !Array.isArray(result)
-      ? (result as ToolResult)
-      : undefined;
-  const running = status.type === "running";
-  const cancelled = status.type === "incomplete" && status.reason === "cancelled";
-  const state = running
-    ? "running"
-    : cancelled
-      ? "cancelled"
-      : isError
-        ? "error"
-        : "success";
-  const label = running ? "执行中" : cancelled ? "已取消" : isError ? "失败" : "已完成";
-  const StatusIcon = isError || cancelled ? XCircle : CheckCircle2;
-
+function WorkLensTool(props: ToolCallMessagePartProps) {
+  const { t } = useLocale();
   return (
-    <details className={`tool-card ${state}`} open={running || isError}>
-      <summary>
-        {running ? <Clock3 className="spin" size={15} /> : <StatusIcon size={15} />}
-        <strong>{toolName}</strong>
-        <span className="tool-arg">{argsText.replace(/\s+/g, " ").slice(0, 95)}</span>
-        <span className="tool-status">
-          {label}
-          {detail?.elapsed !== undefined ? ` · ${(detail.elapsed / 1000).toFixed(1)}s` : ""}
-        </span>
-        <ChevronDown size={14} />
-      </summary>
-      <div className="tool-detail">
-        {detail?.shellCwd && (
-          <>
-            <label>命令初始目录</label>
-            <pre>{detail.shellCwd}</pre>
-            <p className="subtle">
-              超时：{detail.timeoutSeconds === undefined ? "未设置" : `${detail.timeoutSeconds} 秒`}
-              {detail.exitCode !== undefined
-                ? ` · 退出码：${detail.exitCode === null ? "进程被终止" : detail.exitCode}`
-                : ""}
-            </p>
-          </>
-        )}
-        {detail?.targetPath && (
-          <>
-            <label>目标绝对路径</label>
-            <pre>{detail.targetPath}</pre>
-          </>
-        )}
-        {detail?.startedAt && (
-          <p className="subtle">
-            开始时间：{new Date(detail.startedAt).toLocaleString("zh-CN")}
-          </p>
-        )}
-        <label>参数</label>
-        <pre>{argsText}</pre>
-        {detail?.output && (
-          <>
-            <label>结果</label>
-            <pre>{detail.output}</pre>
-          </>
+    <ToolFallback
+      {...props}
+      toolName={
+        props.isError
+          ? `${props.toolName} · ${t("Failed", "失败")}`
+          : props.toolName
+      }
+      status={
+        props.isError ? { type: "incomplete", reason: "error" } : props.status
+      }
+    />
+  );
+}
+
+function WorkLensToolGroup({
+  children,
+}: PropsWithChildren<{ group: ThreadGroupPart }>) {
+  const { t } = useLocale();
+  const content = useAuiState((s) => s.message.content);
+  const tools = content.filter((part) => part.type === "tool-call");
+  const failed = tools.filter((tool) => tool.isError).length;
+  const running = useAuiState((s) => s.message.status?.type === "running");
+  const progress = useAuiState((s) => s.message.metadata.custom.progress);
+  const started = useRef<number | undefined>(undefined);
+  const [seconds, setSeconds] = useState<number | undefined>();
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (running) {
+      started.current ??= Date.now();
+      return;
+    }
+    if (started.current !== undefined) {
+      setSeconds(
+        Math.max(1, Math.round((Date.now() - started.current) / 1000)),
+      );
+      started.current = undefined;
+    }
+  }, [running]);
+  const label =
+    (running
+      ? t("Thinking…", "思考中…")
+      : seconds !== undefined
+        ? t(`Worked for ${seconds}s`, `已思考 ${seconds} 秒`)
+        : t("Thoughts", "思考过程")) +
+    (failed ? t(` · ${failed} failed`, ` · ${failed} 次失败`) : "");
+  return (
+    <ReasoningRoot
+      variant="ghost"
+      streaming={running}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <div className="flex min-w-0 flex-col items-start gap-1">
+        <ReasoningTrigger className="shrink-0" active={running} label={label} />
+        {running && !open && typeof progress === "string" && progress && (
+          <span data-slot="activity-progress" className="line-clamp-2 min-w-0 text-sm leading-6 text-muted-foreground wrap-anywhere" title={progress}>
+            {progress}
+          </span>
         )}
       </div>
-    </details>
+      <ReasoningContent>
+        <ReasoningText>{children}</ReasoningText>
+      </ReasoningContent>
+    </ReasoningRoot>
   );
 }
 
@@ -217,11 +257,63 @@ export function AgentThread({
   onCancel,
   modelMenu,
 }: Props) {
-  const messages = view?.messages ?? [];
-  const converter = useMemo(() => convertMessage(view), [view]);
-  const runtime = useExternalStoreRuntime<MessageView>({
+  const { t, language } = useLocale();
+  // Presentation only: one activity disclosure per turn; source records stay intact.
+  const messages = useMemo(() => {
+    const convert = convertMessage(view, language);
+    const displayed: ThreadMessageLike[] = [];
+    const source = view?.messages ?? [];
+    let turn: { message: MessageView; index: number }[] = [];
+    const flush = () => {
+      if (!turn.length) return;
+      // The API has no progress/final channel. Only text followed by a tool
+      // is known to be intermediate; never classify by its wording.
+      const lastTool = turn.findLastIndex(({ message }) => message.role === "tool");
+      type Part = Exclude<ThreadMessageLike["content"], string>[number];
+      const activity: Part[] = [];
+      const answer: Part[] = [];
+      let progress = "";
+      for (const [position, { message, index }] of turn.entries()) {
+        const converted = convert(message, index);
+        if (!Array.isArray(converted.content)) continue;
+        for (const part of converted.content) {
+          if (part.type === "text" && position < lastTool) {
+            progress = part.text.replace(/\s+/g, " ").trim();
+            // Display-only reasoning part keeps narration inside the standard
+            // process disclosure. The source text and message are untouched.
+            activity.push({ type: "reasoning", text: part.text });
+          } else if (part.type === "tool-call" || part.type === "reasoning") {
+            activity.push(part);
+          } else {
+            answer.push(part);
+          }
+        }
+      }
+      const id = turn[0].message.id;
+      const status = messageStatus(view, turn[turn.length - 1].index, language);
+      if (activity.length) displayed.push({
+        id: `${id}-activity`, role: "assistant", content: activity, status,
+        metadata: { custom: { progress } },
+      });
+      if (answer.length) displayed.push({
+        id: `${id}-answer`, role: "assistant", content: answer, status,
+      });
+      turn = [];
+    };
+    for (const [index, message] of source.entries()) {
+      if (message.role === "user" || message.role === "summary") {
+        flush();
+        displayed.push(convert(message, index));
+      } else {
+        turn.push({ message, index });
+      }
+    }
+    flush();
+    return displayed;
+  }, [view, language]);
+  const runtime = useExternalStoreRuntime({
     messages,
-    convertMessage: converter,
+    convertMessage: displayMessage,
     isRunning: !!view && activePhases.has(view.phase),
     isSendDisabled: !canSend,
     onNew: async (message) => {
@@ -230,9 +322,30 @@ export function AgentThread({
     },
     onCancel,
     suggestions: [
-      { title: "整理文件", label: "按内容归类并生成清单", prompt: "帮我整理这些文件，并生成一份清晰的目录说明。" },
-      { title: "分析项目", label: "阅读代码并提出下一步", prompt: "分析当前项目，告诉我最值得优先处理的三个问题。" },
-      { title: "起草文档", label: "从现有材料整理成文", prompt: "根据现有材料，帮我起草一份结构清楚的文档。" },
+      {
+        title: t("Organize files", "整理文件"),
+        label: t("Sort and summarize", "按内容归类并生成清单"),
+        prompt: t(
+          "Organize these files and create a clear directory guide.",
+          "帮我整理这些文件，并生成一份清晰的目录说明。",
+        ),
+      },
+      {
+        title: t("Explore a project", "分析项目"),
+        label: t("Review code and next steps", "阅读代码并提出下一步"),
+        prompt: t(
+          "Analyze this project and identify the three highest priority issues.",
+          "分析当前项目，告诉我最值得优先处理的三个问题。",
+        ),
+      },
+      {
+        title: t("Draft a document", "起草文档"),
+        label: t("Turn notes into a draft", "从现有材料整理成文"),
+        prompt: t(
+          "Draft a well-structured document from the available material.",
+          "根据现有材料，帮我起草一份结构清楚的文档。",
+        ),
+      },
     ],
   });
 
@@ -246,7 +359,12 @@ export function AgentThread({
     <AssistantRuntimeProvider runtime={runtime}>
       <ModelMenuContext.Provider value={modelMenu}>
         <div className="agent-thread">
-          <Thread components={{ ToolFallback: WorkLensTool }} />
+          <Thread
+            components={{
+              ToolFallback: WorkLensTool,
+              ProcessGroup: WorkLensToolGroup,
+            }}
+          />
         </div>
       </ModelMenuContext.Provider>
     </AssistantRuntimeProvider>

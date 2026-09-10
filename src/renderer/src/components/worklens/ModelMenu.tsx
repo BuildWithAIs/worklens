@@ -1,35 +1,32 @@
-import { Check, ChevronDown, ChevronRight, Cpu } from "lucide-react";
+import { ProviderIcon } from "./ProviderIcon";
+import { useState } from "react";
+import { Check, ChevronDown, SlidersHorizontal } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { Bootstrap, Selection, Thinking } from "../../../../shared/contracts";
-
-const thinkingLabels: Record<Thinking, string> = {
-  off: "关闭",
-  minimal: "最少",
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "极高",
-  max: "最高",
+import { Button } from "@/components/ui/button";
+import { SearchInput } from "./SearchInput";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
+import { useLocale } from "@/lib/locale";
+import type {
+  Bootstrap,
+  Selection,
+  Thinking,
+} from "../../../../shared/contracts";
+const levels: Record<Thinking, [string, string]> = {
+  off: ["Off", "关闭"],
+  minimal: ["Minimal", "最少"],
+  low: ["Low", "低"],
+  medium: ["Medium", "中"],
+  high: ["High", "高"],
+  xhigh: ["Extra high", "极高"],
+  max: ["Max", "最高"],
 };
-
-function availableModels(data: Bootstrap, value?: Selection) {
-  const hidden = new Set(data.settings.hiddenModels ?? []);
-  return data.providers.flatMap((provider) =>
-    provider.models
-      .filter(
-        (model) =>
-          model.available &&
-          (!hidden.has(`${provider.id}/${model.id}`) ||
-            (value?.provider === provider.id && value?.model === model.id)),
-      )
-      .map((model) => ({ ...model, providerId: provider.id, providerName: provider.name })),
-  );
-}
-
 export function ModelMenu({
   data,
   value,
@@ -43,85 +40,168 @@ export function ModelMenu({
   onChange: (value: Selection) => void;
   onManage: () => void;
 }) {
-  const models = availableModels(data, value);
-  const current = models.find(
-    (m) => m.id === value?.model && m.providerId === value?.provider,
-  );
-
-  if (!models.length) {
-    return (
-      <button className="model-menu-trigger empty" onClick={onManage}>
-        <Cpu size={14} />
-        还没有可用模型 · 去配置
-        <ChevronRight size={14} />
-      </button>
-    );
-  }
-
+  const { t } = useLocale();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const hidden = new Set(data.settings.hiddenModels ?? []);
+  const current = data.providers
+    .find((p) => p.id === value?.provider)
+    ?.models.find((m) => m.id === value?.model);
+  const groups = data.providers
+    .map((p) => ({
+      ...p,
+      models: p.models.filter(
+        (m) =>
+          m.available &&
+          (!hidden.has(p.id + "/" + m.id) ||
+            (value?.provider === p.id && value.model === m.id)) &&
+          (p.name + " " + m.name + " " + m.id)
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+      ),
+    }))
+    .filter((p) => p.models.length);
   return (
-    <Popover>
-      <PopoverTrigger className="model-menu-trigger" disabled={disabled}>
-        <Cpu size={14} />
-        <span>{current?.name ?? "选择模型"}</span>
-        {current && value?.thinking && value.thinking !== "off" && (
-          <span className="model-menu-level">
-            {thinkingLabels[value.thinking]}
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+      >
+        <PopoverTrigger
+          render={<Button variant="ghost" size="sm" className="max-w-72" />}
+          disabled={disabled}
+          aria-label={t("Choose model", "选择模型")}
+        >
+          <ProviderIcon provider={value?.provider} />
+          <span className="truncate">
+            {current?.name ?? t("Choose model", "选择模型")}
           </span>
-        )}
-        <ChevronDown size={14} />
-      </PopoverTrigger>
-      <PopoverContent className="model-menu-content">
-        <div className="model-menu-list">
-          {models.map((model) => {
-            const selected =
-              current?.id === model.id && current.providerId === model.providerId;
-            return (
-              <button
-                key={`${model.providerId}/${model.id}`}
-                className={selected ? "model-menu-item selected" : "model-menu-item"}
-                onClick={() =>
-                  onChange({
-                    provider: model.providerId,
-                    model: model.id,
-                    thinking:
-                      selected && value
-                        ? value.thinking
-                        : model.levels.includes("medium")
-                          ? "medium"
-                          : model.levels[0],
-                  })
+          {current && value && current.levels.length > 1 && (
+            <span className="text-muted-foreground shrink-0">
+              · {t(...levels[value.thinking])}
+            </span>
+          )}
+          <ChevronDown />
+        </PopoverTrigger>
+        <PopoverContent className="chat-model-picker">
+          <div className="chat-model-search">
+            <SearchInput
+              autoFocus
+              aria-label={t("Search models", "搜索模型")}
+              placeholder={t("Search models…", "搜索模型…")}
+              value={query}
+              onValueChange={setQuery}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  e.currentTarget
+                    .closest('[data-slot="popover-content"]')
+                    ?.querySelector<HTMLButtonElement>("[data-model-option]")
+                    ?.focus();
+                }
+              }}
+            />
+          </div>
+          <div
+            className="chat-model-results"
+            onKeyDown={(e) => {
+              if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+              const options = Array.from(
+                e.currentTarget.querySelectorAll<HTMLButtonElement>(
+                  "[data-model-option]",
+                ),
+              );
+              const i = options.indexOf(
+                document.activeElement as HTMLButtonElement,
+              );
+              e.preventDefault();
+              options[
+                (i + (e.key === "ArrowDown" ? 1 : -1) + options.length) %
+                  options.length
+              ]?.focus();
+            }}
+          >
+            {groups.map((p) => (
+              <div key={p.id} role="group" aria-label={p.name}>
+                <div className="chat-model-group flex items-center gap-2"><ProviderIcon provider={p.id} />{p.name}</div>
+                {p.models.map((m) => {
+                  const selected =
+                    p.id === value?.provider && m.id === value.model;
+                  return (
+                    <Button
+                      key={m.id}
+                      data-model-option
+                      variant={selected ? "secondary" : "ghost"}
+                      className="chat-model-option"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        onChange({
+                          provider: p.id,
+                          model: m.id,
+                          thinking:
+                            selected && value
+                              ? value.thinking
+                              : value && m.levels.includes(value.thinking)
+                                ? value.thinking
+                                : m.levels.includes("medium")
+                                  ? "medium"
+                                  : m.levels[0],
+                        });
+                        // Keep the picker open so the user can choose reasoning next.
+                      }}
+                    >
+                      <span>{m.name}</span>
+                      {selected && <Check />}
+                    </Button>
+                  );
+                })}
+              </div>
+            ))}
+            {!groups.length && (
+              <p className="chat-model-empty">
+                {t(
+                  "No matching models. Connect a provider or change visibility in Models.",
+                  "没有匹配的模型。请连接供应商，或在模型管理中调整显示设置。",
+                )}
+              </p>
+            )}
+          </div>
+          {current && value && current.levels.length > 1 && (
+            <div className="chat-model-reasoning">
+              <span>{t("Thinking", "思考强度")}</span>
+              <NativeSelect
+                aria-label={t("Thinking level", "思考强度")}
+                value={value.thinking}
+                onChange={(e) =>
+                  onChange({ ...value, thinking: e.target.value as Thinking })
                 }
               >
-                <div className="model-menu-item-text">
-                  <span className="model-menu-item-name">{model.name}</span>
-                  <span className="model-menu-item-provider">{model.providerName}</span>
-                </div>
-                {selected && <Check size={14} />}
-              </button>
-            );
-          })}
-        </div>
-        {current && current.levels.length > 1 && (
-          <div className="model-menu-levels">
-            <span className="model-menu-levels-label">推理强度</span>
-            <div className="model-menu-levels-options">
-              {current.levels.map((level) => (
-                <button
-                  key={level}
-                  className={value?.thinking === level ? "selected" : ""}
-                  onClick={() => value && onChange({ ...value, thinking: level })}
-                >
-                  {thinkingLabels[level]}
-                </button>
-              ))}
+                {current.levels.map((level) => (
+                  <NativeSelectOption key={level} value={level}>
+                    {t(...levels[level])}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
             </div>
+          )}
+          <div className="chat-model-footer flex items-center gap-2">
+            <Button
+              variant="ghost"
+              className="flex-1 justify-start"
+              onClick={() => {
+                setOpen(false);
+                onManage();
+              }}
+            >
+              <SlidersHorizontal />
+              {t("Manage models", "管理模型")}
+            </Button>
           </div>
-        )}
-        <button className="model-menu-manage" onClick={onManage}>
-          管理模型
-          <ChevronRight size={13} />
-        </button>
-      </PopoverContent>
-    </Popover>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
