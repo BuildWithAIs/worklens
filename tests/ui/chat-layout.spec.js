@@ -196,7 +196,7 @@ test("compact tool activity, history actions and fluid message width", async ({
   const deletion = page.getByRole("dialog", { name: "Delete conversation?" });
   await expect(deletion).toBeVisible();
   await expect(deletion.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
-  await expect(deletion).toContainText("permanently deleted");
+  await expect(deletion).toContainText("permanently delete");
   expect((await deletion.boundingBox()).width).toBeLessThanOrEqual(400);
   await page.screenshot({ path: testInfo.outputPath("delete-confirmation.png"), animations: "disabled" });
   await page.keyboard.press("Escape");

@@ -545,11 +545,11 @@ export function App() {
         >
           {dialog.type === "delete" ? (
             <DialogDescription className="leading-6 wrap-anywhere">
-              {t(
-                `“${dialog.title}” and its history will be permanently deleted.`,
-                `「${dialog.title}」及其记录将永久删除，无法恢复。`,
-              )}
-              <span className="mt-2 block">{t("Running tasks will stop. Local files will be kept.", "运行中的任务会停止，本地文件会保留。")}</span>
+              <span className="text-foreground">
+                {t("This will permanently delete ", "将永久删除会话 ")}
+                <strong className="font-semibold">{dialog.title}</strong>{t(".", "。")}
+              </span>
+              <span className="mt-2 block text-xs leading-5">{t("Running tasks will stop. Local files will be kept.", "运行中的任务会停止，本地文件会保留。")}</span>
             </DialogDescription>
           ) : (
             <input
