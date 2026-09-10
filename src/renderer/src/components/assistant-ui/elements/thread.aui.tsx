@@ -60,6 +60,7 @@ import {
   PencilIcon,
   RefreshCwIcon,
   SquareIcon,
+  XIcon,
 } from "lucide-react";
 import {
   createContext,
@@ -166,7 +167,7 @@ const ThreadRoot: FC<{
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
-        ["--thread-max-width" as string]: "64rem",
+        ["--thread-max-width" as string]: isEmpty ? "55rem" : "64rem",
         ["--composer-bg" as string]: "var(--color-card)",
         ["--composer-radius" as string]: "1.5rem",
         ["--composer-padding" as string]: "8px",
@@ -209,7 +210,7 @@ const ThreadRoot: FC<{
             <ThreadScrollToBottom />
             <Composer autoFocus={autoFocus} />
             {footer}
-            <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
+            <AuiIf condition={isNewChatView}>
               <ThreadSuggestions />
             </AuiIf>
           </ThreadPrimitive.ViewportFooter>
@@ -249,8 +250,10 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
+  const isEmpty = useAuiState((s) => s.composer.isEmpty);
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
+    // Preserve the centered composer's position when suggestions disappear.
+    <div aria-hidden={!isEmpty} inert={!isEmpty} className={cn("aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4", !isEmpty && "invisible")}>
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
@@ -270,7 +273,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const { t } = useLocale();
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone render={<div data-slot="aui_composer-shell" className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]" />}><ComposerAttachments /><ComposerPrimitive.Input
+      <ComposerPrimitive.AttachmentDropzone render={<div data-slot="aui_composer-shell" className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-md shadow-black/5 dark:shadow-black/20 transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]" />}><ComposerAttachments /><ComposerPrimitive.Input
                       placeholder={t("Describe a task or include a local file path…", "描述你的任务，也可以附上本地文件路径…")}
                       className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
                       rows={1}
@@ -281,6 +284,8 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
     </ComposerPrimitive.Root>
   );
 };
+
+const composerActionClassName = "size-8 rounded-full bg-violet-500 text-white hover:bg-violet-600 dark:bg-violet-500 dark:hover:bg-violet-400 focus-visible:border-violet-400 focus-visible:ring-violet-400/40 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-60 motion-reduce:transition-none motion-reduce:active:scale-100";
 
 const ComposerAction: FC = () => {
   const { t } = useLocale();
@@ -306,10 +311,10 @@ const ComposerAction: FC = () => {
           </AuiIf>
         </AuiIf>
         <AuiIf condition={(s) => !s.thread.isRunning}>
-          <ComposerPrimitive.Send render={<TooltipIconButton tooltip={t("Send message", "发送消息")} side="bottom" type="button" variant="default" size="icon" className="aui-composer-send size-7 rounded-full" aria-label={t("Send message", "发送消息")} />}><ArrowUpIcon className="aui-composer-send-icon size-4" /></ComposerPrimitive.Send>
+          <ComposerPrimitive.Send render={<TooltipIconButton tooltip={t("Send message", "发送消息")} side="bottom" type="button" variant="default" size="icon" className={cn("aui-composer-send", composerActionClassName)} aria-label={t("Send message", "发送消息")} />}><ArrowUpIcon className="aui-composer-send-icon size-4" /></ComposerPrimitive.Send>
         </AuiIf>
         <AuiIf condition={(s) => s.thread.isRunning}>
-          <ComposerPrimitive.Cancel render={<Button type="button" variant="default" size="icon" className="aui-composer-cancel size-7 rounded-full" aria-label={t("Stop task", "停止运行")} />}><SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" /></ComposerPrimitive.Cancel>
+          <ComposerPrimitive.Cancel render={<TooltipIconButton tooltip={t("Stop task", "停止运行")} side="bottom" type="button" variant="default" size="icon" className={cn("aui-composer-cancel", composerActionClassName)} aria-label={t("Stop task", "停止运行")} />}><XIcon className="aui-composer-cancel-icon size-4" /></ComposerPrimitive.Cancel>
         </AuiIf>
       </div>
     </div>

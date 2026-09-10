@@ -1,6 +1,27 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
+test("new chat composer stays in place while typing and clearing", async ({ page }) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  const input = page.getByRole("textbox", { name: "Message", exact: true });
+  const composer = page.locator('[data-slot="aui_composer-shell"]');
+  const suggestions = page.locator(".aui-thread-welcome-suggestions");
+  for (const width of [1000, 1920]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(suggestions).toBeVisible();
+    const before = await composer.boundingBox();
+    await input.fill("地");
+    await expect(suggestions).toBeHidden();
+    const during = await composer.boundingBox();
+    expect(Math.abs(during.y - before.y)).toBeLessThan(1);
+    await input.fill("");
+    await expect(suggestions).toBeVisible();
+    const after = await composer.boundingBox();
+    expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+  }
+});
+
 test("compact tool activity, history actions and fluid message width", async ({
   page,
 }, testInfo) => {
@@ -170,6 +191,17 @@ test("compact tool activity, history actions and fluid message width", async ({
     page.getByRole("dialog", { name: "Rename conversation" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await history.getByRole("button", { name: "Conversation options: Review project files" }).click();
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  const deletion = page.getByRole("dialog", { name: "Delete conversation?" });
+  await expect(deletion).toBeVisible();
+  await expect(deletion.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await expect(deletion).toContainText("permanently deleted");
+  expect((await deletion.boundingBox()).width).toBeLessThanOrEqual(400);
+  await page.screenshot({ path: testInfo.outputPath("delete-confirmation.png"), animations: "disabled" });
+  await page.keyboard.press("Escape");
+  await expect(deletion).toBeHidden();
+  await expect(history.getByRole("button", { name: "Review project files", exact: true })).toBeVisible();
   await page.locator('[data-slot="aui_user-message-root"]').last().hover();
   await expect(page.locator(".aui-user-action-edit")).toHaveCount(1);
   await page

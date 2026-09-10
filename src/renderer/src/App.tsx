@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -534,21 +534,23 @@ export function App() {
         </Modal>
       )}
       {dialog && (
-        <Modal
+        <ConversationDialog
+          compact={dialog.type === "delete"}
           title={
             dialog.type === "delete"
-              ? t("Delete conversation permanently", "⚠ 永久删除会话")
+              ? t("Delete conversation?", "删除会话？")
               : t("Rename conversation", "重命名会话")
           }
           onClose={() => setDialog(undefined)}
         >
           {dialog.type === "delete" ? (
-            <p>
+            <DialogDescription className="leading-6 wrap-anywhere">
               {t(
-                `Delete “${dialog.title}” and its history permanently? Running tasks will stop. Changes to local files will remain.`,
-                `永久删除「${dialog.title}」及其记录？正在运行的任务会停止，已修改的本地文件会保留。`,
+                `“${dialog.title}” and its history will be permanently deleted.`,
+                `「${dialog.title}」及其记录将永久删除，无法恢复。`,
               )}
-            </p>
+              <span className="mt-2 block">{t("Running tasks will stop. Local files will be kept.", "运行中的任务会停止，本地文件会保留。")}</span>
+            </DialogDescription>
           ) : (
             <input
               aria-label={t("Conversation name", "会话名称")}
@@ -558,12 +560,12 @@ export function App() {
               onChange={(e) => setDialog({ ...dialog, title: e.target.value })}
             />
           )}
-          <div className="actions">
-            <button onClick={() => setDialog(undefined)}>
+          <div className={dialog.type === "delete" ? "mt-1 flex justify-end gap-2" : "actions"}>
+            <Button variant="outline" onClick={() => setDialog(undefined)}>
               {t("Cancel", "取消")}
-            </button>
-            <button
-              className={dialog.type === "delete" ? "danger-button" : "primary"}
+            </Button>
+            <Button
+              className={dialog.type === "delete" ? "bg-red-600 text-white hover:bg-red-700 focus-visible:border-red-500 focus-visible:ring-red-500/30" : undefined}
               disabled={!dialog.title.trim()}
               onClick={() =>
                 void (
@@ -586,13 +588,30 @@ export function App() {
               }
             >
               {dialog.type === "delete"
-                ? t("Delete permanently", "永久删除")
+                ? t("Delete", "删除")
                 : t("Save name", "保存名称")}
-            </button>
+            </Button>
           </div>
-        </Modal>
+        </ConversationDialog>
       )}
     </div>
+  );
+}
+
+function ConversationDialog({ compact, title, children, onClose }: {
+  compact: boolean;
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  if (!compact) return <Modal title={title} onClose={onClose}>{children}</Modal>;
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent showCloseButton={false} className="p-5 sm:max-w-[400px]">
+        <DialogTitle>{title}</DialogTitle>
+        {children}
+      </DialogContent>
+    </Dialog>
   );
 }
 
