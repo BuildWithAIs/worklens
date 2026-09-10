@@ -79,7 +79,17 @@ export class SecureCredentials implements CredentialStore {
       else if (value && typeof value === "object")
         Object.values(value).forEach(visit);
     };
-    const { type: _type, ...data } = credential;
+    // OAuth model catalogs are public identifiers, not credentials. Redacting
+    // them collapses distinct model IDs (and hiddenModels keys) into one value.
+    const {
+      type: _type,
+      availableModelIds: _models,
+      policyModelIds: _policies,
+      ...data
+    } = credential as Credential & {
+      availableModelIds?: unknown;
+      policyModelIds?: unknown;
+    };
     visit(data);
     for (const key of ["key", "access", "refresh"] as const) {
       const value = (credential as unknown as Record<string, unknown>)[key];
@@ -93,11 +103,15 @@ export class SecureCredentials implements CredentialStore {
       JSON.stringify(secret).slice(1, -1),
     ]);
     for (const secret of forms.sort((a, b) => b.length - a.length))
-      value = value.split(secret).join("[已隐藏]");
-    return value
-      .replace(/(Bearer\s+)[^\s"']+/gi, "$1[已隐藏]")
-      .replace(/\bsk-[\w-]+/g, "[已隐藏]")
-      .replace(/([?&](?:key|token|code|secret)=)[^&\s]+/gi, "$1[已隐藏]");
+      value = value.split(secret).join("[redacted]");
+    return (
+      value
+        .replace(/(Authorization\s*:\s*Bearer\s+)[^\s"']+/gi, "$1[redacted]")
+        // "bearer token" is also a normal authentication method description.
+        .replace(/(Bearer\s+)(?!token\b)[^\s"']+/gi, "$1[redacted]")
+        .replace(/\bsk-[\w-]+/g, "[redacted]")
+        .replace(/([?&](?:key|token|code|secret)=)[^&\s]+/gi, "$1[redacted]")
+    );
   }
   async read(
     id: string,

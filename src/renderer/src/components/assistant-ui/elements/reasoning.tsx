@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -164,11 +164,13 @@ function ReasoningFade({
 function ReasoningTrigger({
   active,
   duration,
+  label,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   active?: boolean;
   duration?: number;
+  label?: string;
 }) {
   const durationText = duration ? ` (${duration}s)` : "";
 
@@ -181,10 +183,6 @@ function ReasoningTrigger({
       )}
       {...props}
     >
-      <BrainIcon
-        data-slot="reasoning-trigger-icon"
-        className="aui-reasoning-trigger-icon size-4 shrink-0"
-      />
       <span
         data-slot="reasoning-trigger-label"
         className={cn(
@@ -192,7 +190,7 @@ function ReasoningTrigger({
           active && "shimmer motion-reduce:animate-none",
         )}
       >
-        Reasoning{durationText}
+        {label ?? `Reasoning${durationText}`}
       </span>
       <ChevronDownIcon
         data-slot="reasoning-trigger-chevron"

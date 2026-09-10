@@ -29,6 +29,7 @@ export const schemas = {
       theme: z.enum(["light", "dark", "system"]).optional(),
       riskAccepted: z.boolean().optional(),
       defaults: selection.optional(),
+      hiddenModels: z.array(z.string().min(1).max(400)).max(2000).optional(),
       lastConversation: id.optional(),
     })
     .strict(),
@@ -53,6 +54,7 @@ export const schemas = {
     })
     .strict(),
   test: selection,
+  clearConnection: z.object({ provider: z.string().min(1).max(200) }).strict(),
   open: z.object({ id }).strict(),
   rename: z.object({ id, title: z.string().trim().min(1).max(120) }).strict(),
   delete: z.object({ id }).strict(),

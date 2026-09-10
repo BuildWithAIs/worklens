@@ -16,7 +16,8 @@
     "test:e2e": "npm run build && playwright test",
     "pack": "npm run build && electron-builder --dir",
     "dist:win": "npm run build && electron-builder --win nsis",
-    "dist:mac": "npm run build && electron-builder --mac dmg"
+    "dist:mac": "npm run build && electron-builder --mac dmg",
+    "test:ui": "npm run build && playwright test --config playwright.ui.config.ts"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.18",
@@ -25,6 +26,7 @@
     "@earendil-works/pi-agent-core": "0.85.1",
     "@earendil-works/pi-ai": "0.85.1",
     "@earendil-works/pi-coding-agent": "0.85.1",
+    "@lobehub/icons-static-svg": "1.95.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
     "lucide-react": "0.577.0",

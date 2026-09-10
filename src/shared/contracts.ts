@@ -35,6 +35,8 @@ export interface ProviderInfo {
   id: string;
   name: string;
   configured: boolean;
+  credentialType?: "api_key" | "oauth";
+  credentialHint?: string;
   credentialError?: string;
   methods: { type: "api_key" | "oauth"; name: string; interactive: boolean }[];
   models: ModelInfo[];
@@ -45,6 +47,7 @@ export interface Settings {
   theme: "light" | "dark" | "system";
   riskAccepted: boolean;
   defaults?: Selection;
+  hiddenModels?: string[];
   lastConversation?: string;
   [key: string]: unknown;
 }
@@ -144,6 +147,7 @@ export interface Requests {
     output: void;
   };
   test: { input: Selection; output: string };
+  clearConnection: { input: { provider: string }; output: void };
   open: { input: { id: string }; output: ConversationView };
   rename: { input: { id: string; title: string }; output: void };
   delete: { input: { id: string }; output: void };
