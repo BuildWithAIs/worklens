@@ -1,5 +1,8 @@
 # Deployment verification
 
+The initial Static Assets deployment is recorded below. The later migration to
+private R2 and bucket-scoped CI/CD is documented in `../README.md` and PR #7.
+
 Verified on 2026-09-10 **before creating the feature branch, commit, or PR**.
 
 - Site: https://worklens.buildwithais.com/
