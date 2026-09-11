@@ -1,12 +1,25 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-export async function mockServer() {
+export async function mockServer(
+  options: { failFirst?: number; failAlways?: boolean } = {},
+) {
   const requests: any[] = [];
   const server = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
     const input = JSON.parse(body);
     requests.push(input);
+    if (options.failAlways || requests.length <= (options.failFirst ?? 0)) {
+      response.writeHead(options.failAlways ? 400 : 503, {
+        "content-type": "application/json",
+      });
+      response.end(
+        JSON.stringify({
+          error: { message: "Fixture request failed", type: "server_error" },
+        }),
+      );
+      return;
+    }
     const messages = input.messages ?? [];
     const lastUserIndex = messages.findLastIndex((m: any) => m.role === "user");
     const raw = messages[lastUserIndex]?.content ?? "";
@@ -60,6 +73,10 @@ export async function mockServer() {
       }
       chunk({}, "stop");
     }
+    if (!response.destroyed)
+      response.write(
+        `data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", choices: [], usage: { prompt_tokens: 100, completion_tokens: 40, total_tokens: 140, prompt_tokens_details: { cached_tokens: 20 } } })}\n\n`,
+      );
     response.end("data: [DONE]\n\n");
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

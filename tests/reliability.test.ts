@@ -327,5 +327,13 @@ test("PRD 046: Pi compaction persists a recoverable summary", async () => {
   expect(history.messages.some((message) => message.role === "summary")).toBe(
     true,
   );
+  expect(history.usage?.conversation.total).toBe(
+    session.getSessionStats().tokens.total,
+  );
+  expect(history.usage?.context).toEqual({
+    status: "unavailable",
+    contextWindow: fixtureModel.contextWindow,
+  });
+  expect(history.usage?.run?.total).toBe(140);
   await restored.shutdown();
 });
