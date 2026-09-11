@@ -9,7 +9,17 @@ import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { mkdir, unlink, realpath, readFile, readdir } from "node:fs/promises";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
+import {
+  UsageService,
+  getConversationUsage,
+  getLatestRun,
+  buildContextUsage,
+  readRetainedUsage,
+  getHistoricalContext,
+  auditSessionFile,
+  incompleteUsage,
+} from "./usage";
 import { resources, toolNames } from "./resources";
 import { worklensTools } from "./tools";
 import { projectMessages, textContent } from "./projection";
@@ -22,6 +32,7 @@ import type {
   Phase,
   Selection,
   Recovery,
+  UsageSnapshot,
 } from "../shared/contracts";
 
 interface ActiveRun {
@@ -40,12 +51,58 @@ interface Runtime {
   toolUpdates: Map<string, Partial<MessageView>>;
   updated: string;
   timer?: NodeJS.Timeout;
+  usage?: UsageSnapshot;
+  accountingDamaged?: boolean;
 }
 export class AgentService {
   private sessions = new Map<string, Runtime>();
   private operations = new SerialQueue();
   private requests = new Map<string, Promise<ConversationView>>();
   private stopping = false;
+  private usage = new UsageService();
+  private lookupModel = (provider: string, model: string) =>
+    this.modelRuntime.getModel(provider, model);
+  getGlobalUsage() {
+    return this.usage.getGlobalUsage();
+  }
+  private refreshUsage(runtime: Runtime) {
+    const entries = runtime.manager.getEntries();
+    const activeId = [
+      "generating",
+      "tool",
+      "compacting",
+      "retrying",
+      "stopping",
+    ].includes(runtime.phase)
+      ? runtime.active?.id
+      : undefined;
+    runtime.usage = {
+      conversation: getConversationUsage(entries, this.lookupModel),
+      run: getLatestRun(entries, this.lookupModel, activeId),
+      context: runtime.session
+        ? buildContextUsage(runtime.session.getContextUsage())
+        : getHistoricalContext(
+            runtime.manager,
+            this.selection(runtime),
+            this.lookupModel,
+          ),
+    };
+    if (runtime.accountingDamaged) {
+      runtime.usage.conversation = incompleteUsage(runtime.usage.conversation);
+      if (runtime.usage.run)
+        runtime.usage.run = {
+          ...runtime.usage.run,
+          ...incompleteUsage(runtime.usage.run),
+        };
+    }
+    // A new manager can still be memory-only before its first assistant response.
+    const file = runtime.manager.getSessionFile();
+    if (file && existsSync(file))
+      this.usage.update(
+        runtime.manager.getSessionId(),
+        runtime.usage.conversation,
+      );
+  }
   diagnostics: string[] = [];
   recoveries: Recovery[] = [];
   constructor(
@@ -60,6 +117,11 @@ export class AgentService {
       mkdir(this.paths.sessions, { recursive: true }),
       mkdir(join(this.paths.userData, "runs"), { recursive: true }),
     ]);
+    await this.usage.rebuild(() =>
+      readRetainedUsage(this.paths, this.lookupModel, (message) =>
+        this.diagnostics.push(message),
+      ),
+    );
     const pending = (await readdir(join(this.paths.userData, "runs"))).filter(
       (file) => file.endsWith(".pending.json"),
     );
@@ -187,7 +249,7 @@ export class AgentService {
         Object.assign(message, runtime.toolUpdates.get(message.toolId));
     }
     return redactStrings(
-      { ...this.summary(id, runtime), messages },
+      { ...this.summary(id, runtime), messages, usage: runtime.usage },
       this.redact,
     );
   }
@@ -208,6 +270,7 @@ export class AgentService {
         sequence: ++active.sequence,
         type,
         view: this.view(id, runtime),
+        globalUsage: this.getGlobalUsage(),
       });
     };
     if (immediate) {
@@ -277,7 +340,9 @@ export class AgentService {
       phase: "idle",
       toolUpdates: new Map(),
       updated: info.modified.toISOString(),
+      accountingDamaged: await auditSessionFile(info.path),
     };
+    this.refreshUsage(runtime);
     this.sessions.set(id, runtime);
     return runtime;
   }
@@ -437,7 +502,23 @@ export class AgentService {
       if (event.type === "compaction_end" && event.errorMessage)
         runtime.error = this.redact(event.errorMessage);
     }
-    this.publish(id, runtime, event.type);
+    if (
+      event.type === "message_end" ||
+      event.type === "compaction_end" ||
+      event.type === "auto_retry_end"
+    ) {
+      // Locked Pi 0.85.1 emits message_end BEFORE synchronous appendMessage.
+      // U0 integration test proves this microtask observes the corresponding append.
+      queueMicrotask(() => {
+        if (runtime.active !== active) return;
+        try {
+          this.refreshUsage(runtime);
+          this.publish(id, runtime, event.type);
+        } catch {
+          this.diagnostics.push("用量更新暂时失败，将在本轮结束时重新核对。");
+        }
+      });
+    } else this.publish(id, runtime, event.type);
   }
   send(input: {
     conversationId?: string;
@@ -501,6 +582,21 @@ export class AgentService {
           runtime.phase = "failed";
           throw error;
         }
+        try {
+          runtime.manager.appendCustomEntry("worklens.run-start", {
+            version: 1,
+            conversationId: id,
+            runId: active.id,
+            ...input.selection,
+            startedAt: runtime.updated,
+          });
+          this.refreshUsage(runtime);
+        } catch (error) {
+          runtime.active = undefined;
+          runtime.phase = "failed";
+          // The accepted prompt remains in the recovery marker if attribution fails.
+          throw error;
+        }
         active.done = Promise.resolve().then(async () => {
           try {
             if (active.cancelled) return;
@@ -522,12 +618,57 @@ export class AgentService {
           } finally {
             if (active.cancelled) runtime.phase = "cancelled";
             runtime.updated = new Date().toISOString();
+            let terminalPersisted = false;
+            try {
+              this.refreshUsage(runtime);
+              runtime.manager.appendCustomEntry("worklens.run-end", {
+                version: 1,
+                conversationId: id,
+                runId: active.id,
+                outcome: runtime.phase,
+                endedAt: runtime.updated,
+                usage: runtime.usage?.run
+                  ? {
+                      ...runtime.usage.run,
+                      state: runtime.phase,
+                      endedAt: runtime.updated,
+                    }
+                  : undefined,
+              });
+              this.refreshUsage(runtime);
+              // appendCustomEntry may only have updated memory. Verify the actual
+              // canonical file contains BOTH boundaries before releasing recovery.
+              const file = runtime.manager.getSessionFile();
+              if (file && existsSync(file)) {
+                const persisted = SessionManager.open(
+                  file,
+                  this.paths.sessions,
+                  this.paths.runtime,
+                );
+                const run = getLatestRun(
+                  persisted.getEntries(),
+                  this.lookupModel,
+                );
+                terminalPersisted =
+                  run?.runId === active.id && run.state === runtime.phase;
+              }
+            } catch {
+              this.diagnostics.push("本轮用量归档未完成，已保留恢复记录。");
+            }
             this.publish(id, runtime, "run_end", true);
             runtime.active = undefined;
-            // Retain the accepted prompt if Pi has not yet created its session file.
-            const file = runtime.manager.getSessionFile();
-            if (file && (await realpath(file).catch(() => undefined)))
-              await unlink(pendingPath).catch(() => {});
+            if (terminalPersisted) await unlink(pendingPath).catch(() => {});
+            else
+              await atomicJson(pendingPath, {
+                version: 1,
+                conversationId: id,
+                runId: active.id,
+                text: input.text,
+                selection: input.selection,
+                startedAt: runtime.usage?.run?.startedAt,
+                phase: runtime.phase,
+                endedAt: runtime.updated,
+              }).catch(() => {});
           }
         });
         this.publish(id, runtime, "run_start", true);
@@ -554,6 +695,7 @@ export class AgentService {
       const runtime = await this.get(id);
       if (runtime.active) throw new Error("运行期间不能切换模型");
       await this.ensureSession(runtime, selection);
+      this.refreshUsage(runtime);
       return this.view(id, runtime);
     });
   }
@@ -593,6 +735,7 @@ export class AgentService {
       }
       runtime.session?.dispose();
       this.sessions.delete(id);
+      this.usage.remove(id);
     });
   }
   async cancelAll() {
