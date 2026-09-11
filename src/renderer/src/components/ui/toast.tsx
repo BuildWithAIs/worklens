@@ -8,7 +8,7 @@ import {
   CircleCheckIcon,
   InfoIcon,
   TriangleAlertIcon,
-  OctagonXIcon,
+  CircleXIcon,
   Loader2Icon,
 } from "lucide-react";
 
@@ -40,7 +40,7 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
     <ToastPrimitive.Root
       data-slot="toast"
       className={cn(
-        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-2xl border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-max min-w-[min(220px,100%)] max-w-[min(360px,100%)] origin-bottom rounded-2xl border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "[--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))]",
         "h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms]",
         "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
@@ -151,7 +151,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
   }
 
   if (type === "error") {
-    icon = <OctagonXIcon className="text-destructive" aria-hidden="true" />;
+    icon = <CircleXIcon className="text-destructive" aria-hidden="true" />;
   }
 
   if (type === "loading") {
@@ -179,10 +179,10 @@ function ToastList() {
     <Toast
       key={toastItem.id}
       toast={toastItem}
-      className={toastItem.type === "success" ? "w-80 max-w-full rounded-xl shadow-md" : undefined}
+      className="rounded-xl shadow-md"
     >
-      <ToastContent className={toastItem.type === "success" ? "items-start gap-3 px-4 py-3" : undefined}>
-        <div className={toastItem.type === "success" ? "pt-1.5" : undefined}><ToastIcon type={toastItem.type} /></div>
+      <ToastContent className="items-start gap-3 px-4 py-3">
+        <div className="shrink-0 pt-1.5"><ToastIcon type={toastItem.type} /></div>
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1 wrap-anywhere">
           <ToastTitle />
           <ToastDescription />

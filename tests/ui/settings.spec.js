@@ -65,6 +65,30 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     name: "Search providers",
     exact: true,
   });
+  const providerFilter = page.getByRole("combobox", { name: "Filter providers", exact: true });
+  await providerFilter.selectOption("connected");
+  await expect(page.getByRole("heading", { name: "Available", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Connected", exact: true })).toBeVisible();
+  await providerFilter.selectOption("available");
+  await expect(page.getByRole("heading", { name: "Connected", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Available", exact: true })).toBeVisible();
+  await search.fill("deep");
+  const clearButton = page.getByRole("button", { name: "Clear search", exact: true });
+  const searchBounds = await search.boundingBox();
+  const clearBounds = await clearButton.boundingBox();
+  await clearButton.hover();
+  await page.mouse.down();
+  const pressedBounds = await clearButton.boundingBox();
+  expect(Math.abs(pressedBounds.y - clearBounds.y)).toBeLessThanOrEqual(1.5);
+  expect(pressedBounds.y).toBeGreaterThanOrEqual(searchBounds.y);
+  expect(pressedBounds.y + pressedBounds.height).toBeLessThanOrEqual(searchBounds.y + searchBounds.height);
+  await page.mouse.up();
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
+  await search.fill("deep");
+  await expect(page.getByText("No providers match your filters.", { exact: true })).toBeVisible();
+  await providerFilter.selectOption("all");
+  await search.clear();
   await search.fill("deep");
   await expect(page.locator(".settings-entry")).toHaveCount(1);
   await page
