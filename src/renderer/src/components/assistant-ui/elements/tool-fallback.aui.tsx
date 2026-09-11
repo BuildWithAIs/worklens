@@ -4,6 +4,7 @@ import { memo, useCallback, useRef, useState } from "react";
 import {
   AlertCircleIcon,
   CheckIcon,
+  CopyIcon,
   ChevronDownIcon,
   LoaderIcon,
   XCircleIcon,
@@ -26,10 +27,46 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useLocale } from "@/lib/locale";
 
 const ANIMATION_DURATION = 200;
 
 const pressable = "active:scale-[0.98]";
+
+const toolCodeClassName =
+  "min-w-0 max-w-full rounded-lg border border-border/50 bg-muted/40 p-3.5 font-mono text-xs leading-5 text-foreground/90 whitespace-pre-wrap wrap-anywhere";
+
+function formatToolArgs(value: string) {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    // Incomplete streaming JSON remains visible without changing its contents.
+    return value;
+  }
+}
+
+function ToolCodeBlock({ text, className }: { text: string; className: string }) {
+  const { t } = useLocale();
+  const { isCopied, copyToClipboard } = useCopyToClipboard();
+  return (
+    <div className="group/tool-code relative min-w-0 w-full max-w-[720px] overflow-hidden rounded-lg border border-border/50 bg-muted/40">
+      <div className="absolute top-2 right-2 text-muted-foreground transition-opacity [@media(hover:hover)]:opacity-0 group-hover/tool-code:opacity-100 group-focus-within/tool-code:opacity-100">
+        <TooltipIconButton
+          tooltip={isCopied ? t("Copied", "已复制") : t("Copy", "复制")}
+          onClick={() => copyToClipboard(text)}
+          disabled={!text}
+        >
+          {isCopied ? <CheckIcon /> : <CopyIcon />}
+        </TooltipIconButton>
+      </div>
+      <pre className={cn(toolCodeClassName, "rounded-none border-0 bg-transparent pr-12", className)}>
+        <code>{text}</code>
+      </pre>
+    </div>
+  );
+}
 
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -234,9 +271,7 @@ function ToolFallbackArgs({
       className={cn("aui-tool-fallback-args", className)}
       {...props}
     >
-      <pre className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {argsText}
-      </pre>
+      <ToolCodeBlock className="aui-tool-fallback-args-value" text={formatToolArgs(argsText)} />
     </div>
   );
 }
@@ -256,12 +291,7 @@ function ToolFallbackResult({
       className={cn("aui-tool-fallback-result", className)}
       {...props}
     >
-      <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
-        Result:
-      </p>
-      <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
-      </pre>
+      <ToolCodeBlock className="aui-tool-fallback-result-content" text={typeof result === "string" ? result : JSON.stringify(result, null, 2)} />
     </div>
   );
 }

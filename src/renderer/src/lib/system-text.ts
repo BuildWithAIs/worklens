@@ -2,7 +2,7 @@
 // Only system-owned messages are translated; never rewrite conversation content.
 const messages: Record<string, string> = {
   运行期间不能切换模型:
-    "Wait for the current response to finish before switching models.",
+    "Can’t switch models while responding.",
   "当前会话正在运行，请先停止": "Stop the current response before continuing.",
   "模型尚未配置或不可用，请在设置中完成认证":
     "Connect a provider in Settings to use this model.",

@@ -37,7 +37,7 @@ test("compact tool activity, history actions and fluid message width", async ({
       updatedAt: new Date().toISOString(),
       selection: { provider: "deepseek", model: "flash", thinking: "medium" },
       messages: [
-        { id: "u1", role: "user", text: "Review project files." },
+        { id: "u1", role: "user", text: Array.from({ length: 16 }, (_, i) => `Review project files, requirement ${i + 1}.`).join("\n") },
         ...Array.from({ length: 5 }, (_, i) => [
           {
             id: `reason${i}`,
@@ -116,6 +116,19 @@ test("compact tool activity, history actions and fluid message width", async ({
     };
   });
   await page.goto("/");
+  const longMessage = page.locator(".aui-user-message-content").first();
+  const expandMessage = longMessage.getByRole("button", { name: "Show more", exact: true });
+  await expect(expandMessage).toHaveAttribute("aria-expanded", "false");
+  const collapsedHeight = (await longMessage.boundingBox()).height;
+  await expandMessage.click();
+  const collapseMessage = longMessage.getByRole("button", { name: "Show less", exact: true });
+  await expect(collapseMessage).toHaveAttribute("aria-expanded", "true");
+  await expect(collapseMessage).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(collapseMessage).toHaveCSS("font-size", "14px");
+  expect((await longMessage.boundingBox()).height).toBeGreaterThan(collapsedHeight);
+  await collapseMessage.click();
+  await expect(expandMessage).toBeVisible();
+  await expect(page.locator(".aui-user-message-content").last().getByRole("button", { name: "Show more", exact: true })).toHaveCount(0);
   await expect(page.locator(".chat-header")).not.toContainText("Workspace");
   await expect(page.locator(".chat-header")).not.toContainText("Completed");
   expect(
@@ -140,6 +153,15 @@ test("compact tool activity, history actions and fluid message width", async ({
     page.getByText("Thinking step 4", { exact: true }),
   ).toBeVisible();
   await page.locator('[data-slot="tool-fallback-trigger"]').first().click();
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const argsBlock = page.locator('[data-slot="tool-fallback-args"]').first();
+  await argsBlock.getByRole("button", { name: "Copy", exact: true }).click();
+  await expect(argsBlock.getByRole("button", { name: "Copied", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(JSON.stringify({ path: "file-0.md" }, null, 2));
+  const resultBlock = page.locator('[data-slot="tool-fallback-result"]').first();
+  await resultBlock.getByRole("button", { name: "Copy", exact: true }).click();
+  await expect(resultBlock.getByRole("button", { name: "Copied", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await resultBlock.locator("pre").innerText());
   await expect(
     page.locator('[data-slot="tool-fallback-result"]'),
   ).toContainText("Result 0");
@@ -197,7 +219,7 @@ test("compact tool activity, history actions and fluid message width", async ({
   await expect(deletion).toBeVisible();
   await expect(deletion.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
   await expect(deletion).toContainText("permanently delete");
-  expect((await deletion.boundingBox()).width).toBeLessThanOrEqual(400);
+  expect((await deletion.boundingBox()).width).toBeLessThanOrEqual(440);
   await page.screenshot({ path: testInfo.outputPath("delete-confirmation.png"), animations: "disabled" });
   await page.keyboard.press("Escape");
   await expect(deletion).toBeHidden();

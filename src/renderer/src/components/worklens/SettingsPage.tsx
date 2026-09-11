@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -15,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemActions } from "@/components/ui/item";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +73,7 @@ export function SettingsPage({
   const { t, language, setLanguage } = useLocale();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [query, setQuery] = useState("");
+  const [providerScope, setProviderScope] = useState("all");
   const [modelQuery, setModelQuery] = useState("");
   const [scope, setScope] = useState("connected");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -185,9 +188,11 @@ export function SettingsPage({
       });
     }
   }
-  const filtered = data.providers.filter((p) =>
-    (p.name + " " + p.id).toLowerCase().includes(query.toLowerCase()),
-  );
+  const filtered = data.providers.filter((p) => {
+    const isConnected = Boolean(p.configured || p.credentialType || p.credentialError);
+    return (p.name + " " + p.id).toLowerCase().includes(query.toLowerCase()) &&
+      (providerScope === "all" || (providerScope === "connected" ? isConnected : !isConnected));
+  });
   const connected = filtered.filter(
     (p) => p.configured || p.credentialType || p.credentialError,
   );
@@ -316,18 +321,24 @@ export function SettingsPage({
                     value={query}
                     onValueChange={setQuery}
                   />
-                  <Button
-                    variant="outline"
+                  <NativeSelect aria-label={t("Filter providers", "筛选供应商")} value={providerScope} onChange={(event) => setProviderScope(event.target.value)}>
+                    <NativeSelectOption value="all">{t("All providers", "全部供应商")}</NativeSelectOption>
+                    <NativeSelectOption value="connected">{t("Connected", "已连接")}</NativeSelectOption>
+                    <NativeSelectOption value="available">{t("Available", "可连接")}</NativeSelectOption>
+                  </NativeSelect>
+                  <TooltipIconButton
+                    variant="ghost"
+                        className="size-[38px] p-0"
                     size="icon"
                     aria-label={t("Refresh providers", "刷新供应商")}
-                    title={t("Refresh providers", "刷新供应商")}
+                    tooltip={t("Refresh providers", "刷新供应商")}
                     disabled={!!refreshing}
                     onClick={() => void refreshProvider()}
                   >
                     <RefreshCw
                       className={refreshing === "all" ? "spin" : undefined}
                     />
-                  </Button>
+                  </TooltipIconButton>
                 </div>
                 {!!connected.length && (
                   <section className="settings-section">
@@ -347,7 +358,7 @@ export function SettingsPage({
                 )}
                 {!filtered.length && (
                   <p className="settings-empty">
-                    {t("No providers match your search.", "没有匹配的供应商。")}
+                    {t("No providers match your filters.", "没有匹配的供应商。")}
                   </p>
                 )}
               </>
@@ -404,20 +415,21 @@ export function SettingsPage({
                           <span className="text-muted-foreground">{p.models.length}</span>
                         </span>
                       </AccordionTrigger>
-                      <Button
+                      <TooltipIconButton
                         variant="ghost"
+                        className="size-8 p-0"
                         size="icon-sm"
                         aria-label={
                           t("Refresh models: ", "刷新模型：") + p.name
                         }
-                        title={t("Refresh models", "刷新模型")}
+                        tooltip={t("Refresh models", "刷新模型")}
                         disabled={!!refreshing}
                         onClick={() => void refreshProvider(p.id)}
                       >
                         <RefreshCw
                           className={refreshing === p.id ? "spin" : undefined}
                         />
-                      </Button>
+                      </TooltipIconButton>
                     </div>
                     <AccordionContent className="settings-model-panel">
                       <div className="settings-list">
@@ -429,7 +441,7 @@ export function SettingsPage({
                                 <div className="settings-entry-title">
                                   {m.name}
                                 </div>
-                                <div className="settings-entry-description" title={t("Context window and capabilities", "上下文窗口与能力")}>
+                                <Hint content={t("Context window and capabilities", "上下文窗口与能力")}><div className="settings-entry-description" tabIndex={0}>
                                   {Intl.NumberFormat(language, {
                                     notation: "compact",
                                     maximumFractionDigits: 1,
@@ -440,7 +452,7 @@ export function SettingsPage({
                                     ? t(" · Thinking", " · 推理")
                                     : ""}
                                   {m.image ? t(" · Vision", " · 图片") : ""}
-                                </div>
+                                </div></Hint>
                                 {results[key] && !results[key].ok && (
                                   <p
                                     className="model-test-result failed"
@@ -453,7 +465,7 @@ export function SettingsPage({
                               <div className="settings-entry-actions">
                                 {m.available ? (
                                   <>
-                                    <Button
+                                    <TooltipIconButton
                                       variant="ghost"
                                       size="icon-xs"
                                       disabled={testing.has(key)}
@@ -461,7 +473,7 @@ export function SettingsPage({
                                         t("Test connection: ", "测试连接：") +
                                         m.name
                                       }
-                                      title={t("Test connection · sends a short request", "测试连接 · 发送简短请求")}
+                                      tooltip={t("Test connection · sends a short request", "测试连接 · 发送简短请求")}
                                       onClick={() => void testModel(p, m)}
                                     >
                                       {testing.has(key) ? (
@@ -469,10 +481,12 @@ export function SettingsPage({
                                       ) : (
                                         <Zap />
                                       )}
-                                    </Button>
+                                    </TooltipIconButton>
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger render={
                                     <Switch
                                       size="sm"
-                                      title={t("Show in chat", "在对话中显示")}
                                       aria-label={
                                         t("Show in chat: ", "在对话中显示：") +
                                         m.name
@@ -483,17 +497,23 @@ export function SettingsPage({
                                         void toggleModel(key, checked)
                                       }
                                     />
+                                        } />
+                                        <TooltipContent side="bottom">
+                                          {t("Show in chat", "在对话中显示")}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
                                   </>
                                 ) : p.configured ? (
-                                  <span
-                                    className="text-xs text-muted-foreground"
-                                    title={t(
+                                  <Hint content={t(
                                       "Not available with the current connection. Manage authentication in Providers.",
                                       "当前连接下不可用。可在供应商页面管理认证。",
-                                    )}
+                                    )}><span
+                                    className="text-xs text-muted-foreground"
+                                    tabIndex={0}
                                   >
                                     {t("Unavailable", "不可用")}
-                                  </span>
+                                  </span></Hint>
                                 ) : (
                                   <Button
                                     variant="outline"
@@ -644,11 +664,11 @@ export function SettingsPage({
                             {data.paths[which]}
                           </ItemDescription>
                         </ItemContent>
-                        <Button
+                        <Hint content={t("Open folder", "打开文件夹")}><Button
                           variant="ghost"
                           size="icon-sm"
                           aria-label={t("Open ", "打开") + label}
-                          title={t("Open folder", "打开文件夹")}
+
                           onClick={() =>
                             void api
                               .invoke("showPath", { which })
@@ -658,7 +678,7 @@ export function SettingsPage({
                           }
                         >
                           <FolderOpen />
-                        </Button>
+                        </Button></Hint>
                       </Item>
                     ))}
                   </ItemGroup>

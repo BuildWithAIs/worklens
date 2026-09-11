@@ -1,3 +1,5 @@
+import { useRef, useState } from "react"
+import type { ReactElement, ReactNode } from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 import { cn } from "cn"
 
@@ -53,7 +55,6 @@ function TooltipContent({
           {...props}
         >
           {children}
-          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
@@ -61,3 +62,40 @@ function TooltipContent({
 }
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+
+// Shared hint for existing controls and focusable explanatory text.
+function Hint({ children, content }: { children: ReactElement; content: ReactNode }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger render={children} />
+        <TooltipContent>{content}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+export { Hint }
+
+// Dense navigation lists: reveal truncated labels without covering adjacent rows.
+function OverflowHint({ children, content }: { children: ReactElement; content: string }) {
+  const trigger = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+  return (
+    <TooltipProvider>
+      <Tooltip
+        open={open}
+        disableHoverablePopup
+        onOpenChange={(next) => {
+          const label = trigger.current?.querySelector<HTMLElement>(".truncate")
+          setOpen(next && !!label && label.scrollWidth > label.clientWidth)
+        }}
+      >
+        <TooltipTrigger ref={trigger} render={children} onPointerLeave={() => setOpen(false)} onBlur={() => setOpen(false)} />
+        <TooltipContent side="right" align="center" sideOffset={12} className="pointer-events-none">
+          {content}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+export { OverflowHint }

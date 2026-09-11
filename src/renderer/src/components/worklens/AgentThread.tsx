@@ -223,7 +223,7 @@ function WorkLensToolGroup({
     (running
       ? t("Thinking…", "思考中…")
       : seconds !== undefined
-        ? t(`Worked for ${seconds}s`, `已思考 ${seconds} 秒`)
+        ? t(`Worked for ${seconds}s`, `已处理 ${seconds} 秒`)
         : t("Thoughts", "思考过程")) +
     (failed ? t(` · ${failed} failed`, ` · ${failed} 次失败`) : "");
   return (
@@ -236,7 +236,7 @@ function WorkLensToolGroup({
       <div className="flex min-w-0 flex-col items-start gap-1">
         <ReasoningTrigger className="shrink-0" active={running} label={label} />
         {running && !open && typeof progress === "string" && progress && (
-          <span data-slot="activity-progress" className="line-clamp-2 min-w-0 text-sm leading-6 text-muted-foreground wrap-anywhere" title={progress}>
+          <span data-slot="activity-progress" className="line-clamp-2 min-w-0 text-sm leading-6 text-muted-foreground wrap-anywhere">
             {progress}
           </span>
         )}

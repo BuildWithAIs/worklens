@@ -46,6 +46,8 @@
   --code: #f4f4f5;
   --overlay: #18181b66;
   --accent-text: #ffffff;
+  --user-message-bg: #eee6ff;
+  --user-message-text: #352455;
   --shadow: #18181b14;
 }
 :root[data-theme="dark"] {
@@ -65,6 +67,8 @@
   --code: #18181b;
   --overlay: #00000099;
   --accent-text: #18181b;
+  --user-message-bg: #352747;
+  --user-message-text: #eee6ff;
   --shadow: #00000040;
 }
 * {
@@ -88,6 +92,12 @@ input,
 select,
 textarea {
   font: inherit;
+}
+.aui-user-message-toggle {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--user-message-text) 80%, var(--user-message-bg));
 }
 button:not([data-slot]) {
   cursor: pointer;
@@ -266,7 +276,7 @@ kbd {
 .conversation-item {
   position: relative;
   border-radius: 10px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .conversation-item.selected {
   background: var(--soft);
@@ -289,9 +299,9 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text) 60%, var(--muted));
 }
 .conversation-meta {
   display: block;
@@ -889,6 +899,26 @@ kbd {
 }
 .agent-thread [data-slot="aui_thread-viewport"] {
   scrollbar-gutter: stable;
+}
+.aui-reasoning-text::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.aui-reasoning-text::-webkit-scrollbar-track,
+.aui-reasoning-text::-webkit-scrollbar-corner {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.aui-reasoning-text::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--faint) 50%, transparent);
+  background-clip: padding-box;
+}
+.aui-reasoning-text::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--faint) 70%, transparent);
 }
 .agent-thread .aui-composer-input {
   color: var(--text);

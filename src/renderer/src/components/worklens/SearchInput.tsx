@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip";
 import { useRef, type ComponentProps } from "react";
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -24,21 +25,21 @@ export function SearchInput({ value, onValueChange, ...props }: Props) {
         onChange={(event) => onValueChange(event.target.value)}
       />
       {value && (
-        <Button
+        <div className="absolute inset-y-0 right-1 flex items-center">
+        <Hint content={t("Clear search", "清除搜索")}><Button
           type="button"
           variant="ghost"
           size="icon-xs"
-          className="absolute right-1 top-1/2 -translate-y-1/2"
           disabled={props.disabled || props.readOnly}
           aria-label={t("Clear search", "清除搜索")}
-          title={t("Clear search", "清除搜索")}
           onClick={() => {
             onValueChange("");
             input.current?.focus();
           }}
         >
           <X />
-        </Button>
+        </Button></Hint>
+        </div>
       )}
     </div>
   );

@@ -44,6 +44,7 @@ import {
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
+  type TextMessagePartProps,
   useAuiState,
   useAui,
 } from "@assistant-ui/react";
@@ -52,6 +53,8 @@ import {
   ArrowUpIcon,
   CheckIcon,
   ChevronLeftIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   ChevronRightIcon,
   CopyIcon,
   DownloadIcon,
@@ -65,6 +68,10 @@ import {
 import {
   createContext,
   useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
   type ComponentType,
   type FC,
   type PropsWithChildren,
@@ -167,7 +174,7 @@ const ThreadRoot: FC<{
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
-        ["--thread-max-width" as string]: isEmpty ? "55rem" : "64rem",
+        ["--thread-max-width" as string]: isEmpty ? "55rem" : "58rem",
         ["--composer-bg" as string]: "var(--color-card)",
         ["--composer-radius" as string]: "1.5rem",
         ["--composer-padding" as string]: "8px",
@@ -181,6 +188,7 @@ const ThreadRoot: FC<{
         <div
           className={cn(
             "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-6 pt-4 md:px-10",
+            !isEmpty && "@min-[90rem]:max-w-[68rem]",
             isEmpty && "justify-center",
           )}
         >
@@ -495,6 +503,50 @@ const UserImagePart: ImageMessagePartComponent = (part) => (
   </div>
 );
 
+const UserMessageText: FC<TextMessagePartProps> = ({ text }) => {
+  const { t } = useLocale();
+  const id = useId();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const measure = () => setOverflows(content.scrollHeight > 280);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [text]);
+
+  const collapsed = overflows && !expanded;
+  return (
+    <div>
+      <div
+        id={id}
+        className={cn(collapsed && "max-h-[280px] overflow-hidden")}
+        style={collapsed ? { maskImage: "linear-gradient(to bottom, black calc(100% - 56px), transparent)" } : undefined}
+      >
+        <div ref={contentRef} className="whitespace-pre-wrap">{text}</div>
+      </div>
+      {overflows && (
+        <Button
+          variant="disclosure"
+          size="sm"
+          className="aui-user-message-toggle mt-2 gap-1.5 px-0 text-inherit hover:bg-transparent hover:text-inherit dark:hover:bg-transparent"
+          aria-expanded={expanded}
+          aria-controls={id}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? t("Show less", "收起") : t("Show more", "展开更多")}
+          {expanded ? <ChevronUpIcon data-icon="inline-end" /> : <ChevronDownIcon data-icon="inline-end" />}
+        </Button>
+      )}
+    </div>
+  );
+};
+
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
@@ -505,9 +557,9 @@ const UserMessage: FC = () => {
       <UserMessageAttachments />
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
+        <div className="aui-user-message-content peer bg-(--user-message-bg) text-(--user-message-text) rounded-3xl px-4 py-3 text-base leading-7 font-normal wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
-            components={{ File: UserFilePart, Image: UserImagePart }}
+            components={{ Text: UserMessageText, File: UserFilePart, Image: UserImagePart }}
           />
         </div>
         <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">

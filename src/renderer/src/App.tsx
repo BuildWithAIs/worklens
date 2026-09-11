@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { OverflowHint } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -74,6 +76,8 @@ export function App() {
   );
   useEffect(() => {
     if (!notice) return;
+    const isModelSwitchReminder = notice.type === "error" &&
+      systemText(notice.text.replace(/^Error: /, ""), "en") === "Can’t switch models while responding.";
     const needsSettings =
       notice.type === "error" && /模型尚未配置|模型.*不可用/.test(notice.text);
     let disposed = false;
@@ -88,7 +92,7 @@ export function App() {
         if (!disposed)
           setNotice((current) => (current === notice ? undefined : current));
       },
-      type: notice.type,
+      type: isModelSwitchReminder ? "info" : notice.type,
       timeout: notice.type === "error" ? 0 : 3200,
       priority: notice.type === "error" ? "high" : "low",
       actionProps: needsSettings
@@ -346,10 +350,10 @@ export function App() {
               key={conversation.id}
               className={`conversation-item ${current === conversation.id ? "selected" : ""}`}
             >
-              <Button
+              <OverflowHint content={conversation.title}><Button
                 variant="ghost"
                 aria-current={current === conversation.id ? "page" : undefined}
-                title={conversation.title}
+
                 className="conversation-open"
                 onClick={() => void open(conversation.id)}
               >
@@ -359,7 +363,7 @@ export function App() {
                   )}
                   <span className="truncate">{conversation.title}</span>
                 </span>
-              </Button>
+              </Button></OverflowHint>
               <div className="conversation-actions">
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -387,7 +391,7 @@ export function App() {
                           })
                         }
                       >
-                        <Pencil size={14} />
+                        <Pencil />
                         {t("Rename", "重命名")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
@@ -400,7 +404,7 @@ export function App() {
                           })
                         }
                       >
-                        <Trash2 size={14} />
+                        <Trash2 />
                         {t("Delete", "删除")}
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
@@ -535,7 +539,6 @@ export function App() {
       )}
       {dialog && (
         <ConversationDialog
-          compact={dialog.type === "delete"}
           title={
             dialog.type === "delete"
               ? t("Delete conversation?", "删除会话？")
@@ -544,15 +547,15 @@ export function App() {
           onClose={() => setDialog(undefined)}
         >
           {dialog.type === "delete" ? (
-            <DialogDescription className="leading-6 wrap-anywhere">
+            <DialogDescription className="text-base leading-7 wrap-anywhere">
               <span className="text-foreground">
                 {t("This will permanently delete ", "将永久删除会话 ")}
                 <strong className="font-semibold">{dialog.title}</strong>{t(".", "。")}
               </span>
-              <span className="mt-2 block text-xs leading-5">{t("Running tasks will stop. Local files will be kept.", "运行中的任务会停止，本地文件会保留。")}</span>
+              <span className="mt-2 block text-sm leading-6 text-muted-foreground/80">{t("Running tasks will stop. Local files will be kept.", "运行中的任务会停止，本地文件会保留。")}</span>
             </DialogDescription>
           ) : (
-            <input
+            <Input
               aria-label={t("Conversation name", "会话名称")}
               autoFocus
               value={dialog.title}
@@ -560,12 +563,12 @@ export function App() {
               onChange={(e) => setDialog({ ...dialog, title: e.target.value })}
             />
           )}
-          <div className={dialog.type === "delete" ? "mt-1 flex justify-end gap-2" : "actions"}>
+          <div className="mt-1 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDialog(undefined)}>
               {t("Cancel", "取消")}
             </Button>
             <Button
-              className={dialog.type === "delete" ? "bg-red-600 text-white hover:bg-red-700 focus-visible:border-red-500 focus-visible:ring-red-500/30" : undefined}
+              className={dialog.type === "delete" ? "bg-destructive text-white hover:bg-destructive/90 focus-visible:border-destructive focus-visible:ring-destructive/30" : undefined}
               disabled={!dialog.title.trim()}
               onClick={() =>
                 void (
@@ -598,17 +601,15 @@ export function App() {
   );
 }
 
-function ConversationDialog({ compact, title, children, onClose }: {
-  compact: boolean;
+function ConversationDialog({ title, children, onClose }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
 }) {
-  if (!compact) return <Modal title={title} onClose={onClose}>{children}</Modal>;
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent showCloseButton={false} className="p-5 sm:max-w-[400px]">
-        <DialogTitle>{title}</DialogTitle>
+      <DialogContent showCloseButton={false} className="gap-5 p-6 sm:max-w-[440px]">
+        <DialogTitle className="text-lg leading-7 font-normal">{title}</DialogTitle>
         {children}
       </DialogContent>
     </Dialog>
