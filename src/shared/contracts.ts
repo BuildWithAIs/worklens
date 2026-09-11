@@ -21,6 +21,57 @@ export interface Selection {
   model: string;
   thinking: Thinking;
 }
+export type UsageDataStatus = "complete" | "partial" | "unavailable";
+export type CostSource =
+  | "provider"
+  | "pi-estimate"
+  | "calculated"
+  | "mixed"
+  | "unknown";
+export interface CostUsage {
+  status: UsageDataStatus;
+  usd?: number;
+  source: CostSource;
+}
+export interface TokenUsage {
+  status: UsageDataStatus;
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  reasoning?: number;
+  total?: number;
+  cost: CostUsage;
+}
+export interface GlobalUsage {
+  status: UsageDataStatus;
+  totalTokens?: number;
+  scope: "retained-local-sessions";
+  sessionCount: number;
+  readableSessionCount: number;
+  unavailableSessionCount: number;
+  /** Monotonic within this main-process lifetime; never a billing ledger ID. */
+  revision: number;
+}
+export interface ContextUsage {
+  status: UsageDataStatus;
+  tokens?: number;
+  contextWindow?: number;
+  percent?: number;
+}
+export interface RunUsage extends TokenUsage {
+  runId: string;
+  state: "active" | "completed" | "cancelled" | "failed" | "incomplete";
+  selection?: Selection;
+  startedAt?: string;
+  endedAt?: string;
+  elapsedMs?: number;
+}
+export interface UsageSnapshot {
+  run?: RunUsage;
+  conversation: TokenUsage;
+  context?: ContextUsage;
+}
 export interface ModelInfo {
   id: string;
   name: string;
@@ -88,6 +139,7 @@ export interface Conversation {
 }
 export interface ConversationView extends Conversation {
   messages: MessageView[];
+  usage?: UsageSnapshot;
 }
 export interface ChatEvent {
   conversationId: string;
@@ -95,6 +147,7 @@ export interface ChatEvent {
   sequence: number;
   type: string;
   view: ConversationView;
+  globalUsage?: GlobalUsage;
 }
 export interface AuthStep {
   loginId: string;
@@ -114,6 +167,7 @@ export interface Recovery {
   startedAt: string;
 }
 export interface Bootstrap {
+  globalUsage?: GlobalUsage;
   settings: Settings;
   providers: ProviderInfo[];
   conversations: Conversation[];

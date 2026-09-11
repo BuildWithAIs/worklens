@@ -1,4 +1,9 @@
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -24,9 +29,12 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { systemText } from "@/lib/system-text";
 import { useLocale } from "@/lib/locale";
+import { UsagePopover } from "@/components/worklens/UsagePopover";
+import { newerGlobalUsage } from "../../shared/usage";
 import { AgentThread } from "@/components/worklens/AgentThread";
 import type {
   Bootstrap,
+  GlobalUsage,
   ConversationView,
   Phase,
   Selection,
@@ -118,12 +126,17 @@ export function App() {
   const [showRecovery, setShowRecovery] = useState(true);
   const sequences = useRef(new Map<string, number>());
   const latestRuns = useRef(new Map<string, string>());
+  const globalUsage = useRef<GlobalUsage | undefined>(undefined);
   const currentView = current ? views[current] : undefined;
   const busy = active(currentView?.phase);
   const sending = pendingSends.has(current ?? draftId);
   const refresh = useCallback(async () => {
     const next = await api.invoke("bootstrap", undefined);
-    setData(next);
+    globalUsage.current = newerGlobalUsage(
+      globalUsage.current,
+      next.globalUsage,
+    );
+    setData({ ...next, globalUsage: globalUsage.current });
     return next;
   }, []);
   const acceptView = useCallback((view: ConversationView) => {
@@ -166,6 +179,14 @@ export function App() {
       })
       .catch((error) => setError(String(error)));
     const unsubscribe = api.onChat((event) => {
+      // Global revisions belong to the whole app, independently of run sequences.
+      globalUsage.current = newerGlobalUsage(
+        globalUsage.current,
+        event.globalUsage,
+      );
+      setData((previous) =>
+        previous ? { ...previous, globalUsage: globalUsage.current } : previous,
+      );
       const latest = latestRuns.current.get(event.conversationId);
       if (latest && latest !== event.runId && event.type !== "run_start")
         return;
@@ -427,17 +448,25 @@ export function App() {
             <div>
               <h1>{currentView?.title ?? t("New conversation", "新的开始")}</h1>
             </div>
-            {currentView && busy && (
-              <span
-                role="status"
-                className={busy ? "run-status running" : "run-status"}
-              >
-                {busy && <LoaderCircle className="spin" size={13} />}{" "}
-                {currentView.statusDetail
-                  ? systemText(currentView.statusDetail, language)
-                  : t(...labels[currentView.phase])}
-              </span>
-            )}
+            <div className="chat-header-actions">
+              {currentView && busy && (
+                <span
+                  role="status"
+                  className={busy ? "run-status running" : "run-status"}
+                >
+                  {busy && <LoaderCircle className="spin" size={13} />}{" "}
+                  {currentView.statusDetail
+                    ? systemText(currentView.statusDetail, language)
+                    : t(...labels[currentView.phase])}
+                </span>
+              )}
+              <UsagePopover
+                global={data.globalUsage}
+                usage={currentView?.usage}
+                selection={currentView?.selection ?? selection}
+                providers={data.providers}
+              />
+            </div>
           </header>
           <AgentThread
             key={current ?? draftId}
@@ -460,7 +489,7 @@ export function App() {
         </>
       </main>
       <Dialog
-        open={page === "settings"}
+        open={page === "settings" && !(showRecovery && data.recoveries.length)}
         onOpenChange={(open) => {
           if (!open) setPage("chat");
         }}
@@ -547,9 +576,15 @@ export function App() {
             <DialogDescription className="leading-6 wrap-anywhere">
               <span className="text-foreground">
                 {t("This will permanently delete ", "将永久删除会话 ")}
-                <strong className="font-semibold">{dialog.title}</strong>{t(".", "。")}
+                <strong className="font-semibold">{dialog.title}</strong>
+                {t(".", "。")}
               </span>
-              <span className="mt-2 block text-xs leading-5">{t("Running tasks will stop. Local files will be kept.", "运行中的任务会停止，本地文件会保留。")}</span>
+              <span className="mt-2 block text-xs leading-5">
+                {t(
+                  "Running tasks will stop. Local files will be kept.",
+                  "运行中的任务会停止，本地文件会保留。",
+                )}
+              </span>
             </DialogDescription>
           ) : (
             <input
@@ -560,12 +595,22 @@ export function App() {
               onChange={(e) => setDialog({ ...dialog, title: e.target.value })}
             />
           )}
-          <div className={dialog.type === "delete" ? "mt-1 flex justify-end gap-2" : "actions"}>
+          <div
+            className={
+              dialog.type === "delete"
+                ? "mt-1 flex justify-end gap-2"
+                : "actions"
+            }
+          >
             <Button variant="outline" onClick={() => setDialog(undefined)}>
               {t("Cancel", "取消")}
             </Button>
             <Button
-              className={dialog.type === "delete" ? "bg-red-600 text-white hover:bg-red-700 focus-visible:border-red-500 focus-visible:ring-red-500/30" : undefined}
+              className={
+                dialog.type === "delete"
+                  ? "bg-red-600 text-white hover:bg-red-700 focus-visible:border-red-500 focus-visible:ring-red-500/30"
+                  : undefined
+              }
               disabled={!dialog.title.trim()}
               onClick={() =>
                 void (
@@ -598,15 +643,30 @@ export function App() {
   );
 }
 
-function ConversationDialog({ compact, title, children, onClose }: {
+function ConversationDialog({
+  compact,
+  title,
+  children,
+  onClose,
+}: {
   compact: boolean;
   title: string;
   children: React.ReactNode;
   onClose: () => void;
 }) {
-  if (!compact) return <Modal title={title} onClose={onClose}>{children}</Modal>;
+  if (!compact)
+    return (
+      <Modal title={title} onClose={onClose}>
+        {children}
+      </Modal>
+    );
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent showCloseButton={false} className="p-5 sm:max-w-[400px]">
         <DialogTitle>{title}</DialogTitle>
         {children}
