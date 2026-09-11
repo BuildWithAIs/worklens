@@ -1,5 +1,5 @@
-export async function mockWorklens(page) {
-  await page.addInitScript(() => {
+export async function mockWorklens(page, options = {}) {
+  await page.addInitScript((options) => {
     const model = (id, name, provider, available = true) => ({
       id,
       name,
@@ -107,6 +107,32 @@ export async function mockWorklens(page) {
     data.settings =
       JSON.parse(localStorage.getItem("ui-fixture-settings") ?? "null") ??
       data.settings;
+    const selection = data.settings.defaults;
+    if (options.modelState) {
+      delete data.settings.defaults;
+      for (const provider of data.providers) {
+        if (options.modelState === "unconfigured") {
+          provider.configured = false;
+          delete provider.credentialType;
+          delete provider.credentialHint;
+          delete provider.connection;
+        }
+        for (const model of provider.models) {
+          if (options.modelState === "hidden") {
+            data.settings.hiddenModels.push(`${provider.id}/${model.id}`);
+          } else {
+            model.available = false;
+          }
+        }
+      }
+    }
+    if (options.unavailableSelection && selection) {
+      data.settings.defaults = selection;
+      const selectedModel = data.providers
+        .find((provider) => provider.id === selection.provider)
+        ?.models.find((model) => model.id === selection.model);
+      if (selectedModel) selectedModel.available = false;
+    }
     let listeners = [],
       pending;
     window.calls = [];
@@ -193,5 +219,5 @@ export async function mockWorklens(page) {
         if (name === "refreshModels") return "Existing 3 models (unchanged)";
       },
     };
-  });
+  }, options);
 }

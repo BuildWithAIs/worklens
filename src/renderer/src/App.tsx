@@ -164,8 +164,6 @@ export function App() {
       .then(async (next) => {
         if (!alive) return;
         setSelection(next.settings.defaults);
-        if (!next.providers.some((p) => p.models.some((m) => m.available)))
-          setPage("settings");
         const last = next.settings.lastConversation;
         if (last && next.conversations.some((c) => c.id === last)) {
           const view = await api.invoke("open", { id: last });
@@ -481,7 +479,9 @@ export function App() {
               onChange: changeModel,
               onManage: () => {
                 setPage("settings");
-                setSettingsSection("models");
+                setSettingsSection(
+                  data.providers.some((p) => p.configured) ? "models" : "providers",
+                );
               },
             }}
           />

@@ -159,9 +159,9 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     app = undefined;
     const restored = await launch();
     // No provider re-registration: inspecting retained usage requires no credentials.
-    await restored
-      .getByRole("button", { name: "Close settings", exact: true })
-      .click();
+    await expect(
+      restored.getByRole("dialog", { name: "Settings", exact: true }),
+    ).toHaveCount(0);
     await restored
       .locator(".conversation-open")
       .filter({ hasText: first.title })

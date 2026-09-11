@@ -104,6 +104,11 @@ export function SettingsPage({
   function openConnect(provider: ProviderInfo) {
     setConnect(provider);
   }
+  function goToProviders(provider?: ProviderInfo) {
+    setQuery(provider?.name ?? "");
+    setProviderScope("all");
+    setSection("providers");
+  }
   async function refreshProvider(id?: string) {
     if (refreshing) return;
     setRefreshing(id ?? "all");
@@ -415,6 +420,17 @@ export function SettingsPage({
                           <span className="text-muted-foreground">{p.models.length}</span>
                         </span>
                       </AccordionTrigger>
+                      {!p.configured && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          aria-label={t("Go to Providers: ", "前往供应商设置：") + p.name}
+                          onClick={() => goToProviders(p)}
+                        >
+                          {t("Go to Providers", "前往供应商设置")}
+                        </Button>
+                      )}
                       <TooltipIconButton
                         variant="ghost"
                         className="size-8 p-0"
@@ -514,21 +530,7 @@ export function SettingsPage({
                                   >
                                     {t("Unavailable", "不可用")}
                                   </span></Hint>
-                                ) : (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      openConnect(
-                                        data.providers.find(
-                                          (item) => item.id === p.id,
-                                        )!,
-                                      )
-                                    }
-                                  >
-                                    {t("Connect", "连接")}
-                                  </Button>
-                                )}
+                                ) : null}
                               </div>
                             </div>
                           );
@@ -553,17 +555,37 @@ export function SettingsPage({
                 ))}
                 </Accordion>
                 {!modelGroups.length && (
-                  <p className="settings-empty">
-                    {scope === "connected" && !data.providers.some((p) => p.configured)
-                      ? t(
-                          "Connect a provider in Providers, or select All models to browse.",
-                          "请在供应商页面连接服务，或选择全部模型进行浏览。",
-                        )
-                      : t(
-                      "No models match these filters.",
-                      "没有符合筛选条件的模型。",
+                  <div className="settings-empty">
+                    {scope === "connected" &&
+                    !modelQuery.trim() &&
+                    !data.providers.some((p) => p.configured) ? (
+                      <>
+                        <p className="font-medium text-foreground">
+                          {t("No providers connected", "尚未连接供应商")}
+                        </p>
+                        <p className="mt-2">
+                          {t(
+                            "Connect a provider to use its models.",
+                            "连接供应商后即可使用其模型。",
+                          )}
+                        </p>
+                        <Button
+                          variant="outline"
+                          className="mt-4"
+                          onClick={() => goToProviders()}
+                        >
+                          {t("Go to Providers", "前往供应商设置")}
+                        </Button>
+                      </>
+                    ) : (
+                      <p>
+                        {t(
+                          "No models match these filters. Try another search or filter.",
+                          "没有符合条件的模型，请调整搜索或筛选条件。",
+                        )}
+                      </p>
                     )}
-                  </p>
+                  </div>
                 )}
               </>
             )}

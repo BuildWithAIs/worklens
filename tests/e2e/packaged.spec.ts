@@ -27,9 +27,10 @@ test("PRD 063, 17.5: packaged Windows ASAR runtime and PowerShell smoke", async 
   });
   try {
     const page = await application.firstWindow();
+    await expect(page.locator(".sidebar")).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "模型服务", exact: true }),
-    ).toBeVisible();
+      page.getByRole("dialog", { name: "Settings", exact: true }),
+    ).toHaveCount(0);
     const bootstrap = await page.evaluate(() =>
       window.worklens.invoke("bootstrap", undefined),
     );

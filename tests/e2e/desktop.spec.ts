@@ -48,6 +48,13 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     app = first.instance;
     const page = first.window;
     await expect(
+      page.getByRole("dialog", { name: "Settings", exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Choose model", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Connect a provider", exact: true })
+      .click();
+    await expect(
       page.getByRole("heading", { name: "Providers", exact: true }),
     ).toBeVisible();
     expect(await page.evaluate(() => typeof (window as any).require)).toBe(
@@ -266,14 +273,9 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     app = undefined;
     const second = await launch();
     app = second.instance;
-    if (
-      await second.window
-        .getByRole("button", { name: "Close settings", exact: true })
-        .isVisible()
-    )
-      await second.window
-        .getByRole("button", { name: "Close settings", exact: true })
-        .click();
+    await expect(
+      second.window.getByRole("dialog", { name: "Settings", exact: true }),
+    ).toHaveCount(0);
     await second.window
       .locator(".conversation-open")
       .filter({ hasText: "实际文件任务" })

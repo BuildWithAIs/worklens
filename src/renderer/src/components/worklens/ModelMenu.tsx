@@ -1,6 +1,6 @@
 import { ProviderIcon } from "./ProviderIcon";
 import { useState } from "react";
-import { Check, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, Plug, SlidersHorizontal } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -43,6 +43,7 @@ export function ModelMenu({
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const hasConfiguredProvider = data.providers.some((p) => p.configured);
   const hidden = new Set(data.settings.hiddenModels ?? []);
   const current = data.providers
     .find((p) => p.id === value?.provider)
@@ -79,7 +80,7 @@ export function ModelMenu({
           <span className="truncate">
             {current?.name ?? t("Choose model", "选择模型")}
           </span>
-          {current && value && current.levels.length > 1 && (
+          {current?.available && value && current.levels.length > 1 && (
             <span className="text-muted-foreground shrink-0">
               · {t(...levels[value.thinking])}
             </span>
@@ -162,14 +163,24 @@ export function ModelMenu({
             ))}
             {!groups.length && (
               <p className="chat-model-empty">
-                {t(
-                  "No matching models. Connect a provider or change visibility in Models.",
-                  "没有匹配的模型。请连接供应商，或在模型管理中调整显示设置。",
-                )}
+                {query.trim()
+                  ? t(
+                      "No matching models. Try another search.",
+                      "没有匹配的模型，请调整搜索条件。",
+                    )
+                  : hasConfiguredProvider
+                    ? t(
+                        "No models to show. Check availability and visibility in Models.",
+                        "暂无可显示的模型，请在模型管理中检查可用状态与显示设置。",
+                      )
+                    : t(
+                        "Connect a provider to choose a model.",
+                        "连接供应商后即可选择模型。",
+                      )}
               </p>
             )}
           </div>
-          {current && value && current.levels.length > 1 && (
+          {current?.available && value && current.levels.length > 1 && (
             <div className="chat-model-reasoning">
               <span>{t("Thinking", "思考强度")}</span>
               <NativeSelect
@@ -196,8 +207,10 @@ export function ModelMenu({
                 onManage();
               }}
             >
-              <SlidersHorizontal />
-              {t("Manage models", "管理模型")}
+              {hasConfiguredProvider ? <SlidersHorizontal /> : <Plug />}
+              {hasConfiguredProvider
+                ? t("Manage models", "管理模型")
+                : t("Connect a provider", "连接供应商")}
             </Button>
           </div>
         </PopoverContent>
