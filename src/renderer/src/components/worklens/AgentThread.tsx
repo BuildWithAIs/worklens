@@ -210,7 +210,13 @@ function WorkLensToolGroup({
   useEffect(() => {
     if (running) {
       started.current ??= Date.now();
-      return;
+      const start = started.current;
+      const updateElapsed = () => {
+        setSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+      };
+      updateElapsed();
+      const timer = setInterval(updateElapsed, 1000);
+      return () => clearInterval(timer);
     }
     if (started.current !== undefined) {
       setSeconds(
@@ -221,7 +227,7 @@ function WorkLensToolGroup({
   }, [running]);
   const label =
     (running
-      ? t("Thinking…", "思考中…")
+      ? t(`Thinking… ${seconds ?? 0}s`, `思考中… ${seconds ?? 0} 秒`)
       : seconds !== undefined
         ? t(`Worked for ${seconds}s`, `已处理 ${seconds} 秒`)
         : t("Thoughts", "思考过程")) +

@@ -298,10 +298,12 @@ test("compact tool activity, history actions and fluid message width", async ({
   expect(widths.every((w) => !w.overflow)).toBe(true);
   await page.evaluate(() => localStorage.setItem("fixture-running", "true"));
   await page.reload();
-  await expect(groups.nth(1)).toHaveText("Thinking…");
+  await expect(groups.nth(1)).toHaveText(/Thinking… \d+s/);
+  await expect(page.locator('[data-slot="activity-progress"]')).toHaveCount(0);
+  await expect(groups.nth(1)).toHaveText(/Thinking… [1-9]\d*s/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
   await page.evaluate(() => window.progressFixture());
-  await expect(groups.nth(1)).toHaveText("Thinking…");
+  await expect(groups.nth(1)).toHaveText(/Thinking… \d+s/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator('[data-slot="activity-progress"]')).toHaveText("Checking the latest source.");
   const progressBox = await page.locator('[data-slot="activity-progress"]').boundingBox();
