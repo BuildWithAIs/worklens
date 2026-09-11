@@ -98,6 +98,7 @@ else {
                   settings: state.value,
                   providers: await providers!.list(),
                   conversations: await agents!.list(),
+                  globalUsage: agents!.getGlobalUsage(),
                   paths,
                   version: app.getVersion(),
                   tools: toolNames,
@@ -220,7 +221,9 @@ else {
           if (window === ownedWindow) window = undefined;
         });
         ownedWindow.on("close", (event) => {
-          if (readyToClose) return;
+          // before-quit already awaits AgentService.shutdown. Deferring this
+          // close a second time cancels app.quit on macOS and leaves it running.
+          if (readyToClose || quitting) return;
           event.preventDefault();
           if (closing) return;
           closing = true;

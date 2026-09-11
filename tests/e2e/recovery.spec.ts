@@ -27,7 +27,7 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
       env,
     });
     const page = await application.firstWindow();
-    await expect(page.getByRole("button", { name: /新建会话/ })).toBeVisible();
+    await expect(page.locator(".sidebar")).toBeVisible();
     await application.evaluate(
       async (_electron, { uri, url, model }) => {
         const vm = process.getBuiltinModule("node:vm");
@@ -82,7 +82,9 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
     if (process.platform === "win32")
       execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"]);
     else child.kill("SIGKILL");
-    await expect.poll(() => child.exitCode !== null).toBe(true);
+    await expect
+      .poll(() => child.exitCode !== null || child.signalCode !== null)
+      .toBe(true);
     application = undefined;
     application = await electron.launch({
       args: ["."],
@@ -91,13 +93,15 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
     });
     const restored = await application.firstWindow();
     await expect(
-      restored.getByRole("heading", { name: "上次有任务意外中断" }),
+      restored.getByRole("heading", {
+        name: "An earlier task was interrupted",
+      }),
     ).toBeVisible();
     await restored
-      .getByRole("button", { name: "载入草稿，核对后继续" })
+      .getByRole("button", { name: "Load draft for review" })
       .click();
     await expect(
-      restored.getByRole("textbox", { name: "消息", exact: true }),
+      restored.getByRole("textbox", { name: "Message", exact: true }),
     ).toHaveValue(text);
     expect(server.requests.length).toBe(1);
     await restored.screenshot({

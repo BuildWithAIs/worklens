@@ -34,11 +34,10 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       cwd: resolve("."),
       env: env as Record<string, string>,
     });
+    app = instance;
     const window = await instance.firstWindow();
     window.on("pageerror", (error) => errors.push(error.message));
-    await expect(
-      window.getByRole("button", { name: /新建会话/ }),
-    ).toBeVisible();
+    await expect(window.locator(".sidebar")).toBeVisible();
     console.log(
       `Electron fresh process to interactive: ${(performance.now() - launchedAt).toFixed(0)} ms`,
     );
@@ -48,7 +47,9 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     const first = await launch();
     app = first.instance;
     const page = first.window;
-    await expect(page.getByText("Pi 内置 · WorkLens 尚未实测")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Providers", exact: true }),
+    ).toBeVisible();
     expect(await page.evaluate(() => typeof (window as any).require)).toBe(
       "undefined",
     );
@@ -56,22 +57,25 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       path: "test-results/onboarding-light.png",
       fullPage: true,
     });
-    await page.getByRole("textbox", { name: "查找服务商" }).fill("OpenAI");
-    await page.getByRole("button", { name: "OpenAI", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "Search providers" })
+      .fill("OpenAI");
+    const openai = page.locator(".settings-entry").filter({
+      has: page.locator(".settings-entry-title", {
+        hasText: /^OpenAI(?!\s*Codex)/,
+      }),
+    });
     await expect(
-      page.getByRole("alert").filter({ hasText: "无法读取或解密" }),
+      openai.getByText("Saved credentials need attention", { exact: true }),
     ).toBeVisible();
+    await openai.getByRole("button", { name: "Manage", exact: true }).click();
     await page
-      .getByRole("button", { name: "配置 · OpenAI API key", exact: true })
-      .click();
-    await page
-      .locator("dialog input[type=password]")
+      .locator("input[type=password]")
       .fill("worklens-placeholder-credential-for-test");
-    await page.getByRole("button", { name: "继续", exact: true }).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(
-      page.getByRole("alert").filter({ hasText: "无法读取或解密" }),
-    ).not.toBeVisible();
+      openai.getByRole("button", { name: "Manage", exact: true }),
+    ).toBeVisible();
     const secretDirectory = join(directory, "app", "credentials");
     const encryptedFiles = await readdir(secretDirectory);
     expect(encryptedFiles.length).toBeGreaterThan(0);
@@ -109,52 +113,79 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       },
       { mainUrl, url: server.url, model: fixtureModel },
     );
-    await page.getByRole("button", { name: "刷新状态", exact: true }).click();
     await page
-      .getByRole("combobox", { name: "模型服务商" })
-      .selectOption("worklens-test");
-    await page.getByRole("button", { name: "保存默认模型" }).click();
-    await page.getByRole("button", { name: "测试连接", exact: true }).click();
+      .getByRole("button", { name: "Refresh providers", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Models", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "Search models", exact: true })
+      .fill("本地测试模型");
+    await page
+      .getByRole("button", {
+        name: "Test connection: 本地测试模型",
+        exact: true,
+      })
+      .click();
     await expect(
-      page.getByRole("status").filter({ hasText: "连接成功" }),
+      page.getByText("Connection successful", { exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "返回对话" }).click();
-    await page.getByRole("button", { name: /新建会话/ }).click();
-    await expect(
-      page.getByRole("heading", { name: "今天，我们从哪里开始？" }),
-    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Close settings", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Choose model", exact: true })
+      .click();
+    await page
+      .getByRole("textbox", { name: "Search models", exact: true })
+      .fill("本地测试模型");
+    await page
+      .getByRole("button", { name: "本地测试模型", exact: true })
+      .click();
+    await page.keyboard.press("Escape");
     await page.screenshot({
       path: "test-results/chat-empty-light.png",
       fullPage: true,
     });
+    const finished = async (state: "Completed" | "Cancelled" = "Completed") => {
+      await expect(page.locator(".run-status")).toHaveCount(0, {
+        timeout: 30000,
+      });
+      await page.locator(".usage-trigger").click();
+      await expect(page.getByTestId("run-usage")).toContainText(state, {
+        timeout: 30000,
+      });
+      await page.keyboard.press("Escape");
+    };
     const target = join(directory, "actual-file.txt");
-    await page.getByRole("textbox", { name: "消息", exact: true }).fill(
+    await page.getByRole("textbox", { name: "Message", exact: true }).fill(
       "TOOL " +
         JSON.stringify({
           name: "write",
           args: { path: target, content: "WorkLens Electron 实测成功" },
         }),
     );
-    await page.getByRole("button", { name: "发送消息" }).click();
+    await page.getByRole("button", { name: "Send message" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator(".run-status")).toHaveText(/已完成/, {
-      timeout: 30000,
-    });
+    await finished();
     expect(await readFile(target, "utf8")).toBe("WorkLens Electron 实测成功");
-    await expect(page.locator(".tool-card.success")).toBeVisible();
-    await page.locator(".tool-card summary").click();
-    await expect(page.locator(".tool-detail")).toContainText(target);
-    await expect(page.locator(".tool-detail")).toContainText("开始时间：");
+    await page.locator('[data-slot="reasoning-trigger"]').first().click();
+    await page.locator('[data-slot="tool-fallback-trigger"]').first().click();
+    await expect(
+      page.locator('[data-slot="tool-fallback-root"]'),
+    ).toContainText(target);
     await page.screenshot({
       path: "test-results/tool-task-light.png",
       fullPage: true,
     });
     await page
-      .getByRole("button", { name: /^重命名 / })
+      .getByRole("button", { name: /^Conversation options:/ })
       .first()
       .click();
-    await page.getByRole("textbox", { name: "会话名称" }).fill("实际文件任务");
-    await page.getByRole("button", { name: "保存名称" }).click();
+    await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "Conversation name" })
+      .fill("实际文件任务");
+    await page.getByRole("button", { name: "Save name", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "实际文件任务", exact: true }),
     ).toBeVisible();
@@ -178,49 +209,54 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
         return original(...args);
       };
     }, mainUrl);
-    await page.getByRole("button", { name: /新建会话/ }).click();
+    await page.getByRole("button", { name: /New chat/ }).click();
     await page
-      .getByRole("textbox", { name: "消息", exact: true })
+      .getByRole("textbox", { name: "Message", exact: true })
       .fill("SLOW 会话甲 " + "进行中 ".repeat(100));
-    await page.getByRole("button", { name: "发送消息" }).click();
-    await page.getByRole("button", { name: /新建会话/ }).click();
+    await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: /New chat/ }).click();
     await page
-      .getByRole("textbox", { name: "消息", exact: true })
+      .getByRole("textbox", { name: "Message", exact: true })
       .fill("并发会话乙");
-    await expect(page.getByRole("button", { name: "发送消息" })).toBeEnabled();
-    await page.getByRole("button", { name: "发送消息" }).click();
-    await expect(page.locator(".run-status")).toHaveText(/已完成/);
-    await expect(page.locator(".messages")).not.toContainText("SLOW");
+    await expect(
+      page.getByRole("button", { name: "Send message" }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: "Send message" }).click();
+    await finished();
+    await expect(page.locator(".aui-thread-root")).not.toContainText("SLOW");
     await page
       .locator(".conversation-open")
       .filter({ hasText: "SLOW 会话甲" })
       .click();
-    await page.getByRole("button", { name: "停止运行" }).click();
-    await expect(page.locator(".run-status")).toHaveText(/已取消/);
+    await page.getByRole("button", { name: "Stop task" }).click();
+    await finished("Cancelled");
     await page
       .locator(".conversation-open")
       .filter({ hasText: "并发会话乙" })
       .click();
-    await expect(page.locator(".run-status")).toHaveText(/已完成/);
+    await finished();
     await page
       .locator(".conversation-open")
       .filter({ hasText: "实际文件任务" })
       .click();
-    await page.getByRole("button", { name: "设置", exact: true }).click();
-    await page.getByRole("button", { name: "返回对话" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Close settings" }).click();
     await page
-      .getByRole("textbox", { name: "消息", exact: true })
+      .getByRole("textbox", { name: "Message", exact: true })
       .fill("继续这个历史会话");
-    await page.getByRole("button", { name: "发送消息" }).click();
-    await expect(page.locator(".run-status")).toHaveText(/已完成/, {
-      timeout: 30000,
-    });
-    await expect(page.locator(".messages")).toContainText("继续这个历史会话");
+    await page.getByRole("button", { name: "Send message" }).click();
+    await finished();
+    await expect(page.locator(".aui-thread-root")).toContainText(
+      "继续这个历史会话",
+    );
     await expect(
       page.getByRole("heading", { name: "实际文件任务", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "设置", exact: true }).click();
-    await page.getByRole("button", { name: "深色", exact: true }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "General", exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "Appearance", exact: true })
+      .selectOption("dark");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page.screenshot({
       path: "test-results/settings-dark.png",
@@ -230,16 +266,29 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     app = undefined;
     const second = await launch();
     app = second.instance;
+    if (
+      await second.window
+        .getByRole("button", { name: "Close settings", exact: true })
+        .isVisible()
+    )
+      await second.window
+        .getByRole("button", { name: "Close settings", exact: true })
+        .click();
     await second.window
       .locator(".conversation-open")
       .filter({ hasText: "实际文件任务" })
       .click();
-    await expect(second.window.locator(".tool-card.success")).toBeVisible();
-    await second.window.locator(".tool-card summary").click();
-    await expect(second.window.locator(".tool-detail")).toContainText(
-      "开始时间：",
-    );
-    await expect(second.window.locator(".tool-detail")).toContainText("耗时");
+    await second.window
+      .locator('[data-slot="reasoning-trigger"]')
+      .first()
+      .click();
+    await second.window
+      .locator('[data-slot="tool-fallback-trigger"]')
+      .first()
+      .click();
+    await expect(
+      second.window.locator('[data-slot="tool-fallback-root"]'),
+    ).toContainText(target);
     await expect(
       second.window.getByRole("heading", { name: "实际文件任务", exact: true }),
     ).toBeVisible();
@@ -251,14 +300,21 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       path: "test-results/restored-dark.png",
       fullPage: true,
     });
-    await expect(second.window.locator(".messages")).toContainText(
+    await expect(second.window.locator(".aui-thread-root")).toContainText(
       "继续这个历史会话",
     );
     await second.window
-      .getByRole("button", { name: "删除 并发会话乙", exact: true })
+      .getByRole("button", {
+        name: "Conversation options: 并发会话乙",
+        exact: true,
+      })
       .click();
     await second.window
-      .getByRole("button", { name: "永久删除", exact: true })
+      .getByRole("menuitem", { name: "Delete", exact: true })
+      .click();
+    await second.window
+      .getByRole("dialog", { name: "Delete conversation?" })
+      .getByRole("button", { name: "Delete", exact: true })
       .click();
     await expect(
       second.window
