@@ -3,6 +3,7 @@ import {
   expect,
   _electron as electron,
   type ElectronApplication,
+  type Page,
 } from "@playwright/test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -27,6 +28,19 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     page.on("pageerror", (error) => errors.push(error.message));
     await expect(page.locator(".sidebar")).toBeVisible();
     return page;
+  };
+  const total = async (page: Page, expected: string) => {
+    await page.locator(".usage-trigger").click();
+    await page.getByRole("tab", { name: "Details", exact: true }).click();
+    await expect(page.locator(".usage-total strong")).toHaveText(expected);
+    await page.keyboard.press("Escape");
+  };
+  const completedRun = async (page: Page, tokens: string) => {
+    await expect(page.getByRole("button", { name: "Stop task", exact: true })).toHaveCount(0, { timeout: 30000 });
+    await page.locator(".usage-trigger").click();
+    await expect(page.locator(".usage-run-state")).toContainText("Completed");
+    await expect(page.getByTestId("run-usage")).toContainText(tokens);
+    await page.keyboard.press("Escape");
   };
   try {
     const page = await launch();
@@ -69,7 +83,7 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       }),
     );
     await page.reload();
-    await expect(page.locator(".usage-total strong")).toHaveText("0");
+    await total(page, "0");
     const target = join(root, "usage-output.txt");
     await page
       .getByRole("textbox", { name: "Message", exact: true })
@@ -83,13 +97,10 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await page
       .getByRole("button", { name: "Send message", exact: true })
       .click();
-    await expect(page.locator(".usage-trigger")).toContainText("280 tokens", {
-      timeout: 30000,
-    });
-    await expect(page.locator(".usage-live-dot")).toHaveCount(0);
+    await completedRun(page, "280");
     expect(await readFile(target, "utf8")).toBe("usage verified");
     await page.locator(".usage-trigger").click();
-    await expect(page.getByTestId("run-usage")).toContainText("Completed");
+    await expect(page.locator(".usage-run-state")).toContainText("Completed");
     await expect(page.getByTestId("conversation-usage")).toContainText("280");
     await page.screenshot({
       path: info.outputPath("usage-real-electron.png"),
@@ -106,9 +117,8 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await page
       .getByRole("button", { name: "Send message", exact: true })
       .click();
-    await expect(page.locator(".usage-total strong")).toHaveText("420");
-    await expect(page.locator(".usage-trigger")).toContainText("140 tokens");
-    await expect(page.locator(".usage-live-dot")).toHaveCount(0);
+    await total(page, "420");
+    await completedRun(page, "140");
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await page
       .getByRole("textbox", { name: "Message", exact: true })
@@ -116,7 +126,7 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await page
       .getByRole("button", { name: "Send message", exact: true })
       .click();
-    await expect(page.locator(".usage-live-dot")).toBeVisible();
+    await expect(page.locator(".conversation-item.selected .history-loading-ring")).toBeVisible();
     const slow = await page.evaluate(
       async () =>
         (
@@ -130,15 +140,15 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await page
       .getByRole("button", { name: "Send message", exact: true })
       .click();
-    await expect(page.locator(".usage-total strong")).toHaveText("560");
+    await total(page, "560");
     await page
       .locator(".conversation-open")
       .filter({ hasText: "SLOW background" })
       .click();
     await page.getByRole("button", { name: "Stop task", exact: true }).click();
-    await expect(page.locator(".usage-live-dot")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Stop task", exact: true })).toHaveCount(0);
     await page.locator(".usage-trigger").click();
-    await expect(page.getByTestId("run-usage")).toContainText("Cancelled");
+    await expect(page.locator(".usage-run-state")).toContainText("Cancelled");
     await page.keyboard.press("Escape");
     const beforeRestart = await page.evaluate(() =>
       window.worklens.invoke("bootstrap", undefined),
@@ -166,15 +176,13 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       .locator(".conversation-open")
       .filter({ hasText: first.title })
       .click();
-    await expect(restored.locator(".usage-total strong")).toHaveText("560+");
-    await expect(restored.locator(".usage-trigger")).toContainText(
-      "140 tokens",
-    );
+    await total(restored, "560+");
+    await completedRun(restored, "140");
     await restored.locator(".usage-trigger").click();
     await expect(restored.getByTestId("conversation-usage")).toContainText(
       "420",
     );
-    await expect(restored.getByTestId("run-usage")).toContainText("Completed");
+    await expect(restored.locator(".usage-run-state")).toContainText("Completed");
     await restored.screenshot({
       path: info.outputPath("usage-restored-dark.png"),
       fullPage: true,
@@ -193,7 +201,7 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       .getByRole("dialog", { name: "Delete conversation?" })
       .getByRole("button", { name: "Delete", exact: true })
       .click();
-    await expect(restored.locator(".usage-total strong")).toHaveText("560");
+    await total(restored, "560");
     await restored
       .getByRole("button", {
         name: "Conversation options: Independent foreground",
@@ -207,7 +215,7 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       .getByRole("dialog", { name: "Delete conversation?" })
       .getByRole("button", { name: "Delete", exact: true })
       .click();
-    await expect(restored.locator(".usage-total strong")).toHaveText("420");
+    await total(restored, "420");
     expect(errors).toEqual([]);
   } finally {
     await app?.close();

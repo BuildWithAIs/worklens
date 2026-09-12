@@ -1,3 +1,5 @@
+import { BrandMark } from "@/components/worklens/BrandMark";
+import { HistoryTitle } from "@/components/worklens/HistoryTitle";
 import { Input } from "@/components/ui/input";
 import { OverflowHint } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -16,7 +18,6 @@ import {
   X,
   Trash2,
   Pencil,
-  LoaderCircle,
 } from "lucide-react";
 import {
   SettingsPage,
@@ -51,6 +52,18 @@ export function App() {
   const [views, setViews] = useState<Record<string, ConversationView>>({});
   const [current, setCurrent] = useState<string>();
   const [page, setPage] = useState<"chat" | "settings">("chat");
+  const [unread, setUnread] = useState<Set<string>>(() => new Set());
+  const visibleConversation = useRef<string | undefined>(undefined);
+  const notifiedRuns = useRef(new Set<string>());
+  useEffect(() => {
+    visibleConversation.current = page === "chat" ? current : undefined;
+    if (page === "chat" && current) setUnread(previous => {
+      if (!previous.has(current)) return previous;
+      const next = new Set(previous);
+      next.delete(current);
+      return next;
+    });
+  }, [current, page]);
   const [selection, setSelection] = useState<Selection>();
   const [text, setText] = useState("");
   const [error, setError] = useState("");
@@ -181,6 +194,12 @@ export function App() {
       if ((sequences.current.get(key) ?? 0) >= event.sequence) return;
       sequences.current.set(key, event.sequence);
       acceptView(event.view);
+      if (event.type === "run_end" && event.view.phase === "completed" && !notifiedRuns.current.has(key)) {
+        notifiedRuns.current.add(key);
+        if (visibleConversation.current !== event.conversationId) {
+          setUnread(previous => new Set(previous).add(event.conversationId));
+        }
+      }
     });
     return () => {
       alive = false;
@@ -299,7 +318,7 @@ export function App() {
   if (!data)
     return (
       <main className="loading">
-        <div className="brand-mark">W</div>
+        <BrandMark />
         <h1>WorkLens</h1>
         <p>
           {systemText(error, language) ||
@@ -319,11 +338,8 @@ export function App() {
     <div className="app-shell" data-settings-open={page === "settings" && !(showRecovery && data.recoveries.length) ? "true" : undefined}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">W</div>
-          <span>
-            WorkLens
-            <small>{t("Your local workspace", "你的本地工作助手")}</small>
-          </span>
+          <BrandMark />
+          <span>WorkLens</span>
         </div>
         <Button
           variant="ghost"
@@ -336,8 +352,7 @@ export function App() {
           <kbd aria-hidden="true">{isMac ? "⌘ N" : "Ctrl N"}</kbd>
         </Button>
         <div className="section-label">
-          {t("History", "历史会话")}{" "}
-          <span>{data.conversations.length || ""}</span>
+          {t("Recents", "最近会话")}
         </div>
         <nav
           aria-label={t("Conversations", "会话列表")}
@@ -362,11 +377,14 @@ export function App() {
               >
                 <span className="conversation-title">
                   {active(conversation.phase) && (
-                    <LoaderCircle size={13} className="spin" />
+                    <span className="history-loading-ring" aria-hidden="true" />
                   )}
-                  <span className="truncate">{conversation.title}</span>
+                  <HistoryTitle title={conversation.title} />
                 </span>
               </Button></OverflowHint>
+              {unread.has(conversation.id) && !active(conversation.phase) && (
+                <span className="conversation-unread" role="img" aria-label={t("Unread reply", "未读回复")} />
+              )}
               <div className="conversation-actions">
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -432,7 +450,7 @@ export function App() {
         <>
           <header className="chat-header">
             <div>
-              <h1>{currentView?.title ?? t("New conversation", "新的开始")}</h1>
+              <h1 data-slot="chat-title">{currentView?.title ?? t("New conversation", "新的开始")}</h1>
             </div>
             <div className="chat-header-actions">
               <UsagePopover

@@ -39,7 +39,6 @@ import {
   ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
-  SuggestionPrimitive,
   ThreadPrimitive,
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
@@ -63,7 +62,6 @@ import {
   PencilIcon,
   RefreshCwIcon,
   SquareIcon,
-  XIcon,
 } from "lucide-react";
 import {
   createContext,
@@ -174,7 +172,7 @@ const ThreadRoot: FC<{
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
-        ["--thread-max-width" as string]: isEmpty ? "55rem" : "58rem",
+        ["--thread-max-width" as string]: isEmpty ? "760px" : "880px",
         ["--composer-bg" as string]: "var(--color-card)",
         ["--composer-radius" as string]: "1.5rem",
         ["--composer-padding" as string]: "8px",
@@ -188,7 +186,6 @@ const ThreadRoot: FC<{
         <div
           className={cn(
             "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-6 pt-4 md:px-10",
-            !isEmpty && "@min-[90rem]:max-w-[68rem]",
             isEmpty && "justify-center",
           )}
         >
@@ -218,9 +215,6 @@ const ThreadRoot: FC<{
             <ThreadScrollToBottom />
             <Composer autoFocus={autoFocus} />
             {footer}
-            <AuiIf condition={isNewChatView}>
-              <ThreadSuggestions />
-            </AuiIf>
           </ThreadPrimitive.ViewportFooter>
         </div>
       </ThreadPrimitive.Viewport>
@@ -253,26 +247,6 @@ const ThreadWelcome: FC = () => {
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
         {t("What would you like to work on?", "今天，我们从哪里开始？")}
       </h1>
-    </div>
-  );
-};
-
-const ThreadSuggestions: FC = () => {
-  const isEmpty = useAuiState((s) => s.composer.isEmpty);
-  return (
-    // Preserve the centered composer's position when suggestions disappear.
-    <div aria-hidden={!isEmpty} inert={!isEmpty} className={cn("aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4", !isEmpty && "invisible")}>
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
-    </div>
-  );
-};
-
-const ThreadSuggestionItem: FC = () => {
-  return (
-    <div className="aui-thread-welcome-suggestion-display fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200">
-      <SuggestionPrimitive.Trigger send render={<Button variant="ghost" className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors" />}><SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" /><SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" /></SuggestionPrimitive.Trigger>
     </div>
   );
 };
@@ -322,7 +296,7 @@ const ComposerAction: FC = () => {
           <ComposerPrimitive.Send render={<TooltipIconButton tooltip={t("Send message", "发送消息")} side="bottom" type="button" variant="default" size="icon" className={cn("aui-composer-send", composerActionClassName)} aria-label={t("Send message", "发送消息")} />}><ArrowUpIcon className="aui-composer-send-icon size-4" /></ComposerPrimitive.Send>
         </AuiIf>
         <AuiIf condition={(s) => s.thread.isRunning}>
-          <ComposerPrimitive.Cancel render={<TooltipIconButton tooltip={t("Stop task", "停止运行")} side="bottom" type="button" variant="default" size="icon" className={cn("aui-composer-cancel", composerActionClassName)} aria-label={t("Stop task", "停止运行")} />}><XIcon className="aui-composer-cancel-icon size-4" /></ComposerPrimitive.Cancel>
+          <ComposerPrimitive.Cancel render={<TooltipIconButton tooltip={t("Stop task", "停止运行")} side="bottom" type="button" variant="default" size="icon" className={cn("aui-composer-cancel", composerActionClassName)} aria-label={t("Stop task", "停止运行")} />}><SquareIcon aria-hidden="true" className="aui-composer-cancel-icon size-3 fill-current" /></ComposerPrimitive.Cancel>
         </AuiIf>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { toolProgress } from "@/lib/activity-progress";
+import { BookOpen, FilePenLine, Globe, Images, ListFilter, SquareTerminal, Wrench } from "lucide-react";
 import { systemText } from "@/lib/system-text";
 import { useLocale } from "@/lib/locale";
 import {
@@ -201,10 +202,26 @@ function WorkLensToolGroup({
   const { t } = useLocale();
   const content = useAuiState((s) => s.message.content);
   const tools = content.filter((part) => part.type === "tool-call");
+  const latestToolName = tools.at(-1)?.toolName ?? "";
+  const ProgressIcon = /search/i.test(latestToolName) ? Globe
+    : /image|screenshot/i.test(latestToolName) ? Images
+    : latestToolName === "read" ? BookOpen
+    : /^(bash|powershell|shell|exec|terminal)$/i.test(latestToolName) ? SquareTerminal
+    : /^(write|edit|apply_patch)$/i.test(latestToolName) ? FilePenLine
+    : /^(ls|find|grep)$/i.test(latestToolName) ? ListFilter
+    : Wrench;
   const failed = tools.filter((tool) => tool.isError).length;
   const running = useAuiState((s) => s.message.status?.type === "running");
   const progress = useAuiState((s) => s.message.metadata.custom.progress);
   const timing = useAuiState((s) => s.message.metadata.custom);
+  const progressKey = String(timing.progressId ?? "");
+  const settled = timing.progressSettled === true;
+  const [dismissedProgress, setDismissedProgress] = useState<string | null>(null);
+  useEffect(() => {
+    if (!settled) { setDismissedProgress(null); return; }
+    const timer = setTimeout(() => setDismissedProgress(progressKey), 900);
+    return () => clearTimeout(timer);
+  }, [progressKey, settled]);
   const start = typeof timing.runStartedAt === "string" ? Date.parse(timing.runStartedAt) : NaN;
   const elapsed = typeof timing.runElapsedMs === "number" ? timing.runElapsedMs : undefined;
   const [now, setNow] = useState(Date.now);
@@ -234,11 +251,12 @@ function WorkLensToolGroup({
       open={open}
       onOpenChange={setOpen}
     >
-      <div className="flex min-w-0 flex-col items-start gap-1">
+      <div className="flex w-full min-w-0 flex-col items-start gap-1">
         <ReasoningTrigger className="shrink-0" active={running} label={label} />
-        {running && !open && typeof progress === "string" && progress && (
-          <span data-slot="activity-progress" className="line-clamp-2 min-w-0 text-sm leading-6 text-muted-foreground wrap-anywhere">
-            {progress}
+        {running && !open && !(settled && dismissedProgress === progressKey) && typeof progress === "string" && progress && (
+          <span data-slot="activity-progress" data-settled={settled} className="flex w-full min-w-0 items-start gap-2 text-sm leading-6 text-muted-foreground">
+            <ProgressIcon aria-hidden="true" className="mt-1 size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate" title={progress}>{progress}</span>
           </span>
         )}
       </div>
@@ -258,7 +276,7 @@ export function AgentThread({
   onCancel,
   modelMenu,
 }: Props) {
-  const { t, language } = useLocale();
+  const { language } = useLocale();
   // Presentation only: one activity disclosure per turn; source records stay intact.
   const messages = useMemo(() => {
     const convert = convertMessage(view, language);
@@ -274,8 +292,14 @@ export function AgentThread({
       const activity: Part[] = [];
       const answer: Part[] = [];
       let progress = "";
+      let progressId = "";
+      let progressSettled = false;
       for (const [position, { message, index }] of turn.entries()) {
-        if (message.role === "tool") progress = toolProgress(message, language);
+        if (message.role === "tool") {
+          progress = toolProgress(message, language);
+          progressId = message.id;
+          progressSettled = ["success", "error", "timeout", "cancelled"].includes(message.status ?? "");
+        }
         const converted = convert(message, index);
         if (!Array.isArray(converted.content)) continue;
         for (const part of converted.content) {
@@ -299,7 +323,7 @@ export function AgentThread({
       const runElapsedMs = recordedTiming?.runElapsedMs ?? latestRun?.elapsedMs;
       if (activity.length) displayed.push({
         id: `${id}-activity`, role: "assistant", content: activity, status,
-        metadata: { custom: { progress, runStartedAt, runElapsedMs } },
+        metadata: { custom: { progress, progressId, progressSettled, runStartedAt, runElapsedMs } },
       });
       const sentAt = turn.findLast(({ message }) => message.role === "assistant" && message.createdAt)?.message.createdAt;
       if (answer.length) displayed.push({
@@ -329,32 +353,7 @@ export function AgentThread({
       if (text) await onSend(text);
     },
     onCancel,
-    suggestions: [
-      {
-        title: t("Organize files", "整理文件"),
-        label: t("Sort and summarize", "按内容归类并生成清单"),
-        prompt: t(
-          "Organize these files and create a clear directory guide.",
-          "帮我整理这些文件，并生成一份清晰的目录说明。",
-        ),
-      },
-      {
-        title: t("Explore a project", "分析项目"),
-        label: t("Review code and next steps", "阅读代码并提出下一步"),
-        prompt: t(
-          "Analyze this project and identify the three highest priority issues.",
-          "分析当前项目，告诉我最值得优先处理的三个问题。",
-        ),
-      },
-      {
-        title: t("Draft a document", "起草文档"),
-        label: t("Turn notes into a draft", "从现有材料整理成文"),
-        prompt: t(
-          "Draft a well-structured document from the available material.",
-          "根据现有材料，帮我起草一份结构清楚的文档。",
-        ),
-      },
-    ],
+
   });
 
   useEffect(() => {

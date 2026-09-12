@@ -133,11 +133,11 @@ test("prototype header, popover, keyboard and desktop layout", async ({
   page,
 }, info) => {
   await fixture(page);
-  await expect(page.locator(".usage-total")).toHaveText("Total3.86Mtokens");
+  await expect(page.locator(".usage-total")).toHaveCount(0);
   const trigger = page.getByRole("button", {
     name: "Open current usage details",
   });
-  await expect(trigger).toContainText("Current8.2k tokens·$0.03 est.");
+  await expect(trigger).toContainText("34%");
   await expect(page.locator(".run-status")).toHaveCount(0);
   for (const width of [1440, 1024, 850, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -163,6 +163,22 @@ test("prototype header, popover, keyboard and desktop layout", async ({
       path: info.outputPath(`usage-${width}.png`),
       fullPage: true,
     });
+    const overviewHeight = box.height;
+    const dividerY = (await page.locator(".usage-model").boundingBox()).y;
+    const modelText = await page.locator(".usage-model strong").boundingBox();
+    await page.getByRole("tab", { name: "Details", exact: true }).click();
+    await expect(page.getByRole("tabpanel", { name: "Details", exact: true })).toContainText("All models total");
+    expect((await page.locator(".usage-popover").boundingBox()).height).toBe(overviewHeight);
+    expect(overviewHeight).toBeLessThanOrEqual(320);
+    expect(Math.abs((await page.locator(".usage-total").boundingBox()).y - dividerY)).toBeLessThanOrEqual(1);
+    const totalText = await page.locator(".usage-total strong").boundingBox();
+    expect(Math.abs(totalText.y + totalText.height / 2 - modelText.y - modelText.height / 2)).toBeLessThanOrEqual(1);
+    expect(await page.getByRole("tabpanel", { name: "Details", exact: true }).evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
+    await expect(page.locator(".usage-cost-note")).toHaveCount(0);
+    await expect(page.locator(".usage-composition > span")).toHaveCount(4);
+    await page.screenshot({path: info.outputPath(`usage-details-${width}.png`)});
+    await page.getByRole("tab", { name: "Details", exact: true }).press("ArrowLeft");
+    await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
     await page.keyboard.press("Escape");
     await expect(page.locator(".usage-popover")).toBeHidden();
     await expect(trigger).toBeFocused();
@@ -180,16 +196,17 @@ test("latest completed run keeps usage and marks lifecycle; legacy never falls b
   await expect(page.locator(".usage-live-dot")).toHaveCount(0);
   await page.locator(".usage-trigger").click();
   await expect(page.getByTestId("run-usage")).toContainText("Last run");
-  await expect(page.getByTestId("run-usage")).toContainText("Completed");
+  await expect(page.locator(".usage-run-state")).toContainText("Completed");
   await page.close();
 });
 
 test("legacy unknown run remains inspectable", async ({ page }) => {
   await fixture(page, { legacy: true });
-  await expect(page.locator(".usage-trigger")).toContainText("Current—");
+  await expect(page.locator(".usage-trigger")).toContainText("34%");
   await expect(page.locator(".usage-trigger")).not.toContainText("44.1k");
   await page.locator(".usage-trigger").click();
-  await expect(page.getByTestId("run-usage")).toContainText("No recorded run");
+  await expect(page.getByTestId("run-usage")).toContainText("—");
+  await expect(page.locator(".usage-run-state")).toContainText("No recorded run");
   await expect(page.getByTestId("conversation-usage")).toContainText("44.1k");
 });
 
@@ -197,18 +214,20 @@ test("partial independent costs, unknown context, reasoning, dark Chinese", asyn
   page,
 }, info) => {
   await fixture(page, { partial: true, dark: true, zh: true });
-  await expect(page.locator(".usage-total")).toHaveText("总用量3.86M+tokens");
+  await expect(page.locator(".usage-trigger")).toHaveText("—");
   await expect(page.locator(".usage-trigger")).not.toContainText("$");
   await page.locator(".usage-trigger").click();
-  await expect(page.getByTestId("run-usage")).toContainText("Token 数据不完整");
+  await expect(page.locator(".usage-notice")).toContainText("Token 数据不完整");
   await expect(page.getByTestId("conversation-usage")).toContainText(
-    "$0.184 部分 · 估算",
+    "$0.184 ≈+",
   );
   await expect(page.getByTestId("conversation-usage")).not.toContainText(
     "Token 数据不完整",
   );
   await expect(page.locator(".usage-context")).toContainText("暂不可用");
   await expect(page.getByRole("progressbar")).toHaveCount(0);
+  await page.getByRole("tab", { name: "明细", exact: true }).click();
+  await expect(page.locator(".usage-total")).toHaveText("所有模型累计3.86M+tokens");
   await expect(page.locator(".usage-breakdown")).toContainText(
     "推理 · 包含在输出中",
   );
@@ -222,7 +241,9 @@ test("unavailable total and old live events never masquerade as zero or roll glo
   page,
 }) => {
   await fixture(page, { unavailable: true });
-  await expect(page.locator(".usage-total")).toHaveText("Total—tokens");
+  await page.locator(".usage-trigger").click();
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
+  await expect(page.locator(".usage-total")).toHaveText("All models total—tokens");
   await page.evaluate(() => window.usageEmit(10, 4000000));
   await expect(page.locator(".usage-total strong")).toHaveText("4M");
   await page.evaluate(() => window.usageEmit(9, 3000000, 11));
@@ -236,5 +257,7 @@ test("live global arriving before first bootstrap is retained", async ({
   page,
 }) => {
   await fixture(page, { bootstrapRace: true });
+  await page.locator(".usage-trigger").click();
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
   await expect(page.locator(".usage-total strong")).toHaveText("5M");
 });
