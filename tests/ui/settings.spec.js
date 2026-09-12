@@ -12,17 +12,15 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   ).toBeVisible();
   await expect(
     page
-      .locator(".settings-pane")
-      .getByRole("button", { name: "Close settings" }),
-  ).toBeVisible();
-  await expect(
-    page
       .locator(".settings-navigation")
-      .getByRole("button", { name: "Close settings" }),
-  ).toHaveCount(0);
+      .getByRole("button", { name: "Back to app" }),
+  ).toBeVisible();
   const backButton = page
-    .locator(".settings-page-heading")
-    .getByRole("button", { name: "Close settings" });
+    .locator(".settings-navigation")
+    .getByRole("button", { name: "Back to app" });
+  await expect(page.locator(".sidebar")).toBeHidden();
+  const settingsBounds = await page.locator(".settings-shell-dialog").boundingBox();
+  expect(settingsBounds).toMatchObject({ x: 0, y: 0, width: 1280, height: 900 });
   await page.setViewportSize({ width: 1280, height: 600 });
   const headerBefore = await backButton.boundingBox();
   await page.locator(".settings-scroll").evaluate((el) => {
@@ -317,7 +315,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   await expect(sonnet).not.toBeChecked();
   await expect(gpt).toBeChecked();
   await page
-    .getByRole("button", { name: "Close settings", exact: true })
+    .getByRole("button", { name: "Back to app", exact: true })
     .click();
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
   expect(

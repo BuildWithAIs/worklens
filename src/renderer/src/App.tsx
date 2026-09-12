@@ -40,17 +40,6 @@ import type {
 
 const api = window.worklens;
 const isMac = /Mac/i.test(navigator.platform);
-const labels: Record<Phase, [string, string]> = {
-  idle: ["Ready", "就绪"],
-  generating: ["Generating", "正在生成"],
-  tool: ["Running tool", "正在执行工具"],
-  compacting: ["Compacting context", "正在压缩上下文"],
-  retrying: ["Retrying", "等待重试"],
-  stopping: ["Stopping", "正在停止"],
-  completed: ["Completed", "已完成"],
-  cancelled: ["Cancelled", "已取消"],
-  failed: ["Failed", "运行失败"],
-};
 const active = (phase?: Phase) =>
   !!phase &&
   ["generating", "tool", "compacting", "retrying", "stopping"].includes(phase);
@@ -164,8 +153,6 @@ export function App() {
       .then(async (next) => {
         if (!alive) return;
         setSelection(next.settings.defaults);
-        if (!next.providers.some((p) => p.models.some((m) => m.available)))
-          setPage("settings");
         const last = next.settings.lastConversation;
         if (last && next.conversations.some((c) => c.id === last)) {
           const view = await api.invoke("open", { id: last });
@@ -329,7 +316,7 @@ export function App() {
     .find((p) => p.id === selection?.provider)
     ?.models.find((m) => m.id === selection?.model);
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-settings-open={page === "settings" && !(showRecovery && data.recoveries.length) ? "true" : undefined}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">W</div>
@@ -339,7 +326,7 @@ export function App() {
           </span>
         </div>
         <Button
-          variant="outline"
+          variant="ghost"
           className="new-chat"
           onClick={newConversation}
           aria-keyshortcuts={isMac ? "Meta+N" : "Control+N"}
@@ -433,7 +420,7 @@ export function App() {
         <div className="sidebar-bottom">
           <Button
             variant="ghost"
-            className="w-full justify-start"
+            className="sidebar-settings-button w-full justify-start"
             onClick={() => setPage("settings")}
           >
             <SettingsIcon />
@@ -448,17 +435,6 @@ export function App() {
               <h1>{currentView?.title ?? t("New conversation", "新的开始")}</h1>
             </div>
             <div className="chat-header-actions">
-              {currentView && busy && (
-                <span
-                  role="status"
-                  className={busy ? "run-status running" : "run-status"}
-                >
-                  {busy && <LoaderCircle className="spin" size={13} />}{" "}
-                  {currentView.statusDetail
-                    ? systemText(currentView.statusDetail, language)
-                    : t(...labels[currentView.phase])}
-                </span>
-              )}
               <UsagePopover
                 global={data.globalUsage}
                 usage={currentView?.usage}
@@ -481,7 +457,9 @@ export function App() {
               onChange: changeModel,
               onManage: () => {
                 setPage("settings");
-                setSettingsSection("models");
+                setSettingsSection(
+                  data.providers.some((p) => p.configured) ? "models" : "providers",
+                );
               },
             }}
           />
@@ -495,6 +473,7 @@ export function App() {
       >
         <DialogContent
           className="settings-shell-dialog"
+          overlayClassName="settings-backdrop"
           showCloseButton={false}
           aria-describedby={undefined}
         >

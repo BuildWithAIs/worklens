@@ -22,6 +22,7 @@ export function projectMessages(
   for (const [index, raw] of messages.entries()) {
     const message = raw as RecordValue;
     const id = `m-${index}`;
+    const firstNew = result.length;
     if (message.role === "user")
       result.push({ id, role: "user", text: textContent(message.content) });
     if (message.role === "assistant") {
@@ -112,6 +113,40 @@ export function projectMessages(
         role: "summary",
         text: bounded(message.summary ?? textContent(message.content)),
       });
+    for (const item of result.slice(firstNew)) {
+      if (typeof message.timestamp === "number" && Number.isFinite(message.timestamp) && !Number.isNaN(new Date(message.timestamp).getTime())) item.createdAt = new Date(message.timestamp).toISOString();
+      if (typeof message.runStartedAt === "string") item.runStartedAt = message.runStartedAt;
+      if (typeof message.runElapsedMs === "number") item.runElapsedMs = message.runElapsedMs;
+    }
   }
   return result;
+}
+
+// Run markers are persisted alongside messages, so timing survives navigation and restart.
+export function withRunTiming(branch: readonly unknown[]): unknown[] {
+  const runs = new Map<string, { runStartedAt: string; runElapsedMs?: number }>();
+  for (const raw of branch) {
+    const entry = raw as RecordValue;
+    const data = entry.data;
+    if (entry.type !== "custom" || typeof data?.runId !== "string") continue;
+    if (entry.customType === "worklens.run-start" && Number.isFinite(Date.parse(data.startedAt))) {
+      runs.set(data.runId, { runStartedAt: data.startedAt });
+    }
+    if (entry.customType === "worklens.run-end") {
+      const run = runs.get(data.runId);
+      const end = Date.parse(data.endedAt);
+      if (run && Number.isFinite(end) && end >= Date.parse(run.runStartedAt)) {
+        run.runElapsedMs = end - Date.parse(run.runStartedAt);
+      }
+    }
+  }
+  let timing: { runStartedAt: string; runElapsedMs?: number } | undefined;
+  return branch.flatMap((raw) => {
+    const entry = raw as RecordValue;
+    if (entry.type === "custom" && entry.customType === "worklens.run-start") timing = runs.get(entry.data?.runId);
+    if (entry.type === "custom" && entry.customType === "worklens.run-end") timing = undefined;
+    if (entry.type === "message") return [{ ...entry.message, ...timing }];
+    if (entry.type === "compaction") return [{ role: "compactionSummary", summary: entry.summary }];
+    return [];
+  });
 }

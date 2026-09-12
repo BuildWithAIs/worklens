@@ -103,6 +103,9 @@ export interface Settings {
   [key: string]: unknown;
 }
 export interface MessageView {
+  createdAt?: string;
+  runStartedAt?: string;
+  runElapsedMs?: number;
   id: string;
   role: "user" | "assistant" | "tool" | "summary";
   text: string;

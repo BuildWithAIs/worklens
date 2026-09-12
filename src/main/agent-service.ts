@@ -22,7 +22,7 @@ import {
 } from "./usage";
 import { resources, toolNames } from "./resources";
 import { worklensTools } from "./tools";
-import { projectMessages, textContent } from "./projection";
+import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import type {
   ChatEvent,
@@ -193,13 +193,7 @@ export class AgentService {
   private view(id: string, runtime: Runtime): ConversationView {
     const branch = runtime.manager.getBranch();
     const messages = projectMessages(
-      branch.flatMap<unknown>((entry) =>
-        entry.type === "message"
-          ? [entry.message]
-          : entry.type === "compaction"
-            ? [{ role: "compactionSummary", summary: entry.summary }]
-            : [],
-      ),
+      withRunTiming(branch),
       this.paths.runtime,
     );
     // During streaming the public agent state may not yet include the current assistant partial.

@@ -47,6 +47,33 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     const first = await launch();
     app = first.instance;
     const page = first.window;
+    if (process.platform === "darwin") {
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-native-vibrancy",
+        "true",
+      );
+      await expect(page.locator("body")).toHaveCSS(
+        "background-color",
+        "rgba(0, 0, 0, 0)",
+      );
+      await expect(page.locator(".app-shell")).toHaveCSS(
+        "background-color",
+        "rgba(0, 0, 0, 0)",
+      );
+      await expect(page.locator(".main-content")).toHaveCSS(
+        "background-color",
+        "rgb(255, 255, 255)",
+      );
+    }
+    await expect(
+      page.getByRole("dialog", { name: "Settings", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Choose model", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Connect a provider", exact: true })
+      .click();
     await expect(
       page.getByRole("heading", { name: "Providers", exact: true }),
     ).toBeVisible();
@@ -130,7 +157,7 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       page.getByText("Connection successful", { exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("button", { name: "Close settings", exact: true })
+      .getByRole("button", { name: "Back to app", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Choose model", exact: true })
@@ -240,7 +267,7 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       .filter({ hasText: "实际文件任务" })
       .click();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "Close settings" }).click();
+    await page.getByRole("button", { name: "Back to app" }).click();
     await page
       .getByRole("textbox", { name: "Message", exact: true })
       .fill("继续这个历史会话");
@@ -266,14 +293,9 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     app = undefined;
     const second = await launch();
     app = second.instance;
-    if (
-      await second.window
-        .getByRole("button", { name: "Close settings", exact: true })
-        .isVisible()
-    )
-      await second.window
-        .getByRole("button", { name: "Close settings", exact: true })
-        .click();
+    await expect(
+      second.window.getByRole("dialog", { name: "Settings", exact: true }),
+    ).toHaveCount(0);
     await second.window
       .locator(".conversation-open")
       .filter({ hasText: "实际文件任务" })
