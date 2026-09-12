@@ -309,7 +309,7 @@ export function SettingsPage({
       </aside>
       <div className="settings-pane">
         <header className="settings-page-heading">
-          <h1>{nav.find((n) => n.id === section)?.label}</h1>
+          <h1 data-slot="settings-page-title">{nav.find((n) => n.id === section)?.label}</h1>
 
         </header>
         <div className="settings-scroll">
