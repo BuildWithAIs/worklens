@@ -72,7 +72,7 @@ export function ModelMenu({
         }}
       >
         <PopoverTrigger
-          render={<Button variant="ghost" size="sm" className="max-w-72" />}
+          render={<Button variant="ghost" size="sm" className="chat-model-trigger max-w-72" />}
           disabled={disabled}
           aria-label={t("Choose model", "选择模型")}
         >

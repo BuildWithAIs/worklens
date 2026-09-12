@@ -178,7 +178,7 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
         timeout: 30000,
       });
       await page.locator(".usage-trigger").click();
-      await expect(page.getByTestId("run-usage")).toContainText(state, {
+      await expect(page.locator(".usage-run-state")).toContainText(state, {
         timeout: 30000,
       });
       await page.keyboard.press("Escape");

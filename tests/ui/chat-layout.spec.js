@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
-test("new chat composer stays in place while typing and clearing", async ({ page }) => {
+test("new chat composer stays in place while typing and clearing", async ({ page }, testInfo) => {
   await mockWorklens(page);
   await page.goto("/");
   const input = page.getByRole("textbox", { name: "Message", exact: true });
@@ -9,14 +9,18 @@ test("new chat composer stays in place while typing and clearing", async ({ page
   const suggestions = page.locator(".aui-thread-welcome-suggestions");
   for (const width of [1000, 1920]) {
     await page.setViewportSize({ width, height: 1000 });
-    await expect(suggestions).toBeVisible();
+    await expect(suggestions).toHaveCount(0);
     const before = await composer.boundingBox();
+    expect(before.width).toBeLessThanOrEqual(680);
+    const viewport = await page.locator('[data-slot="aui_thread-viewport"]').boundingBox();
+    expect(Math.abs(before.x + before.width / 2 - viewport.x - viewport.width / 2)).toBeLessThanOrEqual(6);
+    await page.screenshot({ path: testInfo.outputPath(`home-${width}.png`) });
     await input.fill("地");
-    await expect(suggestions).toBeHidden();
+    await expect(suggestions).toHaveCount(0);
     const during = await composer.boundingBox();
     expect(Math.abs(during.y - before.y)).toBeLessThan(1);
     await input.fill("");
-    await expect(suggestions).toBeVisible();
+    await expect(suggestions).toHaveCount(0);
     const after = await composer.boundingBox();
     expect(Math.abs(after.y - before.y)).toBeLessThan(1);
   }
@@ -88,7 +92,7 @@ test("compact tool activity, history actions and fluid message width", async ({
       } else {
         view.messages.push(
           { id: "progress-live", role: "assistant", text: "Checking the latest source." },
-          { id: "tool-live", role: "tool", toolName: "read", toolId: "live", args: JSON.stringify({ path: "README.md" }), text: "", status: "running" },
+          { id: "tool-live", role: "tool", toolName: "bash", toolId: "live", args: JSON.stringify({ command: "rg --files src" }), text: "", status: "running" },
         );
       }
       window.emitFixture({ conversationId: view.id, runId: "test-run", sequence: finish ? 3 : 2, type: "message_update", view: structuredClone(view) });
@@ -103,6 +107,10 @@ test("compact tool activity, history actions and fluid message width", async ({
         type: "run_end",
         view: structuredClone(view),
       });
+    };
+    window.finishToolFixture = () => {
+      view.messages.at(-1).status = "success";
+      window.emitFixture({ conversationId: view.id, runId: "test-run", sequence: 2.5, type: "message_update", view: structuredClone(view) });
     };
     window.worklens.onChat = (listener) => {
       window.emitFixture = listener;
@@ -286,6 +294,8 @@ test("compact tool activity, history actions and fluid message width", async ({
   await page.locator(".chat-header").click();
   await expect.poll(() => reply.locator("time").evaluateAll(nodes => nodes.every(node => getComputedStyle(node).opacity === "0"))).toBe(true);
   await expect(reply.locator(".aui-md-h2")).toHaveCSS("font-size", "15px");
+  await expect(page.locator('[data-slot="chat-title"]')).toHaveCSS("font-size", "15px");
+  await expect(page.locator('[data-slot="chat-title"]')).toHaveCSS("font-weight", "500");
   const typography = await page.evaluate(() => {
     const size = (selector) =>
       getComputedStyle(document.querySelector(selector)).fontSize;
@@ -312,7 +322,7 @@ test("compact tool activity, history actions and fluid message width", async ({
     });
   }
   expect(widths[1].messages).toBeGreaterThan(widths[0].messages);
-  expect(widths[1].messages).toBeLessThan(1050);
+  expect(widths[1].messages).toBeLessThanOrEqual(800);
   expect(widths.every((w) => Math.abs(w.composer - w.messages) < 1)).toBe(true);
   expect(widths.every((w) => !w.overflow)).toBe(true);
   await page.evaluate(() => localStorage.setItem("fixture-running", "true"));
@@ -329,11 +339,20 @@ test("compact tool activity, history actions and fluid message width", async ({
   await page.evaluate(() => window.progressFixture());
   await expect(groups.nth(1)).toHaveText(/Thinking… \d+s/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator('[data-slot="activity-progress"]')).toHaveText("Reading · README.md");
+  await expect(page.locator('[data-slot="activity-progress"]')).toHaveText("Running bash · rg --files src");
+  await expect(page.locator('[data-slot="activity-progress"] .lucide-square-terminal')).toHaveCount(1);
   const progressBox = await page.locator('[data-slot="activity-progress"]').boundingBox();
+  const progressText = page.locator('[data-slot="activity-progress"] > span');
+  await expect(progressText).toHaveCSS("white-space", "nowrap");
+  await expect(progressText).toHaveCSS("text-overflow", "ellipsis");
+  expect(progressBox.height).toBe(24);
   const triggerBox = await groups.nth(1).boundingBox();
   expect(progressBox.y).toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height);
   await expect(page.locator('[data-slot="aui_assistant-message-indicator"]')).toHaveCount(0);
+  await page.evaluate(() => window.finishToolFixture());
+  await expect(page.locator('[data-slot="activity-progress"]')).toContainText("Completed bash");
+  await expect(page.locator('[data-slot="activity-progress"]')).toHaveCount(0);
+  await expect(groups.nth(1)).toHaveText(/Thinking…/);
   await groups.nth(1).click();
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator('[data-slot="activity-progress"]')).toHaveCount(0);
