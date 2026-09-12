@@ -2,6 +2,8 @@
 
 [English](README.md) | 简体中文
 
+[项目主页](https://worklens.buildwithais.com/) · [网站部署说明](website/README.md)
+
 WorkLens 是一款本地优先的工作 Agent，面向中大型企业的员工——尤其是日常依赖 Jira、Confluence、GitHub 等企业服务的团队。随着记忆能力的加入，它会越来越“懂”你。
 
 基于 Electron、React、TypeScript、Tailwind CSS 和 Pi 进行开发。

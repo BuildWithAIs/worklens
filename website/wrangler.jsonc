@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4.127.1/config-schema.json",
+  "name": "worklens-site",
+  "account_id": "60e88110eacab548b2028b6f76e2b97f",
+  "compatibility_date": "2026-09-04",
+  "workers_dev": false,
+  "preview_urls": false,
+  "main": "worker.mjs",
+  "r2_buckets": [{ "binding": "SITE", "bucket_name": "worklens-site" }],
+  "routes": [{ "pattern": "worklens.buildwithais.com", "custom_domain": true }],
+}
