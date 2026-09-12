@@ -57,6 +57,7 @@ test("compact tool activity, history actions and fluid message width", async ({
           },
         ]).flat(),
         {
+          createdAt: "2026-09-12T03:31:00Z",
           id: "a1",
           role: "assistant",
           text: "## Review complete\n\nThe project contains five documents. Each has been reviewed.\n\n| File | Result |\n| --- | --- |\n| README.md | Clear setup steps |\n| Guide.md | Needs examples |\n\n### Next steps\n\n- Add an example.\n- Update the guide.",
@@ -72,6 +73,7 @@ test("compact tool activity, history actions and fluid message width", async ({
       ],
     };
     if (localStorage.getItem("fixture-running")) {
+      view.messages.at(-1).runStartedAt = new Date(Date.now() - 45000).toISOString();
       view.phase = "tool";
       view.messages.at(-1).status = "running";
       view.messages.at(-1).text = "";
@@ -81,11 +83,12 @@ test("compact tool activity, history actions and fluid message width", async ({
       view.phase = finish ? "completed" : "generating";
       view.messages.at(-1).status = "success";
       if (finish) {
+        view.messages.find(m => m.id === "t6").runElapsedMs = 47000;
         view.messages.push({ id: "final-live", role: "assistant", text: "Final live answer." });
       } else {
         view.messages.push(
           { id: "progress-live", role: "assistant", text: "Checking the latest source." },
-          { id: "tool-live", role: "tool", toolName: "read", toolId: "live", text: "", status: "running" },
+          { id: "tool-live", role: "tool", toolName: "read", toolId: "live", args: JSON.stringify({ path: "README.md" }), text: "", status: "running" },
         );
       }
       window.emitFixture({ conversationId: view.id, runId: "test-run", sequence: finish ? 3 : 2, type: "message_update", view: structuredClone(view) });
@@ -225,7 +228,16 @@ test("compact tool activity, history actions and fluid message width", async ({
   await expect(deletion).toBeHidden();
   await expect(history.getByRole("button", { name: "Review project files", exact: true })).toBeVisible();
   await page.locator('[data-slot="aui_user-message-root"]').last().hover();
-  await expect(page.locator(".aui-user-action-edit")).toHaveCount(1);
+  const user = page.locator('[data-slot="aui_user-message-root"]').last();
+  const actions = user.locator(".aui-user-action-bar-wrapper");
+  await expect(actions).toHaveCSS("opacity", "1");
+  await user.getByRole("button", { name: "Copy", exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Check another file.");
+  await user.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("Check another file.");
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("");
+  await page.locator(".chat-header").click();
+  await expect(actions).toHaveCSS("opacity", "0");
   await page
     .locator('[data-slot="aui_assistant-message-root"]')
     .filter({ hasText: "Review complete" })
@@ -267,12 +279,19 @@ test("compact tool activity, history actions and fluid message width", async ({
   }));
   expect(sidebarMetrics.height).toBeGreaterThanOrEqual(40);
   expect(sidebarMetrics.weight).toBe("400");
+  const reply = page.locator('[data-slot="aui_assistant-message-root"]').filter({ hasText: "Review complete" });
+  await reply.hover();
+  await expect(reply.locator("time")).toHaveAttribute("datetime", "2026-09-12T03:31:00.000Z");
+  await expect(reply.locator("time")).toHaveCSS("opacity", "1");
+  await page.locator(".chat-header").click();
+  await expect.poll(() => reply.locator("time").evaluateAll(nodes => nodes.every(node => getComputedStyle(node).opacity === "0"))).toBe(true);
+  await expect(reply.locator(".aui-md-h2")).toHaveCSS("font-size", "15px");
   const typography = await page.evaluate(() => {
     const size = (selector) =>
       getComputedStyle(document.querySelector(selector)).fontSize;
     return [size(".aui-md-p"), size(".aui-md-li"), size(".aui-md-td")];
   });
-  expect(typography).toEqual(["16px", "16px", "16px"]);
+  expect(typography).toEqual(["14px", "14px", "14px"]);
   const widths = [];
   for (const width of [1000, 1920]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -298,14 +317,19 @@ test("compact tool activity, history actions and fluid message width", async ({
   expect(widths.every((w) => !w.overflow)).toBe(true);
   await page.evaluate(() => localStorage.setItem("fixture-running", "true"));
   await page.reload();
-  await expect(groups.nth(1)).toHaveText(/Thinking… \d+s/);
-  await expect(page.locator('[data-slot="activity-progress"]')).toHaveCount(0);
+  await expect(groups.nth(1)).toHaveText(/Thinking… 4[5-9]s/);
+  await expect(page.locator('.worklens-activity-section').nth(1)).toHaveCSS("border-bottom-width", "0px");
+  await page.getByRole("button", { name: "New chat", exact: false }).click();
+  await page.locator(".conversation-open").first().click();
+  await expect(groups.nth(1)).toHaveText(/Thinking… 4[5-9]s/);
+  await expect(page.locator(".chat-header .run-status")).toHaveCount(0);
+  await expect(page.locator('[data-slot="activity-progress"]')).toHaveText("Reading");
   await expect(groups.nth(1)).toHaveText(/Thinking… [1-9]\d*s/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
   await page.evaluate(() => window.progressFixture());
   await expect(groups.nth(1)).toHaveText(/Thinking… \d+s/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator('[data-slot="activity-progress"]')).toHaveText("Checking the latest source.");
+  await expect(page.locator('[data-slot="activity-progress"]')).toHaveText("Reading · README.md");
   const progressBox = await page.locator('[data-slot="activity-progress"]').boundingBox();
   const triggerBox = await groups.nth(1).boundingBox();
   expect(progressBox.y).toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height);
@@ -315,7 +339,8 @@ test("compact tool activity, history actions and fluid message width", async ({
   await expect(page.locator('[data-slot="activity-progress"]')).toHaveCount(0);
   await expect(page.getByText("Checking the latest source.", { exact: true })).toBeVisible();
   await page.evaluate(() => window.progressFixture(true));
-  await expect(groups.nth(1)).toHaveText(/Worked for \d+s/);
+  await expect(groups.nth(1)).toHaveText("Worked for 47s");
+  await expect(page.locator('.worklens-activity-section').nth(1)).toHaveCSS("border-bottom-width", "1px");
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByText("Final live answer.", { exact: true })).toBeVisible();
   await groups.nth(1).click();

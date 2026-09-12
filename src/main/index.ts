@@ -188,13 +188,21 @@ else {
         },
       );
       const createWindow = () => {
+        nativeTheme.themeSource = state.value.theme;
         window = new BrowserWindow({
           width: 1260,
           height: 860,
           minWidth: 850,
           minHeight: 620,
           title: "WorkLens",
-          backgroundColor: "#f6f4ef",
+          backgroundColor:
+            process.platform === "darwin" ? "#00000000" : "#ffffff",
+          ...(process.platform === "darwin"
+            ? {
+                vibrancy: "popover" as const,
+                visualEffectState: "followWindow" as const,
+              }
+            : {}),
           show: false,
           autoHideMenuBar: true,
           webPreferences: {
@@ -205,7 +213,6 @@ else {
             webSecurity: true,
           },
         });
-        nativeTheme.themeSource = state.value.theme;
         window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
         window.webContents.on("will-navigate", (event) =>
           event.preventDefault(),

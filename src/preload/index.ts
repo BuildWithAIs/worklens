@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { WorkLensAPI } from "../shared/contracts";
+// Only native macOS windows have a material behind the web contents.
+if (process.platform === "darwin") {
+  window.addEventListener("DOMContentLoaded", () => {
+    document.documentElement.dataset.nativeVibrancy = "true";
+  });
+}
 const api: WorkLensAPI = {
   invoke: async (method, input) => {
     const result = await ipcRenderer.invoke("worklens:request", method, input);

@@ -1,15 +1,43 @@
 /* Layout only: controls use shared shadcn primitives and theme tokens. */
 .settings-shell-dialog {
   display: block;
-  width: min(1040px, calc(100vw - 32px));
+  inset: 0;
+  transform: none;
+  translate: none;
+  width: 100vw;
   max-width: none;
-  height: min(780px, calc(100dvh - 64px));
+  height: 100dvh;
   padding: 0;
   overflow: hidden;
+  border-radius: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  animation: none;
+  transition: none;
+}
+/* Paint the new surfaces immediately; only their content enters afterward. */
+.settings-back,
+.settings-navigation nav,
+.settings-page-heading,
+.settings-page-content {
+  animation: settings-content-enter 180ms ease-out 35ms both;
+}
+@keyframes settings-content-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-back,
+  .settings-navigation nav,
+  .settings-page-heading,
+  .settings-page-content {
+    animation: none;
+  }
 }
 .settings-workspace {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
@@ -17,19 +45,37 @@
   display: flex;
   flex-direction: column;
   background: var(--sidebar);
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--glass-edge);
+  padding-top: 20px;
+  min-height: 0;
+  overflow-y: auto;
 }
 .settings-navigation [data-slot="button"] {
   justify-content: flex-start;
   width: 100%;
 }
+.settings-back {
+  margin: 0 16px 16px;
+  width: calc(100% - 32px) !important;
+}
+:root[data-native-vibrancy="true"] .settings-navigation {
+  background: var(--native-sidebar-tint);
+}
 .settings-navigation nav {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 20px 16px;
+  padding: 0 16px 24px;
+}
+.settings-navigation nav [data-slot="button"][aria-current="page"] {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  box-shadow: none;
+}
+.settings-navigation [data-slot="button"]:not([aria-current="page"]):hover {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .settings-pane {
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -54,15 +100,17 @@
   flex-shrink: 0;
   align-items: center;
   gap: 20px;
-  min-height: 64px;
-  padding: 12px 32px;
-  border-bottom: 1px solid var(--border);
+  min-height: 112px;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px 48px 20px;
   background: var(--surface);
 }
 .settings-page-heading h1 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 .settings-toolbar {
@@ -373,7 +421,7 @@
 }
 
 @media (max-width: 580px) {
-  .settings-shell-dialog { width: calc(100vw - 16px); height: calc(100dvh - 24px); }
+  .settings-shell-dialog { width: 100vw; height: 100dvh; }
 }
 
 .settings-page-content > .settings-section:first-child {

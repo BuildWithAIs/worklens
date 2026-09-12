@@ -138,7 +138,7 @@ test("prototype header, popover, keyboard and desktop layout", async ({
     name: "Open current usage details",
   });
   await expect(trigger).toContainText("Current8.2k tokens·$0.03 est.");
-  await expect(page.locator(".run-status")).toBeVisible();
+  await expect(page.locator(".run-status")).toHaveCount(0);
   for (const width of [1440, 1024, 850, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await trigger.click();

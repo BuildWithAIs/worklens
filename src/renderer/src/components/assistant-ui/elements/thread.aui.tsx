@@ -465,13 +465,24 @@ const MessageCopy: FC = () => {
   </TooltipIconButton>;
 };
 
+const MessageTime: FC<{ className?: string }> = ({ className }) => {
+  const { language } = useLocale();
+  const sentAt = useAuiState((s) => s.message.metadata.custom.sentAt);
+  const date = typeof sentAt === "string" ? new Date(sentAt) : undefined;
+  const validDate = date && !Number.isNaN(date.getTime()) ? date : undefined;
+  if (!validDate) return null;
+  return <time className={cn("text-xs", className)} dateTime={validDate.toISOString()} title={validDate.toLocaleString(language)}>
+    {validDate.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit", hour12: false })}
+  </time>;
+};
+
 const AssistantActionBar: FC = () => {
   const { t } = useLocale();
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
-      className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
+      className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex items-center gap-1 duration-200"
     >
       <MessageCopy />
       <ActionBarPrimitive.Reload render={<TooltipIconButton tooltip={t("Regenerate", "重新生成")} />}><RefreshCwIcon /></ActionBarPrimitive.Reload>
@@ -487,6 +498,7 @@ const AssistantActionBar: FC = () => {
                               </ActionBarPrimitive.ExportMarkdown>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
+      <MessageTime className="aui-assistant-message-time ml-2" />
     </ActionBarPrimitive.Root>
   );
 };
@@ -557,12 +569,12 @@ const UserMessage: FC = () => {
       <UserMessageAttachments />
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer bg-(--user-message-bg) text-(--user-message-text) rounded-3xl px-4 py-3 text-base leading-7 font-normal wrap-break-word empty:hidden">
+        <div className="aui-user-message-content peer bg-(--user-message-bg) text-(--user-message-text) rounded-3xl px-4 py-3 text-[14px] leading-[1.7] font-normal wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ Text: UserMessageText, File: UserFilePart, Image: UserImagePart }}
           />
         </div>
-        <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">
+        <div className="aui-user-action-bar-wrapper mt-1 flex h-7 justify-end peer-empty:hidden">
           <UserActionBar />
         </div>
       </div>
@@ -577,13 +589,17 @@ const UserMessage: FC = () => {
 
 const UserActionBar: FC = () => {
   const { t } = useLocale();
+  const aui = useAui();
   return (
     <ActionBarPrimitive.Root
-      hideWhenRunning
-      autohide="not-last"
-      className="aui-user-action-bar-root flex flex-col items-end"
+      className="aui-user-action-bar-root flex items-center justify-end gap-1 text-muted-foreground"
     >
-      <ActionBarPrimitive.Edit render={<TooltipIconButton tooltip={t("Edit", "编辑")} className="aui-user-action-edit" />}><PencilIcon /></ActionBarPrimitive.Edit>
+      <MessageTime className="mr-2" />
+      <MessageCopy />
+      <TooltipIconButton tooltip={t("Edit", "编辑")} className="aui-user-action-edit" onClick={() => {
+        aui.thread().composer().setText(aui.message().getCopyText());
+        document.querySelector<HTMLTextAreaElement>(".aui-composer-input")?.focus();
+      }}><PencilIcon /></TooltipIconButton>
     </ActionBarPrimitive.Root>
   );
 };

@@ -2,7 +2,7 @@ import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
 import { useEffect, useRef, useState } from "react";
 import {
-  X,
+  ArrowLeft,
   Cpu,
   FolderOpen,
   Info,
@@ -289,6 +289,10 @@ export function SettingsPage({
   return (
     <div className="settings-workspace">
       <aside className="settings-navigation">
+        <Button variant="ghost" className="settings-back" onClick={onBack}>
+          <ArrowLeft />
+          {t("Back to app", "返回应用")}
+        </Button>
         <nav aria-label={t("Settings sections", "设置分类")}>
           {nav.map(({ id, label, icon: Icon }) => (
             <Button
@@ -306,14 +310,7 @@ export function SettingsPage({
       <div className="settings-pane">
         <header className="settings-page-heading">
           <h1>{nav.find((n) => n.id === section)?.label}</h1>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onBack}
-            aria-label={t("Close settings", "关闭设置")}
-          >
-            <X />
-          </Button>
+
         </header>
         <div className="settings-scroll">
           <div className="settings-page-content" data-section={section}>

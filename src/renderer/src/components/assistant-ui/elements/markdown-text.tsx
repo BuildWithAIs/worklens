@@ -51,7 +51,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
-      className={cn("aui-md", compact ? "text-sm leading-6" : "text-base leading-7")}
+      className={cn("aui-md font-normal antialiased", compact ? "text-sm leading-6" : "text-[14px] leading-[1.7]")}
       components={markdownComponents}
       defer
     />
@@ -88,7 +88,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h1: ({ className, ...props }) => (
     <h1
       className={cn(
-        "aui-md-h1 mt-7 mb-3 scroll-m-20 text-xl font-semibold first:mt-0 last:mb-0",
+        "aui-md-h1 mt-6 mb-2 scroll-m-20 text-[15px] font-medium first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -97,7 +97,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h2: ({ className, ...props }) => (
     <h2
       className={cn(
-        "aui-md-h2 mt-6 mb-3 scroll-m-20 text-lg font-semibold first:mt-0 last:mb-0",
+        "aui-md-h2 mt-5 mb-2 scroll-m-20 text-[15px] font-medium first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -106,7 +106,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h3: ({ className, ...props }) => (
     <h3
       className={cn(
-        "aui-md-h3 mt-5 mb-2 scroll-m-20 text-base font-semibold first:mt-0 last:mb-0",
+        "aui-md-h3 mt-4 mb-2 scroll-m-20 text-sm font-medium first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -115,7 +115,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h4: ({ className, ...props }) => (
     <h4
       className={cn(
-        "aui-md-h4 mt-3.5 mb-1 scroll-m-20 text-base font-medium first:mt-0 last:mb-0",
+        "aui-md-h4 mt-3.5 mb-1 scroll-m-20 text-sm font-medium first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -124,7 +124,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h5: ({ className, ...props }) => (
     <h5
       className={cn(
-        "aui-md-h5 mt-3 mb-1 text-sm font-semibold first:mt-0 last:mb-0",
+        "aui-md-h5 mt-3 mb-1 text-sm font-medium first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -204,7 +204,7 @@ const defaultComponents = memoizeMarkdownComponents({
   th: ({ className, ...props }) => (
     <th
       className={cn(
-        "aui-md-th border-border border-b px-3 py-2.5 text-start align-top font-semibold first:ps-0 last:pe-0 [[align=center]]:text-center [[align=right]]:text-right",
+        "aui-md-th border-border border-b px-3 py-2.5 text-start align-top font-medium first:ps-0 last:pe-0 [[align=center]]:text-center [[align=right]]:text-right",
         className,
       )}
       {...props}
@@ -233,7 +233,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ),
   strong: ({ className, ...props }) => (
     <strong
-      className={cn("aui-md-strong font-semibold", className)}
+      className={cn("aui-md-strong font-medium", className)}
       {...props}
     />
   ),

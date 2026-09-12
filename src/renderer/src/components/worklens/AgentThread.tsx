@@ -1,9 +1,9 @@
+import { toolProgress } from "@/lib/activity-progress";
 import { systemText } from "@/lib/system-text";
 import { useLocale } from "@/lib/locale";
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -112,7 +112,7 @@ function convertMessage(
 ) {
   return (message: MessageView, index: number): ThreadMessageLike => {
     if (message.role === "user") {
-      return { id: message.id, role: "user", content: message.text };
+      return { id: message.id, role: "user", content: message.text, metadata: { custom: { sentAt: message.createdAt } } };
     }
 
     if (message.role === "tool") {
@@ -204,36 +204,31 @@ function WorkLensToolGroup({
   const failed = tools.filter((tool) => tool.isError).length;
   const running = useAuiState((s) => s.message.status?.type === "running");
   const progress = useAuiState((s) => s.message.metadata.custom.progress);
-  const started = useRef<number | undefined>(undefined);
-  const [seconds, setSeconds] = useState<number | undefined>();
+  const timing = useAuiState((s) => s.message.metadata.custom);
+  const start = typeof timing.runStartedAt === "string" ? Date.parse(timing.runStartedAt) : NaN;
+  const elapsed = typeof timing.runElapsedMs === "number" ? timing.runElapsedMs : undefined;
+  const [now, setNow] = useState(Date.now);
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (running) {
-      started.current ??= Date.now();
-      const start = started.current;
-      const updateElapsed = () => {
-        setSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
-      };
-      updateElapsed();
-      const timer = setInterval(updateElapsed, 1000);
-      return () => clearInterval(timer);
-    }
-    if (started.current !== undefined) {
-      setSeconds(
-        Math.max(1, Math.round((Date.now() - started.current) / 1000)),
-      );
-      started.current = undefined;
-    }
-  }, [running]);
+    if (!running || !Number.isFinite(start)) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running, start]);
+  const seconds = running && Number.isFinite(start)
+    ? Math.max(0, Math.floor((now - start) / 1000))
+    : elapsed !== undefined ? Math.max(0, Math.round(elapsed / 1000)) : undefined;
   const label =
     (running
-      ? t(`Thinking… ${seconds ?? 0}s`, `思考中… ${seconds ?? 0} 秒`)
+      ? (seconds !== undefined ? t(`Thinking… ${seconds}s`, `思考中… ${seconds} 秒`) : t("Thinking…", "思考中…"))
       : seconds !== undefined
         ? t(`Worked for ${seconds}s`, `已处理 ${seconds} 秒`)
         : t("Thoughts", "思考过程")) +
     (failed ? t(` · ${failed} failed`, ` · ${failed} 次失败`) : "");
   return (
     <ReasoningRoot
+      className="worklens-activity-section"
+      data-running={running}
       variant="ghost"
       streaming={running}
       open={open}
@@ -280,6 +275,7 @@ export function AgentThread({
       const answer: Part[] = [];
       let progress = "";
       for (const [position, { message, index }] of turn.entries()) {
+        if (message.role === "tool") progress = toolProgress(message, language);
         const converted = convert(message, index);
         if (!Array.isArray(converted.content)) continue;
         for (const part of converted.content) {
@@ -297,12 +293,18 @@ export function AgentThread({
       }
       const id = turn[0].message.id;
       const status = messageStatus(view, turn[turn.length - 1].index, language);
+      const recordedTiming = turn.find(({ message }) => message.runStartedAt)?.message;
+      const latestRun = turn[turn.length - 1].index === source.length - 1 ? view?.usage?.run : undefined;
+      const runStartedAt = recordedTiming?.runStartedAt ?? latestRun?.startedAt;
+      const runElapsedMs = recordedTiming?.runElapsedMs ?? latestRun?.elapsedMs;
       if (activity.length) displayed.push({
         id: `${id}-activity`, role: "assistant", content: activity, status,
-        metadata: { custom: { progress } },
+        metadata: { custom: { progress, runStartedAt, runElapsedMs } },
       });
+      const sentAt = turn.findLast(({ message }) => message.role === "assistant" && message.createdAt)?.message.createdAt;
       if (answer.length) displayed.push({
         id: `${id}-answer`, role: "assistant", content: answer, status,
+        metadata: { custom: { sentAt } },
       });
       turn = [];
     };
