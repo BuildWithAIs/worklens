@@ -23,6 +23,7 @@ import {
 } from "./usage";
 import { resources, toolNames } from "./resources";
 import { worklensTools } from "./tools";
+import type { ConfluenceService } from "./confluence/service";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import type {
@@ -111,6 +112,7 @@ export class AgentService {
     readonly paths: { runtime: string; sessions: string; userData: string },
     private emit: (event: ChatEvent) => void,
     private redact: (text: string) => string,
+    private confluence?: ConfluenceService,
   ) {}
   async initialize() {
     await Promise.all([
@@ -193,10 +195,7 @@ export class AgentService {
   }
   private view(id: string, runtime: Runtime): ConversationView {
     const branch = runtime.manager.getBranch();
-    const messages = projectMessages(
-      withRunTiming(branch),
-      this.paths.runtime,
-    );
+    const messages = projectMessages(withRunTiming(branch), this.paths.runtime);
     // During streaming the public agent state may not yet include the current assistant partial.
     if (runtime.session?.agent.state.streamingMessage)
       messages.push(
@@ -383,6 +382,11 @@ export class AgentService {
           );
         },
       );
+      const integrationTools =
+        this.confluence?.tools(
+          runtime.manager.getSessionId(),
+          () => runtime.active?.id ?? "idle",
+        ) ?? [];
       const previous = runtime.manager.buildSessionContext();
       runtime.session = (
         await createAgentSession({
@@ -392,8 +396,7 @@ export class AgentService {
           model,
           thinkingLevel: selection.thinking,
           sessionManager: runtime.manager,
-          tools: toolNames,
-          customTools,
+          customTools: [...customTools, ...integrationTools],
           ...local,
         })
       ).session;
@@ -417,6 +420,10 @@ export class AgentService {
         await runtime.session.setModel(model);
       runtime.session.setThinkingLevel(selection.thinking);
     }
+    runtime.session.setActiveToolsByName([
+      ...toolNames,
+      ...(this.confluence?.names() ?? []),
+    ]);
   }
   private onPiEvent(runtime: Runtime, event: AgentSessionEvent) {
     const active = runtime.active;

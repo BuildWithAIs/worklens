@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { connectionSchema } from "./confluence/connection";
 const id = z
   .string()
   .min(1)
@@ -23,6 +24,15 @@ export const schemas = {
   htmlFileAction: z.object({ id, path: z.string().min(1).max(4096).optional(), code: z.string().min(1).max(2 * 1024 * 1024).optional(), action: z.enum(["chrome", "reveal"]) }).strict().refine(value => (value.path !== undefined) !== (value.code !== undefined)),
 
   previewHtml: z.object({ id, path: z.string().min(1).max(4096) }).strict(),
+  confluenceSave: connectionSchema,
+  confluenceTest: connectionSchema,
+  confluenceRemove: z.undefined(),
+  artifact: z
+    .object({
+      id: z.string().uuid(),
+      action: z.enum(["open", "show", "saveAs"]),
+    })
+    .strict(),
   refreshModels: z.object({ provider: z.string().min(1).max(200) }).strict(),
   bootstrap: z.undefined(),
   providers: z.undefined(),

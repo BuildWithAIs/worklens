@@ -29,6 +29,12 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       WORKLENS_TEST_ROOT: directory,
     };
     delete env.ELECTRON_RUN_AS_NODE;
+    // Keep onboarding and local model tests independent of developer credentials.
+    for (const key of Object.keys(env))
+      if (
+        /(?:API_KEY|ACCESS_TOKEN|AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN)$/.test(key)
+      )
+        delete env[key];
     const instance = await electron.launch({
       args: ["."],
       cwd: resolve("."),
@@ -68,12 +74,10 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     await expect(
       page.getByRole("dialog", { name: "Settings", exact: true }),
     ).toHaveCount(0);
-    await page
-      .getByRole("button", { name: "Choose model", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Connect a provider", exact: true })
-      .click();
+    // A deliberately damaged vault may still expose the “Manage models” entry.
+    // Navigate through Settings so this auth/recovery test does not depend on it.
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Providers", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Providers", exact: true }),
     ).toBeVisible();

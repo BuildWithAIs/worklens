@@ -106,6 +106,7 @@ export interface Settings {
   [key: string]: unknown;
 }
 export interface MessageView {
+  artifacts?: LocalArtifact[];
   createdAt?: string;
   runStartedAt?: string;
   runElapsedMs?: number;
@@ -173,6 +174,7 @@ export interface Recovery {
   startedAt: string;
 }
 export interface Bootstrap {
+  confluence?: ConfluenceConnection;
   globalUsage?: GlobalUsage;
   settings: Settings;
   providers: ProviderInfo[];
@@ -186,6 +188,16 @@ export interface Bootstrap {
 export interface Requests {
   htmlFileAction: { input: { id: string; path?: string; code?: string; action: "chrome" | "reveal" }; output: void };
   previewHtml: { input: { id: string; path: string }; output: string };
+  confluenceSave: {
+    input: ConfluenceSettingsInput;
+    output: ConfluenceConnection;
+  };
+  confluenceTest: { input: ConfluenceSettingsInput; output: string };
+  confluenceRemove: { input: undefined; output: void };
+  artifact: {
+    input: { id: string; action: "show" | "open" | "saveAs" };
+    output: void;
+  };
   bootstrap: { input: undefined; output: Bootstrap };
   settings: { input: Partial<Settings>; output: Settings };
   providers: { input: undefined; output: ProviderInfo[] };
@@ -234,6 +246,28 @@ export interface Requests {
     input: { which: "root" | "runtime" | "sessions" | "userData" };
     output: void;
   };
+}
+export interface ConfluenceSettingsInput {
+  url: string;
+  deployment: "data-center" | "cloud";
+  email?: string;
+  token?: string;
+  cloudId?: string;
+  tokenType: "classic" | "scoped";
+  access: "read" | "confirm" | "write";
+}
+export interface ConfluenceConnection extends Omit<
+  ConfluenceSettingsInput,
+  "token"
+> {
+  configured: boolean;
+  error?: string;
+}
+export interface LocalArtifact {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
 }
 export interface WorkLensAPI {
   invoke<K extends keyof Requests>(

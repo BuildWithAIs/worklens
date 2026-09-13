@@ -1,6 +1,7 @@
 import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
 import { toolProgress, toolActivityLabel, toolActivitySummary } from "@/lib/activity-progress";
+import { ArtifactFiles } from "./ArtifactFiles";
 import { activityIcon } from "@/lib/activity-icon";
 import { systemText } from "@/lib/system-text";
 import { useLocale } from "@/lib/locale";
@@ -93,6 +94,7 @@ function toolResult(message: MessageView) {
   return {
     status: message.status,
     output: message.text,
+    ...(message.artifacts?.length ? { artifacts: message.artifacts } : {}),
     ...(message.targetPath ? { targetPath: message.targetPath } : {}),
     ...(message.shellCwd ? { shellCwd: message.shellCwd } : {}),
     ...(message.timeoutSeconds !== undefined
@@ -238,6 +240,10 @@ function WorkLensToolGroup({
   const { t } = useLocale();
   const content = useAuiState((s) => s.message.content);
   const tools = content.filter((part) => part.type === "tool-call");
+  const artifacts = tools.flatMap((part) => {
+    const result = part.result;
+    return result && typeof result === "object" && "artifacts" in result && Array.isArray(result.artifacts) ? result.artifacts : [];
+  });
   const failed = tools.filter((tool) => tool.isError).length;
   const running = useAuiState((s) => s.message.status?.type === "running");
   const progress = useAuiState((s) => s.message.metadata.custom.progress);
@@ -301,6 +307,7 @@ function WorkLensToolGroup({
           )}
         </ReasoningText>
       </ReasoningContent>}
+      <ArtifactFiles result={{ artifacts }} />
     </ReasoningRoot>
   );
 }

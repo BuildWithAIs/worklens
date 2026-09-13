@@ -25,6 +25,9 @@ import { ProviderService } from "./providers";
 import { schemas, externalUrl } from "./validation";
 import { toolNames } from "./resources";
 import type { Requests } from "../shared/contracts";
+import { ConfluenceConnections } from "./confluence/connection";
+import { ConfluenceService } from "./confluence/service";
+import { LocalArtifacts } from "./local-artifacts";
 
 // Keep the original safeStorage identity: changing case selects a different
 // macOS Keychain key. The application bundle controls the Dock display name.
@@ -69,6 +72,36 @@ else {
       );
       const state = new StateStore(join(paths.userData, "app-state.json"));
       await state.load();
+      const connections = new ConfluenceConnections(
+        join(paths.userData, "confluence.json"),
+        safeStorage,
+      );
+      await connections.load();
+      const artifacts = new LocalArtifacts(
+        join(root, "artifacts"),
+        paths.runtime,
+      );
+      const redact = (text: string) =>
+        credentials.redact(connections.redact(text));
+      const confluence = new ConfluenceService(
+        connections,
+        artifacts,
+        async (preview, signal) => {
+          if (!window || window.isDestroyed()) return false;
+          const result = await dialog.showMessageBox(window, {
+            type: "question",
+            title: "Confluence",
+            message: `${preview.operation} · ${preview.target}`,
+            detail: `会话：${preview.sessionId}\n${preview.detail}`,
+            buttons: ["取消", "执行此变更"],
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true,
+            signal,
+          });
+          return !signal.aborted && result.response === 1;
+        },
+      );
       const runtime = await ModelRuntime.create({
         credentials,
         modelsPath: null,
@@ -84,7 +117,8 @@ else {
         runtime,
         paths,
         (event) => broadcast("worklens:chat", event),
-        (text) => credentials.redact(text),
+        redact,
+        confluence,
       );
       await agents.initialize();
       providers = new ProviderService(runtime, credentials, (event) =>
@@ -104,15 +138,45 @@ else {
             const input = schemas[method].parse(raw) as any;
             let value: unknown;
             switch (method) {
+              case "confluenceSave":
+                value = await connections.save(input);
+                break;
+              case "confluenceTest":
+                value = await confluence.test(input);
+                break;
+              case "confluenceRemove":
+                await connections.remove();
+                break;
+              case "artifact": {
+                const artifact = await artifacts.get(input.id);
+                if (input.action === "show")
+                  shell.showItemInFolder(artifact.path);
+                else if (input.action === "open") {
+                  const error = await shell.openPath(artifact.path);
+                  if (error) throw new Error(error);
+                } else {
+                  const chosen = await dialog.showSaveDialog(window!, {
+                    defaultPath: artifact.path,
+                    properties: [
+                      "showOverwriteConfirmation",
+                      "createDirectory",
+                    ],
+                  });
+                  if (!chosen.canceled && chosen.filePath)
+                    await artifacts.copy(artifact.id, chosen.filePath);
+                }
+                break;
+              }
               case "bootstrap":
                 value = {
                   settings: state.value,
+                  confluence: connections.info(),
                   providers: await providers!.list(),
                   conversations: await agents!.list(),
                   globalUsage: agents!.getGlobalUsage(),
                   paths,
                   version: app.getVersion(),
-                  tools: toolNames,
+                  tools: [...toolNames, ...confluence.names()],
                   diagnostics: agents!.diagnostics,
                   recoveries: agents!.recoveries,
                 };
@@ -198,14 +262,14 @@ else {
             }
             return {
               ok: true,
-              value: redactStrings(value, (text) => credentials.redact(text)),
+              value: redactStrings(value, redact),
             };
           } catch (error) {
             return {
               ok: false,
-              error: credentials
-                .redact(error instanceof Error ? error.message : "操作失败")
-                .slice(0, 1600),
+              error: redact(
+                error instanceof Error ? error.message : "操作失败",
+              ).slice(0, 1600),
             };
           }
         },
