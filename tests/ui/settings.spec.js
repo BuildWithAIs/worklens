@@ -7,6 +7,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   await mockWorklens(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Providers", exact: true }),
   ).toBeVisible();

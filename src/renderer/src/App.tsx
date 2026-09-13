@@ -1,7 +1,7 @@
 import { BrandMark } from "@/components/worklens/BrandMark";
 import { HistoryTitle } from "@/components/worklens/HistoryTitle";
 import { Input } from "@/components/ui/input";
-import { OverflowHint } from "@/components/ui/tooltip";
+import { Hint, OverflowHint } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -18,6 +18,8 @@ import {
   X,
   Trash2,
   Pencil,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import {
   SettingsPage,
@@ -47,11 +49,21 @@ const active = (phase?: Phase) =>
 export function App() {
   const { t, language } = useLocale();
   const [settingsSection, setSettingsSection] =
-    useState<SettingsSection>("providers");
+    useState<SettingsSection>("general");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("worklens.sidebarCollapsed") === "true"; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("worklens.sidebarCollapsed", String(sidebarCollapsed)); }
+    catch { /* Keep the toggle usable when storage is unavailable. */ }
+  }, [sidebarCollapsed]);
   const [data, setData] = useState<Bootstrap>();
   const [views, setViews] = useState<Record<string, ConversationView>>({});
   const [current, setCurrent] = useState<string>();
   const [page, setPage] = useState<"chat" | "settings">("chat");
+  const pinSaving = useRef(false);
+  const [pinPending, setPinPending] = useState(false);
   const [unread, setUnread] = useState<Set<string>>(() => new Set());
   const visibleConversation = useRef<string | undefined>(undefined);
   const notifiedRuns = useRef(new Set<string>());
@@ -104,6 +116,7 @@ export function App() {
         ? {
             children: t("Open settings", "前往设置"),
             onClick: () => {
+              setSettingsSection("providers");
               setPage("settings");
               setNotice(undefined);
             },
@@ -241,6 +254,24 @@ export function App() {
     setText("");
     setPage("chat");
   }
+  async function togglePin(id: string) {
+    if (!data || pinSaving.current) return;
+    pinSaving.current = true;
+    setPinPending(true);
+    try {
+      const existing = (data.settings.pinnedConversationIds ?? []).filter(
+        pinnedId => data.conversations.some(conversation => conversation.id === pinnedId),
+      );
+      await settings({ pinnedConversationIds: existing.includes(id)
+        ? existing.filter(pinnedId => pinnedId !== id)
+        : [...existing, id] });
+    } catch (error) {
+      notifyError(String(error));
+    } finally {
+      pinSaving.current = false;
+      setPinPending(false);
+    }
+  }
   async function settings(patch: Partial<Settings>) {
     const result = await api.invoke("settings", patch);
     if (patch.defaults && !current) setSelection(patch.defaults);
@@ -334,9 +365,30 @@ export function App() {
   const availableModel = data.providers
     .find((p) => p.id === selection?.provider)
     ?.models.find((m) => m.id === selection?.model);
+  const pinnedIds = new Set(data.settings.pinnedConversationIds ?? []);
+  const groups = [
+    { key: "pinned", label: t("Pinned", "置顶"), conversations: data.conversations.filter(c => pinnedIds.has(c.id)) },
+    { key: "recents", label: t("Recents", "最近会话"), conversations: data.conversations.filter(c => !pinnedIds.has(c.id)) },
+  ];
   return (
-    <div className="app-shell" data-settings-open={page === "settings" && !(showRecovery && data.recoveries.length) ? "true" : undefined}>
-      <aside className="sidebar">
+    <div className="app-shell" data-sidebar-collapsed={sidebarCollapsed ? "true" : undefined} data-settings-open={page === "settings" && !(showRecovery && data.recoveries.length) ? "true" : undefined}>
+      <Hint content={sidebarCollapsed ? t("Expand sidebar", "展开侧栏") : t("Collapse sidebar", "折叠侧栏")}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="sidebar-toggle"
+        aria-label={sidebarCollapsed ? t("Expand sidebar", "展开侧栏") : t("Collapse sidebar", "折叠侧栏")}
+        aria-expanded={!sidebarCollapsed}
+        aria-controls="conversation-sidebar"
+        onClick={() => setSidebarCollapsed(value => !value)}
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="5" />
+          <path d="M9 4v16" />
+        </svg>
+      </Button>
+      </Hint>
+      <aside id="conversation-sidebar" className="sidebar" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed}>
         <div className="brand">
           <BrandMark />
           <span>WorkLens</span>
@@ -351,19 +403,17 @@ export function App() {
           {t("New chat", "新建会话")}
           <kbd aria-hidden="true">{isMac ? "⌘ N" : "Ctrl N"}</kbd>
         </Button>
-        <div className="section-label">
-          {t("Recents", "最近会话")}
-        </div>
         <nav
           aria-label={t("Conversations", "会话列表")}
           className="conversation-list"
         >
-          {!data.conversations.length && (
-            <p className="sidebar-empty">
-              {t("No conversations yet", "暂无历史会话")}
-            </p>
-          )}
-          {data.conversations.map((conversation) => (
+          {groups.filter(group => group.key === "recents" || group.conversations.length > 0).map(group => (
+            <section key={group.key} className="conversation-group" aria-label={group.label}>
+              <div className="section-label">{group.label}</div>
+              {group.key === "recents" && !data.conversations.length && (
+                <p className="sidebar-empty">{t("No conversations yet", "暂无历史会话")}</p>
+              )}
+              {group.conversations.map((conversation) => (
             <div
               key={conversation.id}
               className={`conversation-item ${current === conversation.id ? "selected" : ""}`}
@@ -376,12 +426,12 @@ export function App() {
                 onClick={() => void open(conversation.id)}
               >
                 <span className="conversation-title">
-                  {active(conversation.phase) && (
-                    <span className="history-loading-ring" aria-hidden="true" />
-                  )}
                   <HistoryTitle title={conversation.title} />
                 </span>
               </Button></OverflowHint>
+              {active(conversation.phase) && (
+                <span className="history-loading-ring" aria-hidden="true" />
+              )}
               {unread.has(conversation.id) && !active(conversation.phase) && (
                 <span className="conversation-unread" role="img" aria-label={t("Unread reply", "未读回复")} />
               )}
@@ -403,6 +453,10 @@ export function App() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" side="right">
                     <DropdownMenuGroup>
+                      <DropdownMenuItem disabled={pinPending} onClick={() => void togglePin(conversation.id)}>
+                        {pinnedIds.has(conversation.id) ? <PinOff /> : <Pin />}
+                        {pinnedIds.has(conversation.id) ? t("Unpin", "取消置顶") : t("Pin", "置顶")}
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() =>
                           setDialog({
@@ -433,13 +487,18 @@ export function App() {
                 </DropdownMenu>
               </div>
             </div>
+              ))}
+            </section>
           ))}
         </nav>
         <div className="sidebar-bottom">
           <Button
             variant="ghost"
             className="sidebar-settings-button w-full justify-start"
-            onClick={() => setPage("settings")}
+            onClick={() => {
+              setSettingsSection("general");
+              setPage("settings");
+            }}
           >
             <SettingsIcon />
             {t("Settings", "设置")}

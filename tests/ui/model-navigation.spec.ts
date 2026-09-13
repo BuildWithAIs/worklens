@@ -77,6 +77,7 @@ test("model groups link to their provider without opening authentication in Mode
   await mockWorklens(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Search providers", exact: true })
     .fill("DeepSeek");
@@ -202,3 +203,22 @@ for (const allUnavailable of [true, false]) {
     }
   });
 }
+
+
+test("ordinary Settings always opens General after provider and model navigation", async ({ page }) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  for (const section of ["Providers", "Models"]) {
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "General", exact: true })).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: section, exact: true }).click();
+    await page.getByRole("button", { name: "Back to app", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  await page.getByRole("button", { name: "Manage models", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to app", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
+});

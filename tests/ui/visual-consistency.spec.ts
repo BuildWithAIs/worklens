@@ -17,6 +17,7 @@ for (const theme of ["light", "dark"]) {
         radius: getComputedStyle(el, "::-webkit-scrollbar-thumb").borderRadius,
       }));
       await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
       const search = page.getByRole("textbox", { name: "Search providers" });
       await expect(search).toHaveCSS("font-size", "14px");
       await expect(page.getByRole("combobox", { name: "Filter providers" })).toHaveCSS("font-size", "14px");
@@ -62,6 +63,7 @@ test("reduced transparency and motion cover both navigation surfaces", async ({ 
   await page.evaluate(() => document.documentElement.dataset.nativeVibrancy = "true");
   await expect(page.locator(".sidebar")).toHaveCSS("background-color", "rgb(250, 250, 250)");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
   await expect(page.locator(".settings-navigation")).toHaveCSS("background-color", "rgb(250, 250, 250)");
   await expect(page.locator(".settings-navigation nav")).toHaveCSS("animation-name", "none");
   await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "none");

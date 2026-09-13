@@ -23,6 +23,10 @@ import { schemas, externalUrl } from "./validation";
 import { toolNames } from "./resources";
 import type { Requests } from "../shared/contracts";
 
+// Keep the original safeStorage identity: changing case selects a different
+// macOS Keychain key. The application bundle controls the Dock display name.
+app.setName("worklens");
+
 const directory = fileURLToPath(new URL(".", import.meta.url));
 const testRoot = process.env.WORKLENS_TEST_ROOT;
 if (testRoot) app.setPath("userData", join(resolve(testRoot), "app"));
@@ -52,6 +56,10 @@ else {
     .whenReady()
     .then(async () => {
       app.setAppUserModelId("com.buildwithais.worklens");
+      const applicationIcon = app.isPackaged
+        ? join(process.resourcesPath, "icon.png")
+        : join(app.getAppPath(), "build/icon.png");
+      if (process.platform === "darwin") app.dock?.setIcon(applicationIcon);
       const credentials = new SecureCredentials(
         join(paths.userData, "credentials"),
         safeStorage,
@@ -195,10 +203,13 @@ else {
           minWidth: 850,
           minHeight: 620,
           title: "WorkLens",
+          icon: applicationIcon,
           backgroundColor:
             process.platform === "darwin" ? "#00000000" : "#ffffff",
           ...(process.platform === "darwin"
             ? {
+                titleBarStyle: "hidden" as const,
+                trafficLightPosition: { x: 20, y: 20 },
                 vibrancy: "popover" as const,
                 visualEffectState: "followWindow" as const,
               }

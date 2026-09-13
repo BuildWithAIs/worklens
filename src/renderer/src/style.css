@@ -30,8 +30,8 @@
 }
 
 :root {
-  --navigation-text: color-mix(in srgb, var(--text) 45%, var(--muted));
-  --navigation-text-selected: color-mix(in srgb, var(--text) 55%, var(--muted));
+  --navigation-text: color-mix(in srgb, var(--text) 60%, var(--muted));
+  --navigation-text-selected: color-mix(in srgb, var(--text) 70%, var(--muted));
   --focus-ring: color-mix(in srgb, var(--text) 36%, transparent);
   --selection-fill: color-mix(in srgb, var(--text) 5%, transparent);
   --navigation-hover: color-mix(in srgb, var(--text) 3%, transparent);
@@ -232,7 +232,7 @@ kbd {
 .sidebar {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  width: 248px;
+  width: var(--sidebar-width);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -269,6 +269,8 @@ kbd {
   color: var(--text);
 }
 .new-chat {
+  gap: 8px;
+  border-width: 0;
   min-height: 40px;
   width: 100%;
   justify-content: flex-start;
@@ -299,6 +301,14 @@ kbd {
   padding: 0 12px;
   margin-bottom: 8px;
 }
+.conversation-group > .section-label {
+  padding-left: 12px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--faint) 70%, var(--muted));
+}
+.conversation-group + .conversation-group {
+  margin-top: 20px;
+}
 .conversation-list {
   flex: 1;
   overflow: auto;
@@ -324,15 +334,18 @@ kbd {
 }
 .conversation-open {
   width: 100%;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
   background: transparent;
   border: 0;
   text-align: left;
-  padding: 6px 10px;
+  padding: 0 12px;
   height: 32px;
   border-radius: 8px;
 }
-.conversation-item:has(.conversation-unread) .conversation-open {
+.conversation-item:has(.conversation-unread) .conversation-open,
+.conversation-item:has(.history-loading-ring) .conversation-open {
   padding-right: 28px;
 }
 .conversation-item:hover .conversation-open,
@@ -902,7 +915,7 @@ kbd {
 }
 @media (max-width: 1050px) {
   .sidebar {
-    width: 216px;
+    --sidebar-width: 248px;
   }
   .chat-header {
     padding: 24px;
@@ -1150,7 +1163,11 @@ kbd {
   pointer-events: none;
 }
 .conversation-item:hover .conversation-unread,
-.conversation-item:has(:focus-visible) .conversation-unread { opacity: 0; }
+.conversation-item:has(:focus-visible) .conversation-unread,
+.conversation-item:has(.conversation-actions [data-popup-open]) .conversation-unread,
+.conversation-item:hover .history-loading-ring,
+.conversation-item:has(:focus-visible) .history-loading-ring,
+.conversation-item:has(.conversation-actions [data-popup-open]) .history-loading-ring { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
   .history-title-text { animation: none !important; }
 }
@@ -1167,8 +1184,12 @@ kbd {
 }
 
 .history-loading-ring {
-  width: 13px;
-  height: 13px;
+  position: absolute;
+  right: 10.5px;
+  top: calc(50% - 5px);
+  pointer-events: none;
+  width: 10px;
+  height: 10px;
   flex-shrink: 0;
   border: 1.5px solid color-mix(in srgb, var(--muted) 22%, transparent);
   border-top-color: var(--muted);
@@ -1179,3 +1200,120 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .history-loading-ring { animation: none; }
 }
+
+.sidebar-settings-button {
+  border-width: 0;
+  padding-inline: 12px;
+  gap: 8px;
+}
+
+/* Shared titlebar clearance for every native window surface. */
+:root { --window-controls-height: 54px; }
+/* Native macOS controls share the sidebar surface instead of a title bar. */
+:root[data-native-vibrancy="true"] .sidebar {
+  position: relative;
+  padding-top: calc(var(--window-controls-height) + 6px);
+}
+:root[data-native-vibrancy="true"] .sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 144px;
+  height: 48px;
+  -webkit-app-region: drag;
+}
+:root[data-native-vibrancy="true"] .brand,
+:root[data-native-vibrancy="true"] .chat-header > div:first-child {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+:root[data-native-vibrancy="true"] .chat-header {
+  background: var(--bg);
+  border-bottom-color: transparent;
+}
+:root[data-native-vibrancy="true"] .chat-header :is(button, a, input, [role="button"]) {
+  -webkit-app-region: no-drag;
+}
+
+.app-shell {
+  position: relative;
+  --sidebar-width: 280px;
+  --sidebar-motion: 300ms cubic-bezier(.16,1,.3,1);
+}
+.sidebar {
+  margin-left: 0;
+  transform: none;
+  clip-path: inset(0);
+  transition: margin-left var(--sidebar-motion), clip-path var(--sidebar-motion), visibility 0s;
+}
+.sidebar > * {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  transform-origin: left center;
+  transition: transform var(--sidebar-motion), opacity 180ms ease-out 65ms;
+}
+.app-shell[data-sidebar-collapsed="true"] .sidebar {
+  margin-left: calc(-1 * var(--sidebar-width));
+  clip-path: inset(0 12% 0 0);
+  visibility: hidden;
+  pointer-events: none;
+  transition: margin-left var(--sidebar-motion), clip-path var(--sidebar-motion), visibility 0s 300ms;
+}
+.app-shell[data-sidebar-collapsed="true"] .sidebar > * {
+  opacity: 0;
+  transform: translateX(-10px) scale(.97);
+  transition: transform var(--sidebar-motion), opacity 140ms ease-out;
+}
+.app-shell[data-sidebar-collapsed="true"] .sidebar::before { -webkit-app-region: no-drag; }
+.chat-header { transition: padding-left var(--sidebar-motion); }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .sidebar > *, .app-shell[data-sidebar-collapsed="true"] .sidebar,
+  .app-shell[data-sidebar-collapsed="true"] .sidebar > *, .chat-header { transition: none; }
+}
+.sidebar-toggle {
+  position: absolute;
+  top: 28px;
+  left: 232px;
+  z-index: 20;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  -webkit-app-region: no-drag;
+}
+.app-shell[data-sidebar-collapsed="true"] .sidebar-toggle { left: 16px; top: 16px; }
+.app-shell[data-sidebar-collapsed="true"] .chat-header { padding-left: 64px; }
+@media (max-width: 1050px) {
+  .sidebar-toggle { left: 200px; }
+}
+:root[data-native-vibrancy="true"] .sidebar-toggle,
+:root[data-native-vibrancy="true"] .app-shell[data-sidebar-collapsed="true"] .sidebar-toggle {
+  top: 13px;
+  left: 96px;
+}
+:root[data-native-vibrancy="true"] .app-shell[data-sidebar-collapsed="true"] .chat-header {
+  padding-left: 152px;
+}
+
+.sidebar-toggle svg { width: 18px; height: 18px; }
+.sidebar-toggle { padding: 5px; border-radius: 9px; }
+.sidebar-toggle:hover { background: var(--selection-fill); }
+/* Keep the native drag rectangle clear of the overlaid sidebar toggle. */
+:root[data-native-vibrancy="true"] .chat-header {
+  height: var(--window-controls-height);
+  min-height: var(--window-controls-height);
+  padding-top: 0;
+  padding-bottom: 0;
+  -webkit-app-region: no-drag;
+  user-select: none;
+}
+:root[data-native-vibrancy="true"] .chat-header > div:first-child {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  -webkit-app-region: drag;
+}
+:root[data-native-vibrancy="true"] .chat-header h1 { margin: 0; }

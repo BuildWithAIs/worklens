@@ -111,6 +111,10 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       async () =>
         (await window.worklens.invoke("bootstrap", undefined)).conversations[0],
     );
+    await expect(page.getByRole("region", { name: "Pinned", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: `Conversation options: ${first.title}`, exact: true }).click();
+    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Pinned", exact: true }).locator(".conversation-open")).toHaveCount(1);
     await page
       .getByRole("textbox", { name: "Message", exact: true })
       .fill("Second run");
@@ -176,6 +180,12 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       .locator(".conversation-open")
       .filter({ hasText: first.title })
       .click();
+    const pinned = restored.getByRole("region", { name: "Pinned", exact: true });
+    await expect(pinned.locator(".conversation-open")).toHaveText(first.title);
+    await pinned.getByRole("button", { name: `Conversation options: ${first.title}`, exact: true }).click();
+    await expect(restored.getByRole("menuitem", { name: "Unpin", exact: true }).locator("svg")).toBeVisible();
+    await restored.getByRole("menuitem", { name: "Unpin", exact: true }).click();
+    await expect(pinned).toHaveCount(0);
     await total(restored, "560+");
     await completedRun(restored, "140");
     await restored.locator(".usage-trigger").click();

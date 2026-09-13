@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip";
 import { Tabs } from "@base-ui/react/tabs";
 import { ProviderIcon } from "./ProviderIcon";
 import { Gauge, Clock3 } from "lucide-react";
@@ -107,14 +108,15 @@ export function UsagePopover({
   return (
     <div className="usage-header" data-testid="usage-header">
       <Popover>
+        <Hint content={`${t("Context usage", "上下文占用")} · ${contextKnown ? percentText : t("Unavailable", "暂不可用")}`}>
         <PopoverTrigger
           className="usage-trigger"
           aria-label={t("Open current usage details", "打开当前用量详情")}
-          title={`${t("Context usage", "上下文占用")} · ${contextKnown ? percentText : t("Unavailable", "暂不可用")}`}
         >
           <Gauge size={16} strokeWidth={1.5} aria-hidden="true" />
           <span>{percentText}</span>
         </PopoverTrigger>
+        </Hint>
         <PopoverContent
           className="usage-popover"
           sideOffset={10}
@@ -182,20 +184,15 @@ export function UsagePopover({
                     return (
                       <tr key={String(testId)} data-testid={String(testId)}>
                         <th scope="row">{String(label)}</th>
-                        <td
-                          title={
-                            item?.status === "partial"
-                              ? t("Partial token data", "Token 数据不完整")
-                              : undefined
-                          }
-                        >
-                          {tokens(item)}
+                        <td>
+                          {item?.status === "partial" ? <Hint content={t("Partial token data", "Token 数据不完整")}><span tabIndex={0}>{tokens(item)}</span></Hint> : tokens(item)}
                         </td>
-                        <td title={cost(item?.cost)}>
-                          {nonNegative(item?.cost.usd) &&
-                          item?.cost.status !== "unavailable"
+                        <td>
+                          <Hint content={cost(item?.cost)}><span tabIndex={0}>
+                          {nonNegative(item?.cost.usd) && item?.cost.status !== "unavailable"
                             ? `${formatCost(item.cost.usd, true)}${item.cost.source === "provider" ? "" : " ≈"}${item.cost.status === "partial" ? "+" : ""}`
                             : "—"}
+                          </span></Hint>
                         </td>
                       </tr>
                     );
@@ -212,13 +209,10 @@ export function UsagePopover({
                   ? ` · ${t("Partial data", "Token 数据不完整")}`
                   : ""}
               </p>
-              <div
-                className="usage-model"
-                title={`${run?.selection ? t("Run model", "本轮模型") : t("Model", "模型")} · ${providerLabel}`}
-              >
+              <Hint content={`${modelLabel} · ${providerLabel}`}><div className="usage-model" tabIndex={0}>
                 <ProviderIcon provider={metadata?.provider ?? ""} />
-                <strong title={modelLabel}>{modelLabel}</strong>
-              </div>
+                <strong>{modelLabel}</strong>
+              </div></Hint>
             </Tabs.Panel>
             <Tabs.Panel value="details" className="usage-tab-panel">
               <div className="usage-breakdown">
@@ -270,9 +264,9 @@ export function UsagePopover({
                   </p>
                 )}
               </div>
-              <div
+              <Hint content={totalTitle}><div
                 className="usage-total"
-                title={totalTitle}
+                tabIndex={0}
                 aria-label={`${t("All models total", "所有模型累计")} ${formatTokens(global?.totalTokens)} tokens · ${totalTitle}`}
               >
                 <span>{t("All models total", "所有模型累计")}</span>
@@ -284,7 +278,7 @@ export function UsagePopover({
                     : ""}
                 </strong>
                 <span>tokens</span>
-              </div>
+              </div></Hint>
             </Tabs.Panel>
           </Tabs.Root>
         </PopoverContent>

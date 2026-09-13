@@ -26,7 +26,7 @@ test("history fades long titles and marks only unseen completed replies", async 
   const first = page.locator(".conversation-item").filter({ hasText: "A long conversation" });
   const title = first.locator(".history-title-clip");
   await page.locator(".chat-header").hover();
-  await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "10px");
+  await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "28px");
   await expect(title).toHaveAttribute("data-overflow", "true");
   await expect(title).toHaveCSS("text-overflow", "clip");
   expect(await title.evaluate(el => getComputedStyle(el).maskImage)).toContain("linear-gradient");
@@ -42,6 +42,15 @@ test("history fades long titles and marks only unseen completed replies", async 
   await expect(first.getByRole("img", { name: "Unread reply" })).toHaveCount(1);
   await page.locator(".chat-header").hover();
   await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "28px");
+  await first.hover();
+  await first.getByRole("button", { name: /^Conversation options:/ }).click();
+  const outside = await page.locator(".chat-header").boundingBox();
+  await page.mouse.move(outside.x + 50, outside.y + 20);
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(first.locator(".conversation-unread")).toHaveCSS("opacity", "0");
+  await page.mouse.click(outside.x + 50, outside.y + 20);
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(first.locator(".conversation-unread")).toHaveCSS("opacity", "1");
   await page.screenshot({ path: testInfo.outputPath("history-unread.png") });
   await first.locator(".conversation-open").click();
   await expect(page.locator(".conversation-unread")).toHaveCount(0);
@@ -70,7 +79,7 @@ test("history fades long titles and marks only unseen completed replies", async 
   await page.mouse.click(headerBox.x + 50, headerBox.y + 20);
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(first.locator(".conversation-actions")).toHaveCSS("opacity", "0");
-  await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "10px");
+  await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "12px");
   await first.locator(".conversation-open").click();
   await page.locator(".chat-header").hover();
   await page.keyboard.press("Tab");

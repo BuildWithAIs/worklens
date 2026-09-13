@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip";
 import { toolProgress } from "@/lib/activity-progress";
 import { BookOpen, FilePenLine, Globe, Images, ListFilter, SquareTerminal, Wrench } from "lucide-react";
 import { systemText } from "@/lib/system-text";
@@ -256,7 +257,7 @@ function WorkLensToolGroup({
         {running && !open && !(settled && dismissedProgress === progressKey) && typeof progress === "string" && progress && (
           <span data-slot="activity-progress" data-settled={settled} className="flex w-full min-w-0 items-start gap-2 text-sm leading-6 text-muted-foreground">
             <ProgressIcon aria-hidden="true" className="mt-1 size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate" title={progress}>{progress}</span>
+            <Hint content={progress}><span className="min-w-0 flex-1 truncate" tabIndex={0}>{progress}</span></Hint>
           </span>
         )}
       </div>

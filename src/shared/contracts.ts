@@ -100,6 +100,7 @@ export interface Settings {
   defaults?: Selection;
   hiddenModels?: string[];
   lastConversation?: string;
+  pinnedConversationIds?: string[];
   [key: string]: unknown;
 }
 export interface MessageView {
