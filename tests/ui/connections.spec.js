@@ -41,10 +41,11 @@ for (const theme of ["light", "dark"]) {
 
       await page.keyboard.press("Tab");
       const before = await page.evaluate(() => window.calls.length);
-      for (const name of ["Jira", "Confluence", "GitHub"]) {
+      for (const name of ["Jira", "GitHub"]) {
         const button = content.getByRole("button", { name: `${language === "en" ? "Connect" : "连接"} ${name}`, exact: true });
         await expect(button).toBeDisabled();
       }
+      await expect(content.getByRole("button", { name: `${language === "en" ? "Connect" : "连接"} Confluence`, exact: true })).toBeEnabled();
       expect(await page.evaluate(() => window.calls.length)).toBe(before);
       for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 900 });

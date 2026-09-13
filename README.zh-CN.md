@@ -10,7 +10,7 @@ WorkLens 是一款本地优先的工作 Agent，面向中大型企业的员工�
 
 ## Confluence
 
-在 **设置 → 集成服务** 中填写站点地址和 token，即可连接一个 Confluence 服务，查找和阅读文档、按版本修改内容、发布带附件的 Markdown，并将下载和导出文件保存在当前会话中。Cloud 使用邮箱和 API token，Data Center 使用 PAT。详见[配置、操作范围与验证说明](docs/confluence.md)。
+在 **设置 → 连接** 中填写站点地址和 token，即可连接一个 Confluence 服务，查找和阅读文档、按版本修改内容、发布带附件的 Markdown，并将下载和导出文件保存在当前会话中。Cloud 使用邮箱和 API token，Data Center 使用 PAT。详见[配置、操作范围与验证说明](docs/confluence.md)。
 
 ## 本地运行
 

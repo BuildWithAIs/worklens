@@ -144,7 +144,7 @@ export class ConfluenceConnections {
     };
   }
   snapshot(): ConnectionSnapshot {
-    if (!this.token) throw new Error("请先在设置 → 集成服务中连接 Confluence");
+    if (!this.token) throw new Error("请先在设置 → 连接中连接 Confluence");
     return {
       settings: this.info(),
       token: this.token,

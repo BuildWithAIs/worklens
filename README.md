@@ -10,7 +10,7 @@ Built with Electron, React, TypeScript, Tailwind CSS, and Pi.
 
 ## Confluence
 
-Connect one Confluence site in **Settings → Integrations** using your URL and token. Search/read documents, make version-aware edits, publish Markdown with attachments, and download/export files into the current conversation. Cloud supports email/API-token authentication; Data Center supports PAT authentication. See [setup, operations, safeguards and validation limits](docs/confluence.md).
+Connect one Confluence site in **Settings → Connections** using your URL and token. Search/read documents, make version-aware edits, publish Markdown with attachments, and download/export files into the current conversation. Cloud supports email/API-token authentication; Data Center supports PAT authentication. See [setup, operations, safeguards and validation limits](docs/confluence.md).
 
 ## Local development
 

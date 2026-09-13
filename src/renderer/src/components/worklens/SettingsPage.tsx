@@ -595,7 +595,7 @@ export function SettingsPage({
                 )}
               </>
             )}
-            {section === "connections" && <ConnectionsSettings />}
+            {section === "connections" && <ConnectionsSettings connection={data.confluence} refresh={refresh} onSuccess={onSuccess} />}
             {section === "general" && (
               <>
                 <section className="settings-section">

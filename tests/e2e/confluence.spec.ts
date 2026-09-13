@@ -34,7 +34,10 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
     let page = await launch();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page
-      .getByRole("button", { name: "Integrations", exact: true })
+      .getByRole("button", { name: "Connections", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Connect Confluence", exact: true })
       .click();
     await page.locator("#confluence-url").fill(fixture.url);
     await page.locator("#confluence-token").fill("synthetic-desktop-token");
@@ -43,7 +46,18 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
       .click();
     await expect(page.getByText(/Fixture User/)).toBeVisible();
     await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Manage Confluence", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Manage Confluence", exact: true })
+      .click();
     await expect(page.locator("#confluence-token")).toHaveValue("");
+    await page.screenshot({
+      path: "test-results/confluence-dialog.png",
+      fullPage: true,
+    });
+    await page.keyboard.press("Escape");
     expect(
       await readFile(join(root, "app", "confluence.json"), "utf8"),
     ).not.toContain("synthetic-desktop-token");
@@ -133,7 +147,10 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
     });
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page
-      .getByRole("button", { name: "Integrations", exact: true })
+      .getByRole("button", { name: "Connections", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Manage Confluence", exact: true })
       .click();
     await page.getByRole("button", { name: "Disconnect", exact: true }).click();
     await expect
