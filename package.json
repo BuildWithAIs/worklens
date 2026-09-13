@@ -8,9 +8,9 @@
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/run-desktop.mjs dev",
     "build": "electron-vite build",
-    "start": "electron .",
+    "start": "node scripts/run-desktop.mjs start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
@@ -85,6 +85,12 @@
       "target": "dmg",
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ]
   }
 }

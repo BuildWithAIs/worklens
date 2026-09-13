@@ -65,6 +65,7 @@
 }
 :root[data-native-vibrancy="true"] .settings-navigation {
   background: var(--native-sidebar-tint);
+  padding-top: calc(var(--window-controls-height) + 6px);
 }
 .settings-navigation nav {
   display: flex;

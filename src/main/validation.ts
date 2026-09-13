@@ -31,6 +31,7 @@ export const schemas = {
       defaults: selection.optional(),
       hiddenModels: z.array(z.string().min(1).max(400)).max(2000).optional(),
       lastConversation: id.optional(),
+      pinnedConversationIds: z.array(id).max(2000).optional(),
     })
     .strict(),
   login: z

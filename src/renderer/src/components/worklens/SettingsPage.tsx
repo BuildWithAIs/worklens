@@ -63,7 +63,7 @@ type Props = {
 const api = window.worklens;
 export function SettingsPage({
   data,
-  initialSection = "providers",
+  initialSection = "general",
   save,
   refresh,
   onBack,

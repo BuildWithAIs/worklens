@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useLocale } from "@/lib/locale";
 "use client";
@@ -445,9 +446,9 @@ const MessageTime: FC<{ className?: string }> = ({ className }) => {
   const date = typeof sentAt === "string" ? new Date(sentAt) : undefined;
   const validDate = date && !Number.isNaN(date.getTime()) ? date : undefined;
   if (!validDate) return null;
-  return <time className={cn("text-xs", className)} dateTime={validDate.toISOString()} title={validDate.toLocaleString(language)}>
+  return <Hint content={validDate.toLocaleString(language)}><time tabIndex={0} className={cn("text-xs", className)} dateTime={validDate.toISOString()}>
     {validDate.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit", hour12: false })}
-  </time>;
+  </time></Hint>;
 };
 
 const AssistantActionBar: FC = () => {
