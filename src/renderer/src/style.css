@@ -63,11 +63,11 @@
   --composer-edge: #20283812;
   --composer-focus-edge: #2028381a;
   --native-sidebar-tint: #ffffffa6;
-  --composer-shadow: 0 2px 5px #20283804, 0 8px 28px -10px #20283814,
+  --composer-shadow: 0 -3px 10px -5px #20283818, 0 2px 5px #20283804, 0 8px 28px -10px #20283814,
     0 20px 64px -24px #20283814, inset 0 1px 0 #ffffff;
 }
 :root[data-theme="dark"] {
-  --bg: #09090b;
+  --bg: #181818;
   --sidebar: #111113;
   --surface: #18181b;
   --text: #fafafa;
@@ -93,7 +93,7 @@
   --composer-edge: #ffffff12;
   --composer-focus-edge: #ffffff1f;
   --native-sidebar-tint: #11111318;
-  --composer-shadow: 0 2px 5px #00000014, 0 8px 28px -10px #00000066,
+  --composer-shadow: 0 -3px 10px -5px #00000066, 0 2px 5px #00000014, 0 8px 28px -10px #00000066,
     0 20px 64px -24px #00000080, inset 0 1px 0 #ffffff06;
 }
 * {
@@ -458,15 +458,26 @@ kbd {
   box-shadow: var(--panel-shadow);
 }
 .chat-header {
+  position: relative;
+  z-index: 2;
   min-height: 64px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--panel-edge);
-  background: var(--surface);
+  border-bottom: 1px solid transparent;
+  background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
   gap: 16px;
+}
+/* Shared surface fades soften the two edges of scrolling chat content. */
+.chat-header::after {
+  content: "";
+  position: absolute;
+  inset: 100% 0 auto;
+  height: 14px;
+  background: linear-gradient(to bottom, var(--bg), transparent);
+  pointer-events: none;
 }
 .eyebrow {
   font-size: 10px;
@@ -985,9 +996,12 @@ kbd {
   background: transparent;
 }
 .agent-thread .aui-thread-viewport-footer.sticky {
-  background: linear-gradient(to bottom, transparent, var(--bg) 64px);
+  z-index: 1;
+  isolation: isolate;
+  background: var(--bg);
 }
 @media (prefers-reduced-transparency: reduce) {
+  .chat-header::after { display: none; }
   .sidebar,
   :root[data-native-vibrancy="true"] .sidebar,
   :root[data-native-vibrancy="true"] .settings-navigation {
@@ -1002,9 +1016,11 @@ kbd {
     background: var(--bg);
   }
 }
+.agent-thread .aui-thread-welcome-root { margin-bottom: 40px; }
+
 .agent-thread .aui-thread-welcome-message-inner {
   font-size: 1.5rem;
-  font-weight: 500;
+  font-weight: 400;
 }
 .conversation-actions {
   position: absolute;
@@ -1172,17 +1188,6 @@ kbd {
   .history-title-text { animation: none !important; }
 }
 
-[data-slot="activity-progress"][data-settled="true"] {
-  animation: activity-progress-exit 900ms ease-out forwards;
-}
-@keyframes activity-progress-exit {
-  0%, 65% { opacity: 1; }
-  100% { opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-slot="activity-progress"][data-settled="true"] { animation: none; }
-}
-
 .history-loading-ring {
   position: absolute;
   right: 10.5px;
@@ -1317,3 +1322,48 @@ kbd {
   -webkit-app-region: drag;
 }
 :root[data-native-vibrancy="true"] .chat-header h1 { margin: 0; }
+
+/* A live turn grows in document flow. Only the completed disclosure is scrollable. */
+.worklens-activity-section[data-running="true"] > div:first-child {
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+.worklens-activity-section[data-running="true"] [data-slot="reasoning-text"] {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+  padding-block: 0;
+}
+.worklens-activity-section [data-slot="reasoning-fade"] { display: none; }
+.worklens-activity-section [data-slot="reasoning-text"] {
+  padding-inline: 0;
+  animation: none;
+  transform: none;
+  transition: none;
+  color: var(--text);
+}
+.worklens-activity-section [data-slot="reasoning-content"] { animation: none; }
+.worklens-activity-section [data-slot="reasoning-trigger"]:disabled { opacity: 1; cursor: default; }
+
+.worklens-activity-section[data-running="true"] [data-slot="reasoning-trigger"] svg { display: none; }
+
+/* A status and its answer belong to the same turn, not two separate messages. */
+[data-slot="aui_assistant-message-root"][data-has-activity="true"] {
+  margin-top: -16px;
+}
+.worklens-activity-section[data-running="true"][data-show-progress="false"] > div:first-child {
+  margin-bottom: 0;
+}
+.worklens-activity-section[data-running="true"] {
+  padding-bottom: 0;
+}
+
+/* User text, attachments and its edit form share the same width constraint. */
+.agent-thread { --user-message-max-width: 75%; }
+[data-slot="aui_user-message-root"] {
+  grid-template-columns: minmax(calc(100% - var(--user-message-max-width)), 1fr) auto;
+}
+@media (max-width: 760px) {
+  .agent-thread { --user-message-max-width: 88%; }
+}

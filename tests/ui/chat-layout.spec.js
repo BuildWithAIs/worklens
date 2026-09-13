@@ -4,6 +4,8 @@ import { mockWorklens } from "./fixture.js";
 test("new chat composer stays in place while typing and clearing", async ({ page }, testInfo) => {
   await mockWorklens(page);
   await page.goto("/");
+  await expect(page.locator('[data-slot="chat-title"]')).toHaveCount(0);
+  await expect(page.locator(".usage-trigger")).toHaveCount(0);
   const input = page.getByRole("textbox", { name: "Message", exact: true });
   const composer = page.locator('[data-slot="aui_composer-shell"]');
   const suggestions = page.locator(".aui-thread-welcome-suggestions");
@@ -307,6 +309,7 @@ test("compact tool activity, history actions and fluid message width", async ({
     await page.setViewportSize({ width, height: 1000 });
     widths.push(
       await page.evaluate(() => ({
+        userBubble: document.querySelector(".aui-user-message-content").getBoundingClientRect().width,
         messages: document
           .querySelector('[data-slot="aui_message-group"]')
           .getBoundingClientRect().width,
@@ -321,44 +324,41 @@ test("compact tool activity, history actions and fluid message width", async ({
       animations: "disabled",
     });
   }
+  expect(widths.every(w => w.userBubble <= w.messages * 0.75)).toBe(true);
   expect(widths[1].messages).toBeGreaterThan(widths[0].messages);
   expect(widths[1].messages).toBeLessThanOrEqual(800);
   expect(widths.every((w) => Math.abs(w.composer - w.messages) < 1)).toBe(true);
   expect(widths.every((w) => !w.overflow)).toBe(true);
   await page.evaluate(() => localStorage.setItem("fixture-running", "true"));
   await page.reload();
-  await expect(groups.nth(1)).toHaveText(/Thinking… 4[5-9]s/);
+  await expect(groups.nth(1)).toHaveText(/Working for 4[5-9]s/);
   await expect(page.locator('.worklens-activity-section').nth(1)).toHaveCSS("border-bottom-width", "0px");
   await page.getByRole("button", { name: "New chat", exact: false }).click();
   await page.locator(".conversation-open").first().click();
-  await expect(groups.nth(1)).toHaveText(/Thinking… 4[5-9]s/);
+  await expect(groups.nth(1)).toHaveText(/Working for 4[5-9]s/);
   await expect(page.locator(".chat-header .run-status")).toHaveCount(0);
-  await expect(page.locator('[data-slot="activity-progress"]')).toHaveText("Reading");
-  await expect(groups.nth(1)).toHaveText(/Thinking… [1-9]\d*s/);
-  await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator('[data-slot="activity-progress"]').last()).toContainText("Reading");
+  await expect(groups.nth(1)).toHaveText(/Working for [1-9]\d*s/);
+  await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
   await page.evaluate(() => window.progressFixture());
-  await expect(groups.nth(1)).toHaveText(/Thinking… \d+s/);
-  await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator('[data-slot="activity-progress"]')).toHaveText("Running bash · rg --files src");
-  await expect(page.locator('[data-slot="activity-progress"] .lucide-square-terminal')).toHaveCount(1);
-  const progressBox = await page.locator('[data-slot="activity-progress"]').boundingBox();
-  const progressText = page.locator('[data-slot="activity-progress"] > span');
-  await expect(progressText).toHaveCSS("white-space", "nowrap");
-  await expect(progressText).toHaveCSS("text-overflow", "ellipsis");
-  expect(progressBox.height).toBe(24);
-  const triggerBox = await groups.nth(1).boundingBox();
-  expect(progressBox.y).toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height);
+  await expect(groups.nth(1)).toHaveText(/Working for \d+s/);
+  await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator('[data-slot="activity-progress"]').last()).toContainText("Running bash · rg --files src");
+  const toolRow = page.locator('[data-slot="activity-progress"]').last();
+  await expect(toolRow.locator(".lucide-square-terminal")).toHaveCount(1);
+  await expect(toolRow.locator("span")).toHaveCSS("white-space", "nowrap");
+  await expect(page.getByText("Checking the latest source.", { exact: true })).toBeVisible();
   await expect(page.locator('[data-slot="aui_assistant-message-indicator"]')).toHaveCount(0);
   await page.evaluate(() => window.finishToolFixture());
-  await expect(page.locator('[data-slot="activity-progress"]')).toContainText("Completed bash");
-  await expect(page.locator('[data-slot="activity-progress"]')).toHaveCount(0);
-  await expect(groups.nth(1)).toHaveText(/Thinking…/);
-  await groups.nth(1).click();
+  await expect(toolRow).toContainText("Completed bash");
+  await expect(page.locator('[data-slot="activity-progress"]').last()).toContainText("Completed bash");
+  await expect(groups.nth(1)).toHaveText(/Working for/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator('[data-slot="activity-progress"]')).toHaveCount(0);
   await expect(page.getByText("Checking the latest source.", { exact: true })).toBeVisible();
   await page.evaluate(() => window.progressFixture(true));
   await expect(groups.nth(1)).toHaveText("Worked for 47s");
+  await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
+  await groups.nth(1).click();
   await expect(page.locator('.worklens-activity-section').nth(1)).toHaveCSS("border-bottom-width", "1px");
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByText("Final live answer.", { exact: true })).toBeVisible();

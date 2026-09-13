@@ -48,13 +48,13 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
       .locator('[data-slot="settings-section-title"]')
       .first()
       .evaluate((el) => getComputedStyle(el).fontSize),
-  ).toBe("15px");
+  ).toBe("14px");
   expect(
     await page
       .locator('[data-slot="settings-section-title"]')
       .first()
       .evaluate((el) => getComputedStyle(el).fontWeight),
-  ).toBe("600");
+  ).toBe("500");
   await page.waitForTimeout(250);
   await page.screenshot({
     path: testInfo.outputPath("worklens-providers-v2.png"),

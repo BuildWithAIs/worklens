@@ -221,3 +221,17 @@ export async function mockWorklens(page, options = {}) {
     };
   }, options);
 }
+
+export async function mockExistingConversation(page) {
+  await mockWorklens(page);
+  await page.addInitScript(() => {
+    const invoke = window.worklens.invoke;
+    const view = { id: "existing", title: "Existing conversation", phase: "completed", messages: [{ id: "user", role: "user", text: "Hello" }], updatedAt: "2026-09-13T00:00:00Z" };
+    window.worklens.invoke = async (name, input) => {
+      if (name === "open") return view;
+      const result = await invoke(name, input);
+      if (name === "bootstrap") { result.conversations = [view]; result.settings.lastConversation = view.id; }
+      return result;
+    };
+  });
+}

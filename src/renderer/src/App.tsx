@@ -509,16 +509,16 @@ export function App() {
         <>
           <header className="chat-header">
             <div>
-              <h1 data-slot="chat-title">{currentView?.title ?? t("New conversation", "新的开始")}</h1>
+              {currentView && <h1 data-slot="chat-title">{currentView.title}</h1>}
             </div>
-            <div className="chat-header-actions">
+            {currentView && <div className="chat-header-actions">
               <UsagePopover
                 global={data.globalUsage}
                 usage={currentView?.usage}
                 selection={currentView?.selection ?? selection}
                 providers={data.providers}
               />
-            </div>
+            </div>}
           </header>
           <AgentThread
             key={current ?? draftId}

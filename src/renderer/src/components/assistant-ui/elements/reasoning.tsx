@@ -1,5 +1,7 @@
 "use client";
 
+import { useShimmer } from "@/hooks/use-shimmer";
+
 import {
   createContext,
   useCallback,
@@ -172,6 +174,7 @@ function ReasoningTrigger({
   duration?: number;
   label?: string;
 }) {
+  const shimmerRef = useShimmer();
   const durationText = duration ? ` (${duration}s)` : "";
 
   return (
@@ -184,6 +187,7 @@ function ReasoningTrigger({
       {...props}
     >
       <span
+        ref={shimmerRef}
         data-slot="reasoning-trigger-label"
         className={cn(
           "aui-reasoning-trigger-label-wrapper inline-block leading-none tabular-nums",

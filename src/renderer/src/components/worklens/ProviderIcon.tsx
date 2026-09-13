@@ -70,6 +70,10 @@ const icons: Record<string, string> = {
 export function ProviderIcon({ provider }: { provider?: string }) {
   const source = provider ? icons[provider] : undefined;
   if (!source) return <Cpu aria-hidden="true" className="size-4 shrink-0" />;
+  return <BrandIcon source={source} />;
+}
+
+export function BrandIcon({ source }: { source: string }) {
   return (
     <span
       aria-hidden="true"

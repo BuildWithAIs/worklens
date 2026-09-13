@@ -1,8 +1,10 @@
+import { ConnectionsSettings } from "./ConnectionsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Plug,
   Cpu,
   FolderOpen,
   Info,
@@ -50,7 +52,7 @@ import type {
 } from "../../../../shared/contracts";
 import "./settings.css";
 
-export type SettingsSection = "general" | "providers" | "models";
+export type SettingsSection = "general" | "providers" | "models" | "connections";
 type Props = {
   data: Bootstrap;
   initialSection?: SettingsSection;
@@ -227,6 +229,7 @@ export function SettingsPage({
     { id: "general" as const, label: t("General", "通用"), icon: Settings2 },
     { id: "providers" as const, label: t("Providers", "供应商"), icon: Globe },
     { id: "models" as const, label: t("Models", "模型"), icon: Cpu },
+    { id: "connections" as const, label: t("Connections", "连接"), icon: Plug },
   ];
   function providerRows(items: ProviderInfo[], isConnected: boolean) {
     return (
@@ -344,16 +347,18 @@ export function SettingsPage({
                 </div>
                 {!!connected.length && (
                   <section className="settings-section">
-                    <h2 data-slot="settings-section-title">
+                    <h2 data-slot="settings-section-title" className="settings-group-bar">
                       {t("Connected", "已连接")}
+                      <span className="settings-group-count" aria-hidden="true">{connected.length}</span>
                     </h2>
                     {providerRows(connected, true)}
                   </section>
                 )}
                 {!!others.length && (
                   <section className="settings-section">
-                    <h2 data-slot="settings-section-title">
+                    <h2 data-slot="settings-section-title" className="settings-group-bar">
                       {t("Available", "可连接")}
+                      <span className="settings-group-count" aria-hidden="true">{others.length}</span>
                     </h2>
                     {providerRows(others, false)}
                   </section>
@@ -409,12 +414,12 @@ export function SettingsPage({
                 >
                 {modelGroups.map((p) => (
                   <AccordionItem value={p.id} key={p.id}>
-                    <div className="settings-accordion-heading">
+                    <div className="settings-accordion-heading settings-group-bar">
                       <AccordionTrigger>
                         <span className="flex items-center gap-2">
                           <ProviderIcon provider={p.id} />
-                          {p.name}
-                          <span className="text-muted-foreground">{p.models.length}</span>
+                          <span data-slot="model-provider-name">{p.name}</span>
+                          <span className="settings-group-count">{p.models.length}</span>
                         </span>
                       </AccordionTrigger>
                       {!p.configured && (
@@ -586,10 +591,11 @@ export function SettingsPage({
                 )}
               </>
             )}
+            {section === "connections" && <ConnectionsSettings />}
             {section === "general" && (
               <>
                 <section className="settings-section">
-                  <h2 data-slot="settings-section-title">
+                  <h2 data-slot="settings-section-title" className="settings-group-bar">
                     {t("Preferences", "偏好")}
                   </h2>
                   <ItemGroup className="settings-list">
@@ -654,7 +660,7 @@ export function SettingsPage({
                   </ItemGroup>
                 </section>
                 <section className="settings-section">
-                  <h2 data-slot="settings-section-title" className="settings-section-heading">
+                  <h2 data-slot="settings-section-title" className="settings-section-heading settings-group-bar">
                     {t("Local data", "本地数据")}
                     <TooltipIconButton
                       aria-label={t("About local data", "关于本地数据")}
@@ -707,21 +713,7 @@ export function SettingsPage({
                     </p>
                   ))}
                 </section>
-                <section className="settings-section">
-                  <h2 data-slot="settings-section-title">
-                    {t("About", "关于")}
-                  </h2>
-                  <ItemGroup className="settings-list">
-                    <Item size="sm" role="listitem" className="settings-entry">
-                      <ItemContent className="settings-entry-copy">
-                        <ItemTitle className="settings-entry-title">WorkLens</ItemTitle>
-                        <ItemDescription className="settings-entry-description">
-                          {t("Version", "版本")} {data.version}
-                        </ItemDescription>
-                      </ItemContent>
-                    </Item>
-                  </ItemGroup>
-                </section>
+
               </>
             )}
           </div>

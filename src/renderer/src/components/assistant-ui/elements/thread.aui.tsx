@@ -93,6 +93,7 @@ export type ThreadComponents = {
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
     | undefined;
+  LiveStatus?: ComponentType;
   ProcessGroup?: ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>;
   ReasoningGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -244,9 +245,9 @@ const ThreadScrollToBottom: FC = () => {
 const ThreadWelcome: FC = () => {
   const { t } = useLocale();
   return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
-        {t("What would you like to work on?", "今天，我们从哪里开始？")}
+    <div className="aui-thread-welcome-root flex flex-col items-center px-4 text-center">
+      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-normal tracking-tight duration-200">
+        {t("Where shall we start?", "从哪里开始？")}
       </h1>
     </div>
   );
@@ -257,7 +258,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone render={<div data-slot="aui_composer-shell" className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-md shadow-black/5 dark:shadow-black/20 transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]" />}><ComposerAttachments /><ComposerPrimitive.Input
-                      placeholder={t("Describe a task or include a local file path…", "描述你的任务，也可以附上本地文件路径…")}
+                      placeholder={t("Do anything...", "Do anything...")}
                       className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
                       rows={1}
                       autoFocus={autoFocus}
@@ -321,9 +322,12 @@ const AssistantMessage: FC = () => {
     ToolGroup,
     ReasoningGroup,
     ProcessGroup,
+    LiveStatus,
   } = useContext(ThreadComponentsContext);
 
   const toolOnly = useAuiState((s) => s.message.content.length > 0 && s.message.content.every((part) => (part.type === "tool-call" || part.type === "reasoning")));
+  const liveSegment = useAuiState((s) => s.message.metadata.custom.liveSegment === true);
+  const hasActivity = useAuiState((s) => s.message.metadata.custom.hasActivity === true);
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`;
@@ -332,7 +336,8 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className={cn("fade-in slide-in-from-bottom-1 animate-in relative duration-150", !toolOnly && "-mb-7.5 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]")}
+      data-has-activity={hasActivity}
+      className={cn("relative", !toolOnly && !liveSegment && "-mb-7.5 pb-7.5")}
     >
       <div
         data-slot="aui_assistant-message-content"
@@ -401,14 +406,14 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
-                if (toolOnly) return null;
+                if (toolOnly || hasActivity) return null;
                 return (
                   <span
                     data-slot="aui_assistant-message-indicator"
-                    className="text-sm text-muted-foreground"
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
                     role="status"
                   >
-                    {t("Thinking…", "思考中…")}
+                    {t("Working…", "处理中…")}
                   </span>
                 );
               default:
@@ -416,10 +421,11 @@ const AssistantMessage: FC = () => {
             }
           }}
         </MessagePrimitive.GroupedParts>
+        {LiveStatus && <LiveStatus />}
         <MessageError />
       </div>
 
-      {!toolOnly && <div
+      {!toolOnly && !liveSegment && <div
         data-slot="aui_assistant-message-footer"
         className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
       >
@@ -538,13 +544,13 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
+      className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
     >
       <UserMessageAttachments />
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer bg-(--user-message-bg) text-(--user-message-text) rounded-3xl px-4 py-3 text-[14px] leading-[1.7] font-normal wrap-break-word empty:hidden">
+        <div className="aui-user-message-content peer bg-(--user-message-bg) text-(--user-message-text) rounded-[18px] px-4 py-3 text-[14px] leading-[1.7] font-normal wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ Text: UserMessageText, File: UserFilePart, Image: UserImagePart }}
           />
@@ -586,7 +592,7 @@ const EditComposer: FC = () => {
       data-slot="aui_edit-composer-wrapper"
       className="flex flex-col px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
-      <ComposerPrimitive.Root className="aui-edit-composer-root border-border/60 dark:border-muted-foreground/15 ms-auto flex w-full max-w-[85%] cursor-text flex-col rounded-(--composer-radius) border bg-(--composer-bg)">
+      <ComposerPrimitive.Root className="aui-edit-composer-root border-border/60 dark:border-muted-foreground/15 ms-auto flex w-full max-w-(--user-message-max-width) cursor-text flex-col rounded-(--composer-radius) border bg-(--composer-bg)">
         <ComposerPrimitive.Input
           className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none"
           autoFocus
