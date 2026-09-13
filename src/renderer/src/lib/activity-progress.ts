@@ -33,3 +33,43 @@ export function toolProgress(message: MessageView, language: "en" | "zh"): strin
   const limit = /bash|powershell|shell|exec|terminal/i.test(name) ? Infinity : 180;
   return compactDetail ? `${verb} · ${compactDetail.length > limit ? `${compactDetail.slice(0, limit)}…` : compactDetail}` : verb;
 }
+
+// Presentation labels only; full arguments remain in toolProgress and tool details.
+export function toolActivityLabel(name: string, detail: string, active: boolean, language: "en" | "zh") {
+  const zh = language === "zh";
+  if (/(: error|：失败)$/.test(detail)) return zh ? "工具执行失败" : "Tool failed";
+  if (/(: timeout|：已超时)$/.test(detail)) return zh ? "工具执行超时" : "Tool timed out";
+  if (/(: cancelled|：已取消)$/.test(detail)) return zh ? "工具已取消" : "Tool cancelled";
+  if (active && detail) return detail;
+  const labels = /search|browse|web|fetch/i.test(name)
+    ? ["Searching", "Searched", "正在搜索", "已搜索"]
+    : /read|open_file/i.test(name)
+      ? ["Reading file", "Read file", "正在读取文件", "已读取文件"]
+      : /bash|powershell|shell|exec|terminal/i.test(name)
+        ? ["Running command", "Ran command", "正在运行命令", "已运行命令"]
+        : /write|edit|patch/i.test(name)
+          ? ["Editing file", "Edited file", "正在编辑文件", "已编辑文件"]
+          : /image|screenshot/i.test(name)
+            ? ["Viewing image", "Viewed image", "正在查看图片", "已查看图片"]
+            : /grep|find|^ls$|list_directory/i.test(name)
+              ? ["Searching files", "Searched files", "正在查找文件", "已查找文件"]
+              : ["Running tool", "Used tool", "正在运行工具", "已使用工具"];
+  return labels[(zh ? 2 : 0) + (active ? 0 : 1)];
+}
+
+
+// Aggregate only the tools between two narration messages; never infer their intent.
+export function toolActivitySummary(messages: MessageView[], language: "en" | "zh"): string | undefined {
+  const counts = new Map<string, number>();
+  for (const message of messages) {
+    if (message.role !== "tool") continue;
+    const label = toolActivityLabel(message.toolName ?? "tool", toolProgress(message, language), false, language);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const plurals: Record<string, string> = {
+    "Ran command": "Ran commands", "Read file": "Read files",
+    "Edited file": "Edited files", "Viewed image": "Viewed images", "Used tool": "Used tools",
+  };
+  const labels = [...counts].map(([label, count]) => count > 1 ? plurals[label] ?? label : label);
+  return labels.length ? labels.map((label, index) => index && language === "en" ? label[0].toLowerCase() + label.slice(1) : label).join(language === "zh" ? "、" : ", ") : undefined;
+}

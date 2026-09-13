@@ -1,3 +1,4 @@
+import { shortTitle, titleCharacters, RENAME_LIMIT } from "@/lib/conversation-title";
 import { BrandMark } from "@/components/worklens/BrandMark";
 import { HistoryTitle } from "@/components/worklens/HistoryTitle";
 import { Input } from "@/components/ui/input";
@@ -422,6 +423,7 @@ export function App() {
                 variant="ghost"
                 aria-current={current === conversation.id ? "page" : undefined}
 
+                aria-label={conversation.title}
                 className="conversation-open"
                 onClick={() => void open(conversation.id)}
               >
@@ -509,7 +511,7 @@ export function App() {
         <>
           <header className="chat-header">
             <div>
-              {currentView && <h1 data-slot="chat-title">{currentView.title}</h1>}
+              {currentView && <Hint content={currentView.title}><h1 data-slot="chat-title" tabIndex={0} aria-label={currentView.title}>{shortTitle(currentView.title)}</h1></Hint>}
             </div>
             {currentView && <div className="chat-header-actions">
               <UsagePopover
@@ -627,30 +629,29 @@ export function App() {
           onClose={() => setDialog(undefined)}
         >
           {dialog.type === "delete" ? (
-            <DialogDescription className="text-base leading-7 wrap-anywhere">
-              <span className="text-foreground">
-                {t("This will permanently delete ", "将永久删除会话 ")}
-                <strong className="font-semibold">{dialog.title}</strong>
-                {t(".", "。")}
-              </span>
-              <span className="mt-2 block text-sm leading-6 text-muted-foreground/80">{t("Running tasks will stop. Local files will be kept.", "运行中的任务会停止，本地文件会保留。")}</span>
+            <DialogDescription className="text-sm leading-6">
+              {t("This permanently deletes this conversation. This cannot be undone.", "这将永久删除此会话，且无法撤销。")}
             </DialogDescription>
           ) : (
-            <Input
-              aria-label={t("Conversation name", "会话名称")}
-              autoFocus
-              value={dialog.title}
-              maxLength={120}
-              onChange={(e) => setDialog({ ...dialog, title: e.target.value })}
-            />
+            <div className="space-y-2">
+              <Input
+                aria-label={t("Conversation name", "会话名称")}
+                aria-describedby="rename-count"
+                autoFocus
+                value={dialog.title}
+                onChange={(e) => setDialog({ ...dialog, title: (e.nativeEvent as InputEvent).isComposing ? e.target.value : titleCharacters(e.target.value).slice(0, RENAME_LIMIT).join("") })}
+                onCompositionEnd={(e) => setDialog({ ...dialog, title: titleCharacters(e.currentTarget.value).slice(0, RENAME_LIMIT).join("") })}
+              />
+              <p id="rename-count" className="text-right text-xs text-muted-foreground" aria-live="polite">{titleCharacters(dialog.title).length}/{RENAME_LIMIT}</p>
+            </div>
           )}
           <div className="mt-1 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDialog(undefined)}>
+            <Button variant="outline" autoFocus={dialog.type === "delete"} onClick={() => setDialog(undefined)}>
               {t("Cancel", "取消")}
             </Button>
             <Button
               className={dialog.type === "delete" ? "bg-destructive text-white hover:bg-destructive/90 focus-visible:border-destructive focus-visible:ring-destructive/30" : undefined}
-              disabled={!dialog.title.trim()}
+              disabled={!dialog.title.trim() || (dialog.type === "rename" && titleCharacters(dialog.title).length > RENAME_LIMIT)}
               onClick={() =>
                 void (
                   dialog.type === "delete"

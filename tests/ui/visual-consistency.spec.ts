@@ -68,3 +68,32 @@ test("reduced transparency and motion cover both navigation surfaces", async ({ 
   await expect(page.locator(".settings-navigation nav")).toHaveCSS("animation-name", "none");
   await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "none");
 });
+
+test("dark native sidebars share a translucent neutral scrim", async ({ page }) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+    document.documentElement.dataset.nativeVibrancy = "true";
+  });
+  const sidebar = page.locator(".sidebar");
+  const scrim = await sidebar.evaluate(el => getComputedStyle(el).backgroundColor);
+  expect(scrim).toBe("rgba(32, 32, 32, 0.6)");
+  await expect(page.locator(".main-content")).toHaveCSS("background-color", "rgb(24, 24, 24)");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.locator(".settings-navigation")).toHaveCSS("background-color", scrim);
+  await expect(page.locator(".settings-pane")).toHaveCSS("background-color", "rgb(24, 24, 24)");
+});
+
+for (const width of [1280, 1000, 850]) {
+  test(`chat and settings sidebars align at ${width}px`, async ({ page }) => {
+    await mockWorklens(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    const chatWidth = (await page.locator(".sidebar").boundingBox())!.width;
+    expect(chatWidth).toBe(width > 1050 ? 280 : 248);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    expect((await page.locator(".settings-navigation").boundingBox())!.width).toBe(chatWidth);
+    expect((await page.locator(".settings-pane").boundingBox())!.x).toBe(chatWidth);
+  });
+}

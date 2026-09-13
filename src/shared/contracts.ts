@@ -182,6 +182,8 @@ export interface Bootstrap {
   recoveries: Recovery[];
 }
 export interface Requests {
+  htmlFileAction: { input: { id: string; path?: string; code?: string; action: "chrome" | "reveal" }; output: void };
+  previewHtml: { input: { id: string; path: string }; output: string };
   bootstrap: { input: undefined; output: Bootstrap };
   settings: { input: Partial<Settings>; output: Settings };
   providers: { input: undefined; output: ProviderInfo[] };

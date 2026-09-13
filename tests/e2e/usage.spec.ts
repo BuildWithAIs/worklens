@@ -182,10 +182,11 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     ).toHaveCount(0);
     await restored
       .locator(".conversation-open")
-      .filter({ hasText: first.title })
+      .and(restored.getByRole("button", { name: first.title, exact: true }))
       .click();
     const pinned = restored.getByRole("region", { name: "Pinned", exact: true });
-    await expect(pinned.locator(".conversation-open")).toHaveText(first.title);
+    await expect(pinned.locator(".conversation-open")).toHaveAttribute("aria-label", first.title);
+    await expect(pinned.locator(".conversation-open")).toContainText("…");
     await pinned.getByRole("button", { name: `Conversation options: ${first.title}`, exact: true }).click();
     await expect(restored.getByRole("menuitem", { name: "Unpin", exact: true }).locator("svg")).toBeVisible();
     await restored.getByRole("menuitem", { name: "Unpin", exact: true }).click();
