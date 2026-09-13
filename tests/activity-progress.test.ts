@@ -17,7 +17,7 @@ test("shell progress includes the command instead of only the tool name", () => 
     args: JSON.stringify({ command: "rg --files\n  src" }) };
   expect(toolProgress(message, "en")).toBe("Running bash · rg --files src");
   expect(toolProgress({ ...message, args: JSON.stringify({ command: "x".repeat(200) }) }, "en"))
-    .toBe(`Running bash · ${"x".repeat(56)}…`);
+    .toBe(`Running bash · ${"x".repeat(200)}`);
   expect(toolProgress({ ...message, toolName: "powershell", status: "success" }, "zh"))
     .toBe("已完成 powershell · rg --files src");
 });

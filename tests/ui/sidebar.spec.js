@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
-import { mockWorklens } from "./fixture.js";
+import { mockWorklens, mockExistingConversation } from "./fixture.js";
 
 test("sidebar collapses, preserves its preference and keeps the toggle reachable", async ({ page }) => {
-  await mockWorklens(page);
+  await mockExistingConversation(page);
   await page.addInitScript(() => {
     window.addEventListener("DOMContentLoaded", () => {
       document.documentElement.dataset.nativeVibrancy = "true";

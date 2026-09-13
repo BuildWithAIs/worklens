@@ -29,6 +29,7 @@ export function toolProgress(message: MessageView, language: "en" | "zh"): strin
       : `${name}: ${message.status}`;
   }
   const compactDetail = detail?.replace(/\s+/g, " ").trim();
-  const limit = /^(bash|powershell|shell|exec|terminal)$/i.test(name) ? 56 : 180;
+  // Command previews use the available row width; CSS supplies the ellipsis.
+  const limit = /bash|powershell|shell|exec|terminal/i.test(name) ? Infinity : 180;
   return compactDetail ? `${verb} · ${compactDetail.length > limit ? `${compactDetail.slice(0, limit)}…` : compactDetail}` : verb;
 }

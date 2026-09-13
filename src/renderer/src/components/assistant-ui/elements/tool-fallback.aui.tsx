@@ -1,5 +1,7 @@
 "use client";
 
+import { useShimmer } from "@/hooks/use-shimmer";
+
 import { memo, useCallback, useRef, useState } from "react";
 import {
   AlertCircleIcon,
@@ -17,7 +19,6 @@ import {
   type ToolCallMessagePart,
   type ToolCallMessagePartProps,
   type ToolCallMessagePartStatus,
-  type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
 import {
   Collapsible,
@@ -165,26 +166,31 @@ function ToolFallbackDuration({
 
 function ToolFallbackTrigger({
   toolName,
+  summary,
+  icon: SummaryIcon,
   status,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   toolName: string;
+  summary?: string;
+  icon?: React.ElementType;
   status?: ToolCallMessagePartStatus;
 }) {
+  const shimmerRef = useShimmer();
   const statusType: ToolStatus = status?.type ?? "complete";
   const isRunning = statusType === "running";
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
 
-  const Icon = statusIconMap[statusType];
+  const Icon = SummaryIcon ?? statusIconMap[statusType];
   const label = isCancelled ? "Cancelled tool" : "Used tool";
 
   return (
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
       className={cn(
-        "aui-tool-fallback-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-tool-fallback-trigger group/trigger text-muted-foreground hover:text-foreground flex w-full min-w-0 origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
         className,
       )}
       {...props}
@@ -194,24 +200,25 @@ function ToolFallbackTrigger({
         className={cn(
           "aui-tool-fallback-trigger-icon size-4 shrink-0",
           isCancelled && "text-muted-foreground",
-          isRunning && "animate-spin [animation-duration:0.6s]",
+          !SummaryIcon && isRunning && "animate-spin [animation-duration:0.6s]",
         )}
       />
       <span
+        ref={shimmerRef}
         data-slot="tool-fallback-trigger-label"
         className={cn(
-          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none",
+          "aui-tool-fallback-trigger-label-wrapper min-w-0 truncate text-start leading-6",
           isCancelled && "text-muted-foreground line-through",
           isRunning && "shimmer motion-reduce:animate-none",
         )}
       >
-        {label}: <b>{toolName}</b>
+        {summary ?? <>{label}: <b>{toolName}</b></>}
       </span>
       <ToolFallbackDuration />
       <ChevronDownIcon
         data-slot="tool-fallback-trigger-chevron"
         className={cn(
-          "aui-tool-fallback-trigger-chevron size-4 shrink-0",
+          "aui-tool-fallback-trigger-chevron ml-auto size-4 shrink-0",
           "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
           "-rotate-90",
           "group-data-open/trigger:rotate-0",
@@ -686,7 +693,11 @@ function ToolFallbackApproval({
   );
 }
 
-const ToolFallbackImpl: ToolCallMessagePartComponent = ({
+type PresentedToolProps = ToolCallMessagePartProps & { summary?: string; icon?: React.ElementType };
+
+const ToolFallbackImpl: React.FC<PresentedToolProps> = ({
+  summary,
+  icon,
   toolName,
   argsText,
   result,
@@ -713,7 +724,7 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
 
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger toolName={toolName} status={status} />
+      <ToolFallbackTrigger toolName={toolName} summary={summary} icon={icon} status={status} />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs
@@ -738,7 +749,7 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
 
 const ToolFallback = memo(
   ToolFallbackImpl,
-) as unknown as ToolCallMessagePartComponent & {
+) as unknown as React.FC<PresentedToolProps> & {
   Root: typeof ToolFallbackRoot;
   Trigger: typeof ToolFallbackTrigger;
   Content: typeof ToolFallbackContent;

@@ -82,7 +82,7 @@
   background: var(--navigation-hover);
 }
 .settings-pane {
-  background: var(--surface);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -112,7 +112,7 @@
   max-width: 1000px;
   margin: 0 auto;
   padding: 32px 48px 20px;
-  background: var(--surface);
+  background: var(--bg);
 }
 .settings-page-heading h1 {
   margin: 0;
@@ -191,6 +191,9 @@
 }
 .settings-list {
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding-inline: 24px;
 }
 .settings-entry {
   display: flex;
@@ -212,7 +215,7 @@
   max-width: 50%;
   flex-shrink: 0;
 }
-.settings-provider-list .settings-entry {
+:is(.settings-provider-list, .settings-connection-list, .settings-model-panel) .settings-entry {
   min-height: 48px;
   padding-block: 10px;
 }
@@ -249,15 +252,7 @@
   line-height: 1.5;
 }
 .settings-model-panel {
-  margin-inline: 16px 12px;
-}
-.settings-model-panel .settings-list {
-  border: 0;
-  border-radius: 0;
-}
-.settings-model-panel .settings-entry {
-  min-height: 48px;
-  padding: 10px 16px;
+  margin-inline: 0;
 }
 .settings-model-copy {
   display: flex;
@@ -453,4 +448,39 @@
 }
 .settings-page-content[data-section="general"] .settings-entry-title {
   font-weight: 400;
+}
+
+/* Shared grouped lists: external headings, outlined contents, inset row dividers. */
+.settings-group-bar,
+.settings-section h2.settings-group-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin: 0 0 12px;
+  padding: 0;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+}
+.settings-group-count {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.settings-accordion-heading.settings-group-bar {
+  padding-block: 0;
+  margin-top: 16px;
+  gap: 16px;
+}
+.settings-page-content .settings-section + .settings-section {
+  margin-top: 32px;
+}
+.settings-model-panel .settings-entry-title {
+  font-weight: 400;
+}
+
+.settings-page-content[data-section="models"] [data-slot="accordion-item"] {
+  border: 0;
 }
