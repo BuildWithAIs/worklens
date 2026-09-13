@@ -86,7 +86,7 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     // A new chat has no usage control; totals become inspectable after sending.
     await expect(page.locator(".usage-trigger")).toHaveCount(0);
     expect(await page.evaluate(async () =>
-      (await window.worklens.invoke("bootstrap", undefined)).globalUsage.totalTokens,
+      (await window.worklens.invoke("bootstrap", undefined)).globalUsage?.totalTokens,
     )).toBe(0);
     const target = join(root, "usage-output.txt");
     await page
