@@ -83,7 +83,11 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       }),
     );
     await page.reload();
-    await total(page, "0");
+    // A new chat has no usage control; totals become inspectable after sending.
+    await expect(page.locator(".usage-trigger")).toHaveCount(0);
+    expect(await page.evaluate(async () =>
+      (await window.worklens.invoke("bootstrap", undefined)).globalUsage.totalTokens,
+    )).toBe(0);
     const target = join(root, "usage-output.txt");
     await page
       .getByRole("textbox", { name: "Message", exact: true })
