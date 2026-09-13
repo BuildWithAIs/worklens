@@ -101,11 +101,19 @@ export class ConfluenceConnections {
       this.value = { ...settings, configured: false };
       if (data.version !== 1 || typeof data.encrypted !== "string")
         throw new Error("Invalid credentials");
-      this.token = this.encryption.decryptString(
+      const token = this.encryption.decryptString(
         Buffer.from(data.encrypted, "base64"),
       );
-      if (!this.token) throw new Error("Empty token");
-      this.remember(this.token, settings.email);
+      if (!token) throw new Error("Empty token");
+      // Upgrade the original v1 file before issuing persistent cursors. Preserve ciphertext.
+      const revision = data.revision ?? randomUUID();
+      if (!z.uuid().safeParse(revision).success)
+        throw new Error("Invalid connection revision");
+      if (data.revision === undefined)
+        await atomicJson(this.path, { ...data, revision });
+      this.token = token;
+      this.remember(token, settings.email);
+      this.revision = revision;
       this.value.configured = true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
@@ -154,14 +162,16 @@ export class ConfluenceConnections {
       const next = await this.candidate(input);
       if (!this.encryption.isEncryptionAvailable())
         throw new Error("操作系统安全存储不可用，无法保存凭据");
+      const revision = randomUUID();
       await atomicJson(this.path, {
         version: 1,
+        revision,
         settings: next.settings,
         encrypted: this.encryption.encryptString(next.token).toString("base64"),
       });
       this.controller.abort(new Error("Confluence 连接已变更"));
       this.controller = new AbortController();
-      this.revision = randomUUID();
+      this.revision = revision;
       this.token = next.token;
       this.value = next.settings;
       return this.info();

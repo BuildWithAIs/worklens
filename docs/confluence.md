@@ -1,6 +1,6 @@
 # Confluence integration
 
-WorkLens connects to one user-configured Confluence site. All requests and credentials stay in the main process. The model receives two tools, `confluence_read` and `confluence_write`; operations have independent, strict input schemas inside `request`.
+WorkLens connects to one user-configured Confluence site. All requests and credentials stay in the main process. The model receives two tools, `confluence_read` and `confluence_write`; operation contracts remain independently validated inside `request`. The registered tools carry small discovery schemas, filtered by deployment/access, instead of the complete operation union. Before using an operation, call `confluence_read` with `{"request":{"operation":"describe_operation","name":"search"}}` (substitute the operation name). It returns that operation’s exact input schema. Unknown fields and invalid arguments still fail runtime validation before any request.
 
 This implementation delivers the first everyday read/write and document-publishing increment discussed in [issue #2](https://github.com/BuildWithAIs/worklens/issues/2), plus additional lifecycle and collaboration operations. It does **not** close the comprehensive issue. The remaining scope is explicitly listed below; missing implementation is not presented as a platform limitation.
 
@@ -88,7 +88,11 @@ Transfers stream to a temporary file in the destination directory, then commit o
 
 Files are limited to 100 MiB; a Markdown publication is limited to 2 MiB of text and 100 MiB of explicitly selected assets (at most 30). Exported Markdown/HTML preserves source URL, page version and export timestamp; attachments use a distinct relative assets directory. Unselected/failed attachments retain a source-page link. HTML export permits basic formatting and safe links, with scripts disabled; it is not the native Confluence renderer.
 
-List results include continuation/completeness. Opaque continuations belong to a connection, session and query and are invalid after a connection change or application restart. Bodies use `offset`, `length`, and `nextOffset`. Oversized JSON results are stored as artifacts with an explicit file path for the existing `read` tool.
+List results contain bounded summaries plus continuation/completeness and a `resultPath` containing the full original records. Cursors are persisted per session for seven days and survive application restart. Older encrypted connection files acquire a stable identity through an atomic migration that preserves their ciphertext. Saving/changing or disconnecting the connection invalidates old cursors; they also cannot cross sessions or queries. Expired cursors return instructions to restart the original query and deduplicate by resource ID. Page observations require a fresh read after restart before editing.
+
+Bodies use `offset`, `length`, and `nextOffset`. Recovery metadata and `resultPath` precede content, so Pi’s 2,000-character compaction input cutoff preserves them for summarization. Results above 1,800 characters get a retrieval file; inline output is bounded separately. Result-file failures preserve the operation outcome and include `retrievalError`; a successful remote mutation is never reported as failed solely because its local result file could not be saved. Model summaries are still lossy: use the returned file handle to recover exact content.
+
+If saving the final exported document fails, the result reports `partial` with all successful attachments and a document-specific failure. Retrying only the document avoids redownloading successful attachments.
 
 ## Execution semantics
 
@@ -100,9 +104,13 @@ List results include continuation/completeness. Opaque continuations belong to a
 - Attachment redirects never receive the Confluence Authorization header after redirecting. API requests do not silently follow login/SSO redirects. HTTPS is required for Cloud and redirected downloads; explicitly configured intranet Data Center HTTP sites are allowed.
 - Local shell/filesystem tools keep their existing permissions. Integration access modes are not an OS sandbox.
 
+## Code organization
+
+`service.ts` registers the two tools and coordinates execution. `discovery.ts` owns the filtered catalog and on-demand contracts; `read.ts` and `write.ts` exhaustively dispatch inferred request unions. Write handlers are grouped by pages, comments, attachments, collaboration, and lifecycle. `operation-context.ts`, `continuations.ts`, `mutations.ts`, `results.ts`, and `transfers.ts` separately own authorization/read state, persistent cursors, write journaling, model output, and files. Adapter response records remain a remote-data boundary; page and list structure are validated before use.
+
 ## Validation
 
-Tests use synthetic credentials and temporary directories. `tests/confluence-fixture.ts` hosts a local REST service. `tests/confluence.test.ts` exercises encrypted persistence, strict contracts, source isolation, pagination, macro preservation, stale versions, execution authorization, uncertain writes, transfer collisions/cancellation, publication partial failures, Cloud payloads and real Pi registration/error handling. `tests/e2e/confluence.spec.ts` runs Electron Settings, connection testing, encrypted restart, a real Pi download and visible artifact card.
+Tests use synthetic credentials and temporary directories. `tests/confluence-fixture.ts` hosts a local REST service. `tests/confluence*.test.ts` exercise encrypted persistence, strict contracts, source isolation, pagination, macro preservation, stale versions, execution authorization, uncertain writes, transfer collisions/cancellation, publication partial failures, Cloud payloads and real Pi registration/error handling. Context regressions exercise Pi’s actual compaction serializer, persistent/expired cursors, schema budgets, deployment/access filtering, existing-session refresh, and final-export storage failure. `tests/e2e/confluence.spec.ts` runs Electron Settings, connection testing, encrypted restart, a real Pi download and visible artifact card.
 
 Live validation: **not performed**. No company network, paid Cloud account or real Confluence token is required for automated tests. The API adapters should be smoke-tested against authorized Cloud and target Data Center versions before claiming full deployment support. Automated fixtures do not certify undocumented or version-dependent behavior.
 

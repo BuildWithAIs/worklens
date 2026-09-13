@@ -33,6 +33,7 @@ const op = <const O extends string, T extends z.ZodRawShape>(
 ) => z.object({ operation: z.literal(operation), ...shape }).strict();
 export const readOperations = [
   op("capabilities", {}),
+  op("describe_operation", { name: short }),
   op("current_user", {}),
   op("read_long_task", { taskId: short }),
   op("list_tasks", {
@@ -238,3 +239,9 @@ export const readSchema = z
 export const writeSchema = z
   .object({ request: z.union(writeOperations) })
   .strict();
+export type ReadRequest = z.infer<typeof readSchema>["request"];
+export type WriteRequest = z.infer<typeof writeSchema>["request"];
+export type WriteOperation<O extends WriteRequest["operation"]> = Extract<
+  WriteRequest,
+  { operation: O }
+>;

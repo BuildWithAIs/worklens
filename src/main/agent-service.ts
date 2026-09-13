@@ -46,6 +46,7 @@ interface ActiveRun {
 interface Runtime {
   manager: SessionManager;
   session?: AgentSession;
+  integrationConfiguration?: string;
   active?: ActiveRun;
   phase: Phase;
   error?: string;
@@ -363,6 +364,16 @@ export class AgentService {
       ).some((m) => m.id === model.id)
     )
       throw new Error("模型尚未配置或不可用，请在设置中完成认证");
+    const integrationConfiguration = JSON.stringify(
+      this.confluence?.connections.info() ?? null,
+    );
+    if (
+      runtime.session &&
+      runtime.integrationConfiguration !== integrationConfiguration
+    ) {
+      runtime.session.dispose();
+      runtime.session = undefined;
+    }
     if (!runtime.session) {
       const local = await resources(
         this.paths.runtime,
@@ -411,6 +422,7 @@ export class AgentService {
         previous.thinkingLevel !== selection.thinking
       )
         runtime.session.setThinkingLevel(selection.thinking);
+      runtime.integrationConfiguration = integrationConfiguration;
       runtime.session.subscribe((event) => this.onPiEvent(runtime, event));
     } else {
       if (
