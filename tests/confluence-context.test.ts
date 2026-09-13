@@ -55,12 +55,7 @@ test("list projection keeps navigation compact and preserves original records in
       _links: { next: "/confluence/rest/api/search?start=2" },
     }),
   );
-  const service = new ConfluenceService(
-    f.connections,
-    f.artifacts,
-    f.approval,
-    fetcher,
-  );
+  const service = new ConfluenceService(f.connections, f.artifacts, fetcher);
   const out = await service
     .tools("session1", () => "run")[0]
     .execute(
@@ -91,7 +86,7 @@ test("continuations survive connection/service restart and stay session and quer
   );
   await loaded.load();
   expect(loaded.snapshot().revision).toBe(f.connections.snapshot().revision);
-  const resumed = new ConfluenceService(loaded, f.artifacts, f.approval);
+  const resumed = new ConfluenceService(loaded, f.artifacts);
   const execute = (session: string, request: object) =>
     resumed
       .tools(session, () => "run2")[0]
@@ -190,7 +185,7 @@ test("failure to persist a large mutation result never reports the successful mu
   expect(f.fixture.state.version).toBe(8);
 });
 
-test("discovery has a fixed small schema budget, filters deployment/access, and retains strict per-operation validation", async () => {
+test("discovery has a fixed small schema budget, filters deployment, and retains strict per-operation validation", async () => {
   const f = await setup();
   const settings = f.connections.info();
   const both = [false, true]
@@ -201,10 +196,6 @@ test("discovery has a fixed small schema budget, filters deployment/access, and 
   expect(
     JSON.stringify(discoverySchema({ ...settings, deployment: "cloud" }, true)),
   ).toContain('"archive_page"');
-  expect(
-    discoverySchema({ ...settings, access: "read" }, true).properties.request
-      .properties.operation.enum,
-  ).toEqual([]);
   const contract = describeOperation(settings, "edit_page");
   expect(contract.tool).toBe("confluence_write");
   expect(JSON.stringify(contract.inputSchema)).toContain("expectedMatches");
@@ -233,7 +224,7 @@ test("legacy encrypted connection migrates once and resumes its new cursor after
   expect(migrated.revision).toBe(upgraded.snapshot().revision);
   expect(migrated.encrypted).toBe(saved.encrypted);
   expect(await readFile(path, "utf8")).not.toContain(f.input.token);
-  const firstService = new ConfluenceService(upgraded, f.artifacts, f.approval);
+  const firstService = new ConfluenceService(upgraded, f.artifacts);
   const query = { operation: "search", cql: "type=page", limit: 1 };
   const first = await firstService
     .tools("session1", () => "run1")[0]
@@ -250,7 +241,7 @@ test("legacy encrypted connection migrates once and resumes its new cursor after
   const restarted = new ConfluenceConnections(path, f.encryption);
   await restarted.load();
   expect(restarted.snapshot().revision).toBe(upgraded.snapshot().revision);
-  const service = new ConfluenceService(restarted, f.artifacts, f.approval);
+  const service = new ConfluenceService(restarted, f.artifacts);
   const next = await service
     .tools("session1", () => "run2")[0]
     .execute(

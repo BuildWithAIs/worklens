@@ -11,8 +11,6 @@ export async function updateComment(
 ): Promise<Json> {
   const d = ctx.adapter;
   const h = d.http;
-  const approve = (detail: Json, target = a.commentId) =>
-    ctx.operations.approve(ctx, a.operation, String(target), detail);
   if (
     a.operation === "edit_comment" ||
     a.operation === "delete_comment" ||
@@ -29,13 +27,6 @@ export async function updateComment(
       a.operation === "edit_comment"
         ? storageContent(a.content, a.format)
         : comment.body?.storage?.value;
-    await approve({
-      commentId: a.commentId,
-      version: a.expectedVersion,
-      before: comment.body,
-      after: body,
-      resolved: a.operation === "resolve_comment" ? a.resolved : undefined,
-    });
     const latest = await d.comment(a.commentId, a.kindOfComment);
     d.assertVersion(latest.version?.number, a.expectedVersion);
     if (
@@ -85,8 +76,6 @@ export async function addComment(
     a.operation === "add_comment" ? a.kindOfComment : "inline";
   const d = ctx.adapter;
   const h = d.http;
-  const approve = (detail: Json, target = p.id) =>
-    ctx.operations.approve(ctx, a.operation, String(target), detail);
   if (a.operation === "add_comment" || a.operation === "add_inline_comment") {
     const body = storageContent(a.content, a.format);
     if (
@@ -122,12 +111,6 @@ export async function addComment(
           "评论选区匹配不明确，请重新选择",
         );
     }
-    await approve({
-      page: p.title,
-      body,
-      parentCommentId: parentCommentId,
-      selection: a.operation === "add_inline_comment" ? a.selection : undefined,
-    });
     if (a.operation === "add_inline_comment")
       d.assertVersion((await d.page(p.id, p.type)).version, p.version);
     return dispatch(() =>

@@ -11,16 +11,9 @@ export async function deleteAttachment(
 ): Promise<Json> {
   const d = ctx.adapter;
   const h = d.http;
-  const approve = (detail: Json, target = a.attachmentId) =>
-    ctx.operations.approve(ctx, a.operation, String(target), detail);
   if (a.operation === "delete_attachment") {
     const attachment = await d.attachment(a.attachmentId);
     d.assertVersion(attachment.version?.number, a.expectedVersion);
-    await approve({
-      attachmentId: a.attachmentId,
-      title: attachment.title,
-      version: a.expectedVersion,
-    });
     d.assertVersion(
       (await d.attachment(a.attachmentId)).version?.number,
       a.expectedVersion,
@@ -44,8 +37,6 @@ export async function uploadAttachment(
 ): Promise<Json> {
   const d = ctx.adapter;
   const h = d.http;
-  const approve = (detail: Json, target = p.id) =>
-    ctx.operations.approve(ctx, a.operation, String(target), detail);
   if (a.operation === "upload_attachment") {
     const file = await uploadFile(ctx, a.filePath);
     if (a.attachmentId) {
@@ -78,13 +69,6 @@ export async function uploadAttachment(
           "同名附件已存在；更新时请明确指定 attachmentId 和 expectedVersion",
         );
     }
-    await approve({
-      page: p.title,
-      filePath: ctx.operations.artifacts.resolvePath(a.filePath),
-      filename: file.name,
-      size: file.blob.size,
-      attachmentId: a.attachmentId,
-    });
     if (a.attachmentId && a.expectedVersion)
       d.assertVersion(
         (await d.attachment(a.attachmentId)).version?.number,

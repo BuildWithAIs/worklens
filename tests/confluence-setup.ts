@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, vi } from "vitest";
+import { afterEach } from "vitest";
 import { ConfluenceConnections } from "../src/main/confluence/connection";
 import { ConfluenceService } from "../src/main/confluence/service";
 import { LocalArtifacts } from "../src/main/local-artifacts";
@@ -35,7 +35,7 @@ export function testEncryption() {
     },
   };
 }
-export async function setup(access: "read" | "confirm" | "write" = "write") {
+export async function setup() {
   const root = await mkdtemp(join(tmpdir(), "worklens-confluence-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const fixture = await confluenceFixture();
@@ -50,12 +50,10 @@ export async function setup(access: "read" | "confirm" | "write" = "write") {
     deployment: "data-center" as const,
     tokenType: "classic" as const,
     token: "synthetic-secret-123",
-    access,
   };
   await connections.save(input);
   const artifacts = new LocalArtifacts(join(root, "artifacts"), root);
-  const approval = vi.fn(async () => true);
-  const service = new ConfluenceService(connections, artifacts, approval);
+  const service = new ConfluenceService(connections, artifacts);
   let run = "run1";
   const tools = service.tools("session1", () => run);
   const call = async (
@@ -83,7 +81,6 @@ export async function setup(access: "read" | "confirm" | "write" = "write") {
     input,
     artifacts,
     service,
-    approval,
     call,
     nextRun: () => {
       run += "x";

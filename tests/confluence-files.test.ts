@@ -1,3 +1,4 @@
+import { OperationSupport } from "../src/main/confluence/operation-context";
 import { readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -150,19 +151,25 @@ test("artifact metadata survives message projection", () => {
   ]);
   expect(projected[0].artifacts).toEqual(artifacts);
 });
-test("exact overwrite checks approval-time file identity and does not overwrite files created during download", async () => {
+test("explicit overwrite succeeds and file identity still prevents replacement races", async () => {
   const f = await setup();
   const path = join(f.root, "existing.txt");
-  await writeFile(path, "old");
-  f.approval.mockImplementation(async () => {
-    await writeFile(path, "changed after preview");
-    return true;
-  });
+  await writeFile(path, "original");
   const result = await f.call({
     operation: "download_attachment",
     attachmentId: "8",
     destination: { path, overwrite: true },
   });
-  expect(result.result.isError).toBe(true);
-  expect(await readFile(path, "utf8")).toBe("changed after preview");
+  expect(result.result.isError).toBe(false);
+  expect(await readFile(path, "utf8")).toBe("fixture attachment bytes");
+  const support = new OperationSupport(f.connections, f.artifacts);
+  const destination = await support.prepareDestination({
+    path,
+    overwrite: true,
+  });
+  await writeFile(path, "changed during download");
+  await expect(
+    f.artifacts.save("session1", "existing.txt", "replacement", destination),
+  ).rejects.toThrow();
+  expect(await readFile(path, "utf8")).toBe("changed during download");
 });

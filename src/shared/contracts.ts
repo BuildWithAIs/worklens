@@ -254,7 +254,6 @@ export interface ConfluenceSettingsInput {
   token?: string;
   cloudId?: string;
   tokenType: "classic" | "scoped";
-  access: "read" | "confirm" | "write";
 }
 export interface ConfluenceConnection extends Omit<
   ConfluenceSettingsInput,

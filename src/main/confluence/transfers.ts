@@ -43,7 +43,7 @@ export async function exportPage(
   a: Extract<ReadRequest, { operation: "export_page" }>,
 ) {
   const p = await ctx.operations.page(ctx, a, true);
-  const destination = await ctx.operations.authorizeLocal(ctx, a.destination);
+  const destination = await ctx.operations.prepareDestination(a.destination);
   const directory = destination?.path
     ? dirname(ctx.operations.artifacts.resolvePath(destination.path))
     : destination?.directory
@@ -170,13 +170,6 @@ export async function publishMarkdown(
     mappings[entry.reference] = file.name;
   }
   const storage = markdownStorage(markdown, mappings);
-  await ctx.operations.approve(ctx, "publish_markdown", space.name, {
-    title: a.title,
-    parentId: a.parentId,
-    storage,
-    files: files.map((f) => ({ name: f.name, size: f.blob.size })),
-    note: "先创建页面，再上传附件；失败时保留页面和成功附件，返回逐项结果。",
-  });
   return dispatch(async () => {
     const created = await ctx.adapter.create(
       space,

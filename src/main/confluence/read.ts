@@ -17,7 +17,6 @@ export async function read(ctx: Execution, a: ReadRequest): Promise<Json> {
     case "capabilities":
       return {
         deployment: ctx.connection.settings.deployment,
-        access: ctx.connection.settings.access,
         read: availableOperations(ctx.connection.settings, false).map(
           (s) => s.shape.operation.value,
         ),
@@ -191,8 +190,7 @@ export async function read(ctx: Execution, a: ReadRequest): Promise<Json> {
       return d.attachment(a.attachmentId);
     case "download_attachment": {
       const raw = await d.attachment(a.attachmentId);
-      const destination = await ctx.operations.authorizeLocal(
-        ctx,
+      const destination = await ctx.operations.prepareDestination(
         a.destination,
       );
       const artifact = await ctx.operations.artifacts.save(

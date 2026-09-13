@@ -14,8 +14,6 @@ export class MutationRunner {
     return this.mutations.run(ctx.signal, async () => {
       ctx.signal.throwIfAborted();
       ctx.operations.connections.assertCurrent(ctx.connection);
-      if (ctx.connection.settings.access === "read")
-        throw new ServiceError("permission", "此连接仅允许读取");
       const digest = createHash("sha256")
         .update(
           JSON.stringify([ctx.sessionId, runId, ctx.connection.revision, a]),

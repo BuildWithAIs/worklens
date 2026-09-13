@@ -1,3 +1,4 @@
+import { ConfluenceService } from "../src/main/confluence/service";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
@@ -75,7 +76,6 @@ test("Cloud requires email and scoped tokens require cloud ID; rejects embedded 
     url: "https://test.atlassian.net",
     deployment: "cloud" as const,
     tokenType: "classic" as const,
-    access: "read" as const,
   };
   expect(() => normalizeSettings(input)).toThrow("邮箱");
   expect(normalizeSettings({ ...input, email: "test@example.com" }).url).toBe(
@@ -202,38 +202,55 @@ test("concurrent external edits return conflict without retry or overwrite", asy
   expect(result.data.status).toBe("conflict");
   expect(f.fixture.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
 });
-test("approval uses actual prepared changes; denial and connection changes prevent dispatch", async () => {
-  const f = await setup("confirm");
-  await f.call({ operation: "read_page", page: "1" });
-  f.approval.mockResolvedValue(false);
-  const request = {
-    operation: "append_page",
-    page: "1",
-    expectedVersion: 7,
-    content: "hello",
-  };
-  expect((await f.call(request, true)).data.status).toBe("cancelled");
-  expect(f.approval.mock.calls[0]).toBeTruthy();
-  f.approval.mockImplementation(async () => {
-    await f.connections.remove();
-    return true;
-  });
-  expect((await f.call(request, true)).result.isError).toBe(true);
-  expect(f.fixture.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
+test("configured connections expose and execute writes without an access setting", async () => {
+  const f = await setup();
+  expect(f.connections.info()).not.toHaveProperty("access");
+  expect(f.service.names()).toEqual(["confluence_read", "confluence_write"]);
+  expect((await f.call({ operation: "capabilities" })).data).not.toHaveProperty(
+    "access",
+  );
+  const result = await f.call(
+    { operation: "add_comment", page: "1", content: "comment" },
+    true,
+  );
+  expect(result.result.isError).toBe(false);
+  expect(f.fixture.state.commentCount).toBe(1);
 });
-test("read-only connection blocks write execution even if tool is called directly", async () => {
-  const f = await setup("read");
-  expect(f.service.names()).toEqual(["confluence_read"]);
-  expect(
-    (
-      await f.call(
-        { operation: "add_comment", page: "1", content: "comment" },
-        true,
-      )
-    ).result.isError,
-  ).toBe(true);
-  expect(f.fixture.state.commentCount).toBe(0);
-});
+
+test.each(["read", "confirm", "write"])(
+  "legacy %s connection migrates without losing credentials or write tools",
+  async (access) => {
+    const f = await setup();
+    const path = join(f.root, "connection.json");
+    const saved = JSON.parse(await readFile(path, "utf8"));
+    saved.settings.access = access;
+    await writeFile(path, JSON.stringify(saved));
+    const loaded = new ConfluenceConnections(path, f.encryption);
+    await loaded.load();
+    expect(loaded.snapshot().token).toBe(f.input.token);
+    expect(loaded.info()).not.toHaveProperty("access");
+    const migrated = JSON.parse(await readFile(path, "utf8"));
+    expect(migrated.encrypted).toBe(saved.encrypted);
+    expect(migrated.revision).toBe(saved.revision);
+    expect(migrated.settings).not.toHaveProperty("access");
+    const service = new ConfluenceService(loaded, f.artifacts);
+    expect(service.names()).toEqual(["confluence_read", "confluence_write"]);
+    const result = await service
+      .tools("migration", () => "run")[1]
+      .execute(
+        "write",
+        {
+          request: { operation: "add_comment", page: "1", content: "migrated" },
+        },
+        undefined,
+        undefined,
+        {} as any,
+      );
+    expect((result as { isError?: boolean }).isError).toBe(false);
+    expect(f.fixture.state.commentCount).toBe(1);
+  },
+);
+
 test("lost write response is unknown and identical attempts in a run do not repeat remote mutation", async () => {
   const f = await setup();
   f.fixture.state.failWrite = true;

@@ -39,6 +39,7 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
     await page
       .getByRole("button", { name: "Connect Confluence", exact: true })
       .click();
+    await expect(page.locator("#confluence-access")).toHaveCount(0);
     await page.locator("#confluence-url").fill(fixture.url);
     await page.locator("#confluence-token").fill("synthetic-desktop-token");
     await page
@@ -78,6 +79,8 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
       window.worklens.invoke("bootstrap", undefined),
     );
     expect(saved.confluence?.configured).toBe(true);
+    expect(saved.confluence).not.toHaveProperty("access");
+    expect(saved.tools).toContain("confluence_write");
     expect(saved.confluence?.url).toBe(fixture.url);
     await app!.evaluate(
       async (_electron, { mainUrl, url, model }) => {
@@ -145,6 +148,36 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
       path: "test-results/confluence-download.png",
       fullPage: true,
     });
+    const writeRun = await page.evaluate(() =>
+      window.worklens.invoke("send", {
+        requestId: "write-confluence-fixture",
+        text: 'TOOL {"name":"confluence_write","args":{"request":{"operation":"add_comment","page":"1","content":"desktop write without approval"}}}',
+        selection: {
+          provider: "worklens-test",
+          model: "worklens-test",
+          thinking: "off",
+        },
+      }),
+    );
+    await expect
+      .poll(
+        async () =>
+          (
+            await page.evaluate(
+              (id) => window.worklens.invoke("open", { id }),
+              writeRun.id,
+            )
+          ).phase,
+      )
+      .toBe("completed");
+    const written = await page.evaluate(
+      (id) => window.worklens.invoke("open", { id }),
+      writeRun.id,
+    );
+    expect(
+      written.messages.find((m) => m.toolName === "confluence_write")?.status,
+    ).toBe("success");
+    expect(fixture.state.commentCount).toBe(1);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page
       .getByRole("button", { name: "Connections", exact: true })

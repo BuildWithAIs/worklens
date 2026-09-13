@@ -16,7 +16,6 @@ test("Cloud scoped requests use the gateway and Basic auth; CDN redirect does no
     token: "scoped-token",
     tokenType: "scoped",
     cloudId: "cloud-123",
-    access: "read",
   });
   const calls: { url: string; headers: Headers }[] = [];
   const fetcher = vi.fn(async (url: any, init: any) => {
@@ -113,8 +112,8 @@ test("real Pi agent registers and selects Confluence tools, returns structured r
   const tool = final.messages.find((m) => m.toolName === "confluence_read");
   expect(tool?.status, tool?.text).toBe("success");
   expect(tool?.text).toContain("Node 22");
-  // Existing conversations must refresh their compact schema when access changes.
-  await f.connections.save({ ...f.input, access: "read" });
+  // Existing conversations continue to work after connection settings are saved.
+  await f.connections.save(f.input);
   for (const [operation, status] of [
     ["describe_operation", "success"],
     ["read_page", "error"],
@@ -145,7 +144,7 @@ test("real Pi agent registers and selects Confluence tools, returns structured r
     tools: { function: { name: string; parameters: unknown } }[];
   };
   expect(latest.tools.some((t) => t.function.name === "confluence_write")).toBe(
-    false,
+    true,
   );
   const schema = latest.tools.find(
     (t) => t.function.name === "confluence_read",
@@ -162,7 +161,6 @@ test("Cloud v2 page updates, comments, properties and tasks use deployment-speci
     email: "fixture@example.com",
     token: "cloud-secret",
     tokenType: "classic",
-    access: "write",
   });
   const calls: { path: string; method: string; body: any }[] = [];
   let pageVersion = 3;
@@ -215,12 +213,7 @@ test("Cloud v2 page updates, comments, properties and tasks use deployment-speci
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
-  const service = new ConfluenceService(
-    f.connections,
-    f.artifacts,
-    async () => true,
-    fetcher,
-  );
+  const service = new ConfluenceService(f.connections, f.artifacts, fetcher);
   const tools = service.tools("cloud-session", () => "run");
   const call = async (a: object, write = false) => {
     const r = await tools[write ? 1 : 0].execute(

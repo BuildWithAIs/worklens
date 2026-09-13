@@ -3,7 +3,7 @@ import type { Execution } from "./operation-context";
 import type { Page } from "./adapter";
 import { ServiceError, type Json } from "./http";
 import type { Dispatch } from "./write";
-import { storageContent, applyEdits, changePreview } from "./content";
+import { storageContent, applyEdits } from "./content";
 import { publishMarkdown } from "./transfers";
 export async function createPage(
   ctx: Execution,
@@ -12,8 +12,6 @@ export async function createPage(
 ): Promise<Json> {
   const d = ctx.adapter;
   const h = d.http;
-  const approve = (detail: Json, target = a.space) =>
-    ctx.operations.approve(ctx, a.operation, String(target), detail);
   if (a.operation === "create_page" || a.operation === "publish_markdown") {
     const space = await d.space(a.space);
     if (a.parentId) {
@@ -24,13 +22,6 @@ export async function createPage(
     if (a.operation === "publish_markdown")
       return publishMarkdown(ctx, a, space, dispatch);
     const storage = storageContent(a.content, a.format);
-    await approve({
-      space: space.name,
-      parentId: a.parentId,
-      title: a.title,
-      status: a.status,
-      storage,
-    });
     return dispatch(async () => {
       const result = await d.create(space, a, storage);
       return {
@@ -55,8 +46,6 @@ export async function editPage(
   p: Page,
 ): Promise<Json> {
   const d = ctx.adapter;
-  const approve = (detail: Json, target = p.id) =>
-    ctx.operations.approve(ctx, a.operation, String(target), detail);
   if (
     a.operation === "edit_page" ||
     a.operation === "replace_page" ||
@@ -81,15 +70,6 @@ export async function editPage(
     if (a.operation === "restore_version")
       next = (await d.page(a.page, a.kind, a.version)).storage;
     const title = ("title" in a ? a.title : undefined) ?? p.title;
-    await approve(
-      {
-        titleBefore: p.title,
-        titleAfter: title,
-        version: p.version,
-        diff: changePreview(p.storage, next),
-      },
-      p.url,
-    );
     d.assertVersion((await d.page(p.id, p.type)).version, p.version);
     return dispatch(async () => ({
       ...(await d.update(

@@ -1,6 +1,6 @@
 # Confluence integration
 
-WorkLens connects to one user-configured Confluence site. All requests and credentials stay in the main process. The model receives two tools, `confluence_read` and `confluence_write`; operation contracts remain independently validated inside `request`. The registered tools carry small discovery schemas, filtered by deployment/access, instead of the complete operation union. Before using an operation, call `confluence_read` with `{"request":{"operation":"describe_operation","name":"search"}}` (substitute the operation name). It returns that operation’s exact input schema. Unknown fields and invalid arguments still fail runtime validation before any request.
+WorkLens connects to one user-configured Confluence site. All requests and credentials stay in the main process. The model receives two tools, `confluence_read` and `confluence_write`; operation contracts remain independently validated inside `request`. The registered tools carry small discovery schemas, filtered by deployment, instead of the complete operation union. Before using an operation, call `confluence_read` with `{"request":{"operation":"describe_operation","name":"search"}}` (substitute the operation name). It returns that operation’s exact input schema. Unknown fields and invalid arguments still fail runtime validation before any request.
 
 This implementation delivers the first everyday read/write and document-publishing increment discussed in [issue #2](https://github.com/BuildWithAIs/worklens/issues/2), plus additional lifecycle and collaboration operations. It does **not** close the comprehensive issue. The remaining scope is explicitly listed below; missing implementation is not presented as a platform limitation.
 
@@ -11,7 +11,6 @@ Open **Settings → Connections** and choose **Connect Confluence**. Configured 
 - **Data Center:** enter the site URL (including a context path such as `/confluence`) and personal access token. WorkLens sends Bearer authentication.
 - **Cloud, classic token:** enter the site URL, account email and API token. WorkLens uses Basic authentication and defaults an empty context path to `/wiki`.
 - **Cloud, scoped token:** also select the scoped token type and provide the site's Cloud ID. Requests use `https://api.atlassian.com/ex/confluence/{cloudId}/wiki`; source links still point to your site.
-- Choose **Read and download only**, **Review changes before applying** (default), or **Allow changes to this Confluence**. The last option explicitly grants connection-wide write access, including publication, deletion, attachments and page restrictions. Change it at any time.
 - **Test connection** checks the authenticated identity using `/rest/api/user/current`; a scoped token may need additional permission for this check. **Save** persists configuration; “Configured” does not imply a successful test or permission for every operation.
 
 Token input is cleared after saving. Leaving it blank preserves the existing token only for the same URL, deployment, email, token type and Cloud ID. Changing account/site requires re-entering it. Disconnecting deletes the saved connection, aborts in-flight requests and invalidates outstanding authorization and pagination. Downloaded files and conversations remain.
@@ -74,7 +73,7 @@ Only text expressly matched by the edits changes. Empty replacement is allowed. 
 | Copy | `copy_page` with explicit attachments/labels/restrictions choices | v1 native copy | Not implemented |
 | Archive | `archive_page`, `read_long_task` | v1 asynchronous archive; poll task | Archive not implemented |
 
-Deletion/restoration currently rejects pages with descendants instead of silently expanding the affected set. Restriction changes affect one explicitly selected user/group and one direct restriction; they do not remove inherited access constraints. Use ancestor reads and paginated restriction-subject reads to inspect inherited context. Moves expose source and target direct restrictions before authorization. The backend remains authoritative for effective permissions.
+Deletion/restoration currently rejects pages with descendants instead of silently expanding the affected set. Restriction changes affect one explicitly selected user/group and one direct restriction; they do not remove inherited access constraints. Use ancestor reads and paginated restriction-subject reads to inspect inherited context. Confluence remains authoritative for account and content permissions.
 
 Pending scope in #2: explicit bounded batch workflows and tree copies, unarchive, personal favorite mutations, like mutations where a documented API supports them, Data Center-specific advanced collaboration/lifecycle adapters, and broader live capability verification. Native PDF/Word exports and marketplace-specific rendering are not implemented. Cloud whiteboards/databases and global administration are outside this integration's scope.
 
@@ -82,9 +81,9 @@ Pending scope in #2: explicit bounded batch workflows and tree copies, unarchive
 
 Default files are saved under `<data root>/artifacts/files/<conversation ID>/confluence/<transfer ID>/`. A file card provides **Open**, **Show in folder**, and **Save as** without expanding tool traces. Disconnecting does not delete artifacts.
 
-`destination.directory` chooses a directory and automatically numbers colliding names. `destination.path` chooses an exact filename and fails if it exists. `overwrite: true` requests an explicit native overwrite confirmation; it is not proof of authorization. Save-as uses the OS file dialog's overwrite confirmation. Relative paths resolve against the displayed initial runtime directory, and `~/` expands to the user home.
+`destination.directory` chooses a directory and automatically numbers colliding names. `destination.path` chooses an exact filename and fails if it exists. `overwrite: true` explicitly requests replacement of an existing file. Save-as uses the OS file dialog's overwrite confirmation. Relative paths resolve against the displayed initial runtime directory, and `~/` expands to the user home.
 
-Transfers stream to a temporary file in the destination directory, then commit only after completion. Exclusive filesystem links prevent no-overwrite collisions, including concurrent downloads. Overwrites preserve the old file until the new one is complete; the tool checks the identity of the file reviewed for overwrite. Cancellation removes the current partial file. No automatic archive extraction or execution occurs.
+Transfers stream to a temporary file in the destination directory, then commit only after completion. Exclusive filesystem links prevent no-overwrite collisions, including concurrent downloads. Overwrites preserve the old file until the new one is complete; the tool checks the identity of the file captured before the transfer. Cancellation removes the current partial file. No automatic archive extraction or execution occurs.
 
 Files are limited to 100 MiB; a Markdown publication is limited to 2 MiB of text and 100 MiB of explicitly selected assets (at most 30). Exported Markdown/HTML preserves source URL, page version and export timestamp; attachments use a distinct relative assets directory. Unselected/failed attachments retain a source-page link. HTML export permits basic formatting and safe links, with scripts disabled; it is not the native Confluence renderer.
 
@@ -97,12 +96,11 @@ If saving the final exported document fails, the result reports `partial` with a
 ## Execution semantics
 
 - Remote reads are limited to four simultaneous operations. Remote writes are serialized across conversations; other clients are protected through server versions where available.
-- Confirmation receives the prepared target/content/files. In “allow changes” mode, saved user authorization is honored. Model-provided approval flags are rejected by the schema. Account/site changes invalidate pending operations.
+- Configured connections expose all implemented read and write operations for their deployment, without a WorkLens access mode or per-operation approval dialog. Confluence account permissions still apply. Account/site changes invalidate pending operations. Legacy access settings are removed on load while preserving encrypted credentials.
 - Read requests retry bounded transient failures and respect Retry-After (long waits are returned to the caller). Mutations are never automatically retried after a network/5xx failure.
 - A journal records pending/completed/uncertain writes. Identical mutations within one run/connection are deduplicated, including ambiguous outcomes. This is not a server-side idempotency guarantee or a cross-request transaction. After an uncertain result, read the target before any new attempt.
 - Versioned page/comment/property writes use expected versions. Some APIs (deletion, moving, restrictions, tasks and file upload) do not expose an atomic compare-and-swap: preflight checks reduce stale operations but cannot eliminate races with external clients.
 - Attachment redirects never receive the Confluence Authorization header after redirecting. API requests do not silently follow login/SSO redirects. HTTPS is required for Cloud and redirected downloads; explicitly configured intranet Data Center HTTP sites are allowed.
-- Local shell/filesystem tools keep their existing permissions. Integration access modes are not an OS sandbox.
 
 ## Code organization
 
@@ -110,7 +108,7 @@ If saving the final exported document fails, the result reports `partial` with a
 
 ## Validation
 
-Tests use synthetic credentials and temporary directories. `tests/confluence-fixture.ts` hosts a local REST service. `tests/confluence*.test.ts` exercise encrypted persistence, strict contracts, source isolation, pagination, macro preservation, stale versions, execution authorization, uncertain writes, transfer collisions/cancellation, publication partial failures, Cloud payloads and real Pi registration/error handling. Context regressions exercise Pi’s actual compaction serializer, persistent/expired cursors, schema budgets, deployment/access filtering, existing-session refresh, and final-export storage failure. `tests/e2e/confluence.spec.ts` runs Electron Settings, connection testing, encrypted restart, a real Pi download and visible artifact card.
+Tests use synthetic credentials and temporary directories. `tests/confluence-fixture.ts` hosts a local REST service. `tests/confluence*.test.ts` exercise encrypted persistence, strict contracts, source isolation, pagination, macro preservation, stale versions, unrestricted tool registration and legacy settings migration, uncertain writes, transfer collisions/cancellation, publication partial failures, Cloud payloads and real Pi registration/error handling. Context regressions exercise Pi’s actual compaction serializer, persistent/expired cursors, schema budgets, deployment filtering, existing-session refresh, and final-export storage failure. `tests/e2e/confluence.spec.ts` runs Electron Settings, connection testing, encrypted restart, a real Pi download and visible artifact card.
 
 Live validation: **not performed**. No company network, paid Cloud account or real Confluence token is required for automated tests. The API adapters should be smoke-tested against authorized Cloud and target Data Center versions before claiming full deployment support. Automated fixtures do not certify undocumented or version-dependent behavior.
 

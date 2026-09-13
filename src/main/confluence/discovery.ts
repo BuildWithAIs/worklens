@@ -22,7 +22,6 @@ export function availableOperations(
   settings: ConfluenceConnection,
   write: boolean,
 ) {
-  if (write && settings.access === "read") return [];
   return [...(write ? writeOperations : readOperations)].filter(
     (schema) =>
       settings.deployment === "cloud" ||
@@ -78,7 +77,7 @@ export function describeOperation(
   if (!schema)
     throw new ServiceError(
       "unavailable_operation",
-      "该操作不可用；请读取 capabilities 查看当前权限与部署支持的操作。",
+      "该操作不可用；请读取 capabilities 查看当前部署支持的操作。",
     );
   return {
     name,
@@ -138,7 +137,7 @@ export function assertAvailable(
     )
   )
     throw new ServiceError(
-      settings.access === "read" && write ? "permission" : "not_implemented",
-      "当前连接权限或部署不支持此操作。请调用 capabilities。",
+      "not_implemented",
+      "当前部署不支持此操作。请调用 capabilities。",
     );
 }

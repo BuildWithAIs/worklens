@@ -20,7 +20,6 @@ export const connectionSchema = z
       .regex(/^[a-zA-Z0-9-]*$/)
       .optional(),
     tokenType: z.enum(["classic", "scoped"]),
-    access: z.enum(["read", "confirm", "write"]),
   })
   .strict();
 export interface ConnectionSnapshot {
@@ -57,7 +56,6 @@ const empty: ConfluenceConnection = {
   url: "",
   deployment: "data-center",
   tokenType: "classic",
-  access: "confirm",
   configured: false,
 };
 export class ConfluenceConnections {
@@ -94,6 +92,7 @@ export class ConfluenceConnections {
       const {
         configured: _configured,
         error: _error,
+        access: _legacyAccess,
         ...storedSettings
       } = data.settings;
       const { token: _ignored, ...settings } =
@@ -109,8 +108,12 @@ export class ConfluenceConnections {
       const revision = data.revision ?? randomUUID();
       if (!z.uuid().safeParse(revision).success)
         throw new Error("Invalid connection revision");
-      if (data.revision === undefined)
-        await atomicJson(this.path, { ...data, revision });
+      if (data.revision === undefined || "access" in data.settings)
+        await atomicJson(this.path, {
+          ...data,
+          revision,
+          settings: { ...settings, configured: true },
+        });
       this.token = token;
       this.remember(token, settings.email);
       this.revision = revision;

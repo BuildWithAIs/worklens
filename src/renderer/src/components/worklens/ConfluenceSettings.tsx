@@ -40,7 +40,6 @@ export function ConfluenceSettings({
     cloudId: connection?.cloudId ?? "",
     token: "",
     tokenType: connection?.tokenType ?? "classic",
-    access: connection?.access ?? "confirm",
   });
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState("");
@@ -74,7 +73,6 @@ export function ConfluenceSettings({
           url: "",
           deployment: "data-center",
           tokenType: "classic",
-          access: "confirm",
           token: "",
         });
         await refresh();
@@ -232,44 +230,6 @@ export function ConfluenceSettings({
                     : t("Enter your token", "填写 token")
                 }
               />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="confluence-access">
-                {t("Allowed actions", "允许的操作")}
-              </FieldLabel>
-              <NativeSelect
-                id="confluence-access"
-                value={form.access}
-                onChange={(e) =>
-                  update({
-                    access: e.target.value as ConfluenceSettingsInput["access"],
-                  })
-                }
-              >
-                <NativeSelectOption value="read">
-                  {t("Read and download only", "仅阅读和下载")}
-                </NativeSelectOption>
-                <NativeSelectOption value="confirm">
-                  {t("Review changes before applying", "修改前查看并确认变更")}
-                </NativeSelectOption>
-                <NativeSelectOption value="write">
-                  {t(
-                    "Allow changes to this Confluence",
-                    "允许修改此 Confluence",
-                  )}
-                </NativeSelectOption>
-              </NativeSelect>
-              <FieldDescription>
-                {form.access === "write"
-                  ? t(
-                      "Authorizes WorkLens to create, edit, publish and delete content, upload files, and change page access on this connection without asking again.",
-                      "授权 WorkLens 在此连接中创建、修改、发布、删除内容、上传文件和更改页面访问限制，无需再次确认。",
-                    )
-                  : t(
-                      "You can change this at any time. Saved files remain when you disconnect.",
-                      "可以随时调整。断开连接后，已下载的文件仍会保留。",
-                    )}
-              </FieldDescription>
             </Field>
           </fieldset>
         </form>

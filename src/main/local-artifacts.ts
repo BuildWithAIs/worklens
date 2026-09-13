@@ -123,7 +123,7 @@ export class LocalArtifacts {
         });
         if (existing && (!existing.isFile() || existing.isSymbolicLink()))
           throw new Error("覆盖目标必须是普通文件，不能是目录或符号链接");
-        if (destination.expectedFile && (!existing || fileIdentity(existing) !== destination.expectedFile)) throw new Error("目标文件在确认后已变更，未覆盖。请重新确认目标。");
+        if (destination.expectedFile && (!existing || fileIdentity(existing) !== destination.expectedFile)) throw new Error("目标文件在传输期间已变更，未覆盖。请重新读取目标。");
         signal?.throwIfAborted();
         await rename(temp, exact);
         });
@@ -143,7 +143,7 @@ export class LocalArtifacts {
             if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
             if (exact)
               throw new Error(
-                `文件已存在：${exact}。请选择其他路径，或明确授权覆盖。`,
+                `文件已存在：${exact}。请选择其他路径，或设置 overwrite: true 覆盖。`,
               );
             if (suffix >= 999) throw new Error("同名文件过多");
           }

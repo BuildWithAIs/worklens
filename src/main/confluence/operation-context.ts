@@ -10,15 +10,6 @@ import {
   fileIdentity,
   type Destination,
 } from "../local-artifacts";
-export type Authorize = (
-  preview: {
-    sessionId: string;
-    operation: string;
-    target: string;
-    detail: string;
-  },
-  signal: AbortSignal,
-) => Promise<boolean>;
 export interface Execution {
   operations: OperationSupport;
   adapter: ConfluenceAdapter;
@@ -32,7 +23,6 @@ export class OperationSupport {
   constructor(
     readonly connections: ConfluenceConnections,
     readonly artifacts: LocalArtifacts,
-    private authorize: Authorize,
   ) {
     this.continuations = new Continuations(artifacts.root);
   }
@@ -114,35 +104,7 @@ export class OperationSupport {
       throw new ServiceError("property_missing", "未找到唯一匹配的内容属性");
     return result.results[0];
   }
-  async approve(
-    ctx: Execution,
-    operation: string,
-    target: string,
-    detail: Json,
-    local = false,
-  ) {
-    this.connections.assertCurrent(ctx.connection);
-    ctx.signal.throwIfAborted();
-    if (!local && ctx.connection.settings.access === "read")
-      throw new ServiceError("permission", "此连接仅允许读取");
-    if (local || ctx.connection.settings.access !== "write") {
-      const accepted = await this.authorize(
-        {
-          sessionId: ctx.sessionId,
-          operation,
-          target,
-          detail: this.connections.redact(JSON.stringify(detail, null, 2)),
-        },
-        ctx.signal,
-      );
-      if (!accepted)
-        throw new ServiceError("cancelled", "用户未授权此操作，未执行");
-    }
-    this.connections.assertCurrent(ctx.connection);
-    ctx.signal.throwIfAborted();
-  }
-  async authorizeLocal(
-    ctx: Execution,
+  async prepareDestination(
     destination?: Destination,
   ): Promise<Destination | undefined> {
     if (!destination?.overwrite || !destination.path) return destination;
@@ -153,13 +115,6 @@ export class OperationSupport {
     if (!exists) return { ...destination, overwrite: false };
     if (!exists.isFile() || exists.isSymbolicLink())
       throw new Error("覆盖目标必须是普通文件");
-    await this.approve(
-      ctx,
-      "覆盖本地文件",
-      path,
-      { path, bytes: exists.size },
-      true,
-    );
     return { ...destination, expectedFile: fileIdentity(exists) };
   }
 }

@@ -11,13 +11,8 @@ export async function writeServiceCollaboration(
 ): Promise<Json> {
   const d = ctx.adapter;
   const h = d.http;
-  const approve = (
-    detail: Json,
-    target = a.operation === "set_space_watch" ? a.space : a.taskId,
-  ) => ctx.operations.approve(ctx, a.operation, String(target), detail);
   if (a.operation === "set_space_watch") {
     const space = await d.space(a.space);
-    await approve({ space: space.name, watching: a.watching });
     return dispatch(() =>
       h.json(
         d.v1(`/user/watch/space/${encodeURIComponent(space.key)}`),
@@ -32,10 +27,6 @@ export async function writeServiceCollaboration(
     const current = await h.json(path);
     if (current.status !== a.expectedStatus)
       throw new ServiceError("conflict", "任务状态已改变，请重新读取");
-    await approve(
-      { taskId: a.taskId, before: current, after: a.status },
-      a.taskId,
-    );
     const latest = await h.json(path);
     if (
       latest.status !== current.status ||
@@ -62,13 +53,7 @@ export async function writePageCollaboration(
 ): Promise<Json> {
   const d = ctx.adapter;
   const h = d.http;
-  const approve = (detail: Json, target = p.id) =>
-    ctx.operations.approve(ctx, a.operation, String(target), detail);
   if (a.operation === "add_labels" || a.operation === "remove_label") {
-    await approve({
-      page: p.title,
-      labels: a.operation === "add_labels" ? a.labels : [a.label],
-    });
     return dispatch(() =>
       h.json(
         d.v1(
@@ -82,7 +67,6 @@ export async function writePageCollaboration(
     );
   }
   if (a.operation === "set_watch") {
-    await approve({ page: p.title, watching: a.watching });
     return dispatch(() =>
       h.json(
         d.v1(`/user/watch/content/${p.id}`),
@@ -103,12 +87,6 @@ export async function writePageCollaboration(
         throw e;
     }
     d.assertVersion(current?.version?.number ?? 0, a.expectedVersion);
-    await approve({
-      page: p.title,
-      key: a.key,
-      before: current?.value,
-      after: a.operation === "set_property" ? a.value : undefined,
-    });
     const endpoint = d.cloud
       ? d.v2(
           `/${d.collection(p.type)}/${p.id}/properties${current ? `/${current.id}` : ""}`,
@@ -136,19 +114,6 @@ export async function writePageCollaboration(
     a.operation === "add_restriction" ||
     a.operation === "remove_restriction"
   ) {
-    const restrictions = await h.json(
-      d.v1(
-        `/content/${p.id}/restriction/byOperation?expand=restrictions.user,restrictions.group`,
-      ),
-    );
-    await approve({
-      page: p.title,
-      operation: a.operation,
-      restriction: a.restriction,
-      subject: a.subject,
-      currentRestrictions: restrictions,
-      note: "仅修改直接限制；不会改变父页面继承的访问限制。移除最后一个直接限制可能扩大访问范围。",
-    });
     const identity =
       a.subject.type === "group"
         ? `group/${encodeURIComponent(a.subject.id)}`

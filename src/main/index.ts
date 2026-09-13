@@ -83,25 +83,7 @@ else {
       );
       const redact = (text: string) =>
         credentials.redact(connections.redact(text));
-      const confluence = new ConfluenceService(
-        connections,
-        artifacts,
-        async (preview, signal) => {
-          if (!window || window.isDestroyed()) return false;
-          const result = await dialog.showMessageBox(window, {
-            type: "question",
-            title: "Confluence",
-            message: `${preview.operation} · ${preview.target}`,
-            detail: `会话：${preview.sessionId}\n${preview.detail}`,
-            buttons: ["取消", "执行此变更"],
-            defaultId: 0,
-            cancelId: 0,
-            noLink: true,
-            signal,
-          });
-          return !signal.aborted && result.response === 1;
-        },
-      );
+      const confluence = new ConfluenceService(connections, artifacts);
       const runtime = await ModelRuntime.create({
         credentials,
         modelsPath: null,
