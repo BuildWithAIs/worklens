@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
-test("history fades long titles and marks only unseen completed replies", async ({ page }, testInfo) => {
+test("history truncates long titles and marks only unseen completed replies", async ({ page }, testInfo) => {
   await mockWorklens(page);
   await page.addInitScript(() => {
     const invoke = window.worklens.invoke;
@@ -27,13 +27,13 @@ test("history fades long titles and marks only unseen completed replies", async 
   const title = first.locator(".history-title-clip");
   await page.locator(".chat-header").hover();
   await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "28px");
-  await expect(title).toHaveAttribute("data-overflow", "true");
-  await expect(title).toHaveCSS("text-overflow", "clip");
-  expect(await title.evaluate(el => getComputedStyle(el).maskImage)).toContain("linear-gradient");
+  await expect(title).toHaveAttribute("data-truncated", "true");
+  await expect(title).toHaveCSS("text-overflow", "ellipsis");
+  await expect(title).toHaveText("A long conversation tit…");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await first.locator(".conversation-open").hover();
   await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "36px");
-  await expect(first.locator(".history-title-text")).toHaveCSS("animation-name", "history-title-pan");
+  await expect(first.locator(".history-title-text")).toHaveCSS("animation-name", "none");
   await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(first.locator(".history-title-text")).toHaveCSS("animation-name", "none");

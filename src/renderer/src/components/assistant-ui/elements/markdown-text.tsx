@@ -6,9 +6,10 @@ import {
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
+import { HtmlArtifactCard, HtmlFileCard, isHtmlArtifact } from "@/components/worklens/HtmlArtifact";
 import remarkGfm from "remark-gfm";
 import { type FC, memo, useMemo, useRef } from "react";
-import type { TextMessagePartProps } from "@assistant-ui/react";
+import { useAuiState, type TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
@@ -60,10 +61,13 @@ export const MarkdownText = memo(MarkdownTextImpl);
 
 const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const ready = useAuiState(s => s.message.role === "assistant" && s.message.status?.type !== "running");
   const onCopy = () => {
     if (!code || isCopied) return;
     copyToClipboard(code);
   };
+
+  if (ready && isHtmlArtifact(language ?? "", code)) return <HtmlArtifactCard code={code} />;
 
   return (
     <div className="aui-code-header-root border-border/50 bg-muted/50 mt-3 flex items-center justify-between rounded-t-xl border border-b-0 px-3.5 py-1.5 text-xs">
@@ -252,6 +256,9 @@ const defaultComponents = memoizeMarkdownComponents({
   ),
   code: function Code({ className, ...props }) {
     const isCodeBlock = useIsMarkdownCodeBlock();
+    const assistant = useAuiState(s => s.message.role === "assistant");
+    const path = typeof props.children === "string" ? props.children.trim() : "";
+    if (assistant && !isCodeBlock && /^(?:\/|[A-Za-z]:[\\/]).*\.html?$/i.test(path)) return <HtmlFileCard path={path} />;
     return (
       <code
         className={cn(

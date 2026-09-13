@@ -1,10 +1,11 @@
+import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
 import { Hint } from "@/components/ui/tooltip";
-import { toolProgress } from "@/lib/activity-progress";
+import { toolProgress, toolActivityLabel, toolActivitySummary } from "@/lib/activity-progress";
 import { activityIcon } from "@/lib/activity-icon";
 import { systemText } from "@/lib/system-text";
 import { useLocale } from "@/lib/locale";
-import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
+import { useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 import {
   AssistantRuntimeProvider,
   ExportedMessageRepository,
@@ -197,7 +198,7 @@ function WorkLensTool(props: ToolCallMessagePartProps) {
   );
   return (
     <ToolFallback
-      summary={summary}
+      summary={toolActivityLabel(props.toolName, summary, props.status.type === "running", language)}
       icon={activityIcon(props.toolName)}
       {...props}
       toolName={
@@ -212,14 +213,17 @@ function WorkLensTool(props: ToolCallMessagePartProps) {
   );
 }
 
-function ActivityProgress({ progress, kind, active = true }: { progress: string; kind: string; active?: boolean }) {
+function ActivityProgress({ progress, kind, active = true, summary }: { progress: string; kind: string; active?: boolean; summary?: string }) {
   const shimmerRef = useShimmer();
+  const { language } = useLocale();
+  const label = ["thinking", "working", "compacting", "retrying", "stopping"].includes(kind)
+    ? progress : (!active && summary) || toolActivityLabel(kind, progress, active, language);
   const Icon = activityIcon(kind);
   return (
     <span data-slot="activity-progress" className="flex w-full min-w-0 items-start gap-2 text-sm leading-6 text-muted-foreground">
       {kind !== "thinking" && kind !== "working" && <Icon aria-hidden="true" className="mt-1 size-4 shrink-0" />}
       <Hint content={progress}>
-        <span ref={shimmerRef} className={`min-w-0 truncate ${active ? "shimmer motion-reduce:animate-none" : ""}`} tabIndex={0}>{progress}</span>
+        <span ref={shimmerRef} className={`min-w-0 truncate ${active ? "shimmer motion-reduce:animate-none" : ""}`} tabIndex={0}>{label}</span>
       </Hint>
     </span>
   );
@@ -228,7 +232,7 @@ function ActivityProgress({ progress, kind, active = true }: { progress: string;
 function WorkLensLiveStatus() {
   const custom = useAuiState((s) => s.message.metadata.custom);
   if (typeof custom.liveProgress !== "string" || !custom.liveProgress) return null;
-  return <div className="mt-2"><ActivityProgress progress={custom.liveProgress} kind={String(custom.progressKind ?? "working")} active={custom.progressActive !== false} /></div>;
+  return <div className="mt-2"><ActivityProgress progress={custom.liveProgress} kind={String(custom.progressKind ?? "working")} active={custom.progressActive !== false} summary={typeof custom.toolSummary === "string" ? custom.toolSummary : undefined} /></div>;
 }
 
 function WorkLensToolGroup({
@@ -296,7 +300,7 @@ function WorkLensToolGroup({
         <ReasoningText>
           {!running && children}
           {running && typeof progress === "string" && progress && (
-            <ActivityProgress progress={progress} kind={String(timing.progressKind ?? "working")} active={timing.progressActive !== false} />
+            <ActivityProgress progress={progress} kind={String(timing.progressKind ?? "working")} active={timing.progressActive !== false} summary={typeof timing.toolSummary === "string" ? timing.toolSummary : undefined} />
           )}
         </ReasoningText>
       </ReasoningContent>}
@@ -314,11 +318,16 @@ export function AgentThread({
   modelMenu,
 }: Props) {
   const { language } = useLocale();
+  // Order live blocks by their first visible content, not an empty message shell.
+  const liveOrder = useRef({ conversationId: view?.id, next: 0, ranks: new Map<string, number>() });
   // Presentation only: one activity disclosure per turn; source records stay intact.
   const messages = useMemo(() => {
     const convert = convertMessage(view, language);
     const displayed: ThreadMessageLike[] = [];
     const source = view?.messages ?? [];
+    if (liveOrder.current.conversationId !== view?.id || !view || !activePhases.has(view.phase)) {
+      liveOrder.current = { conversationId: view?.id, next: 0, ranks: new Map() };
+    }
     let turn: { message: MessageView; index: number }[] = [];
     const flush = () => {
       if (!turn.length) return;
@@ -327,6 +336,17 @@ export function AgentThread({
       // the API has no progress/final channel, so never guess from wording.
       const status = messageStatus(view, turn[turn.length - 1].index, language);
       const running = status.type === "running";
+      if (running) {
+        const order = liveOrder.current;
+        const latestSource = turn.at(-1);
+        turn = turn.filter(entry => entry.message.role !== "assistant" || entry.message.text.trim() || entry === latestSource);
+        for (const { message } of turn) {
+          if ((message.role === "tool" || message.text.trim()) && !order.ranks.has(message.id)) {
+            order.ranks.set(message.id, order.next++);
+          }
+        }
+        turn.sort((a, b) => (order.ranks.get(a.message.id) ?? Infinity) - (order.ranks.get(b.message.id) ?? Infinity));
+      }
       const lastTool = turn.findLastIndex(
         ({ message }) => message.role === "tool",
       );
@@ -340,7 +360,7 @@ export function AgentThread({
         for (const part of converted.content) {
           // Raw reasoning is available only inside the completed disclosure.
           // During a live turn, expose its state, never its expanding transcript.
-          if (running && part.type === "reasoning") continue;
+          if (running && (part.type === "reasoning" || (part.type === "text" && !part.text.trim()))) continue;
           if (part.type === "text" && !running && position < lastTool) {
             // Display-only reasoning part keeps narration inside the standard
             // process disclosure. The source text and message are untouched.
@@ -357,7 +377,7 @@ export function AgentThread({
         ({ message }) => message.runStartedAt,
       )?.message;
       const latestRun =
-        turn[turn.length - 1].index === source.length - 1
+        turn.some(({ index }) => index === source.length - 1)
           ? view?.usage?.run
           : undefined;
       const runStartedAt = recordedTiming?.runStartedAt ?? latestRun?.startedAt;
@@ -408,7 +428,7 @@ export function AgentThread({
         ? [{ type: "reasoning", text: progress }]
         : activity;
       const liveTextSegments = running ? turn.flatMap(({ message }, position) =>
-        message.role === "assistant" && message.text ? [{ message, position }] : [],
+        message.role === "assistant" && message.text.trim() ? [{ message, position }] : [],
       ) : [];
       const prefixTool = liveTextSegments.length
         ? turn.slice(0, liveTextSegments[0].position).findLast(({ message }) => message.role === "tool")?.message
@@ -424,6 +444,7 @@ export function AgentThread({
               progress: prefixTool ? toolProgress(prefixTool, language) : progress,
               progressKind: prefixTool ? prefixTool.toolName ?? "tool" : progressKind,
               progressActive: prefixTool ? false : progressActive,
+              toolSummary: toolActivitySummary(turn.slice(0, liveTextSegments[0]?.position ?? turn.length).map(({ message }) => message), language),
               showProgress: answer.length === 0 || !!prefixTool,
               runStartedAt,
               runElapsedMs,
@@ -451,6 +472,7 @@ export function AgentThread({
             metadata: { custom: {
               sentAt: segment.message.createdAt, hasActivity: true, liveSegment: true,
               liveProgress,
+              toolSummary: toolActivitySummary(turn.slice(segment.position + 1, nextPosition).map(({ message }) => message), language),
               progressKind: lastSegment ? progressKind : segmentTool?.toolName ?? "tool",
               progressActive: lastSegment && progressActive,
             } },
@@ -501,7 +523,7 @@ export function AgentThread({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ModelMenuContext.Provider value={modelMenu}>
-        <div className="agent-thread">
+        <HtmlArtifactWorkspace conversationId={view?.id} running={!!view && activePhases.has(view.phase)}><div className="agent-thread">
           <Thread
             components={{
               ToolFallback: WorkLensTool,
@@ -509,7 +531,7 @@ export function AgentThread({
               LiveStatus: WorkLensLiveStatus,
             }}
           />
-        </div>
+        </div></HtmlArtifactWorkspace>
       </ModelMenuContext.Provider>
     </AssistantRuntimeProvider>
   );

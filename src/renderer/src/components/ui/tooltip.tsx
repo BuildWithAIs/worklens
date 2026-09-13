@@ -87,7 +87,7 @@ function OverflowHint({ children, content }: { children: ReactElement; content: 
         disableHoverablePopup
         onOpenChange={(next) => {
           const label = trigger.current?.querySelector<HTMLElement>(".truncate")
-          setOpen(next && !!label && label.scrollWidth > label.clientWidth)
+          setOpen(next && !!label && (label.scrollWidth > label.clientWidth || label.dataset.truncated === "true"))
         }}
       >
         <TooltipTrigger ref={trigger} render={children} onPointerLeave={() => setOpen(false)} onBlur={() => setOpen(false)} />

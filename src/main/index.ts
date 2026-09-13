@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   app,
   BrowserWindow,
@@ -148,6 +150,18 @@ else {
                 break;
               case "clearConnection":
                 providers!.clearConnection(input.provider);
+                break;
+              case "htmlFileAction": {
+                const file = await agents!.htmlActionFile(input.id, { path: input.path, code: input.code });
+                if (input.action === "reveal") shell.showItemInFolder(file);
+                else {
+                  if (process.platform !== "darwin") throw new Error("Chrome opening is currently supported on macOS only");
+                  await promisify(execFile)("/usr/bin/open", ["-a", "Google Chrome", file]);
+                }
+                break;
+              }
+              case "previewHtml":
+                value = await agents!.previewHtml(input.id, input.path);
                 break;
               case "open":
                 value = await agents!.open(input.id);

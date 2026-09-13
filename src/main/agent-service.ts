@@ -1,3 +1,4 @@
+import { readHtmlPreview, htmlActionFile } from "./html-preview";
 import {
   createAgentSession,
   SessionManager,
@@ -344,6 +345,14 @@ export class AgentService {
     return this.operations.run(id, async () =>
       this.view(id, await this.get(id)),
     );
+  }
+  async htmlActionFile(id: string, source: { path?: string; code?: string }) {
+    const view = await this.open(id);
+    return htmlActionFile(this.paths.runtime, source, view.messages);
+  }
+  async previewHtml(id: string, path: string) {
+    const view = await this.open(id);
+    return readHtmlPreview(this.paths.runtime, path, view.messages);
   }
   private async ensureSession(runtime: Runtime, selection: Selection) {
     const model = this.assertSelection(selection);

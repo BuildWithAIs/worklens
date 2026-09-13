@@ -130,6 +130,17 @@ test("compact tool activity, history actions and fluid message width", async ({
   });
   await page.goto("/");
   const longMessage = page.locator(".aui-user-message-content").first();
+  for (const [theme, background, foreground] of [
+    ["dark", "rgb(75, 48, 128)", "rgb(255, 255, 255)"],
+    ["light", "rgb(238, 230, 255)", "rgb(53, 36, 85)"],
+  ]) {
+    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    for (const bubble of await page.locator(".aui-user-message-content").all()) {
+      await expect(bubble).toHaveCSS("background-color", background);
+      await expect(bubble).toHaveCSS("color", foreground);
+    }
+  }
+
   const expandMessage = longMessage.getByRole("button", { name: "Show more", exact: true });
   await expect(expandMessage).toHaveAttribute("aria-expanded", "false");
   const collapsedHeight = (await longMessage.boundingBox()).height;
@@ -231,7 +242,7 @@ test("compact tool activity, history actions and fluid message width", async ({
   const deletion = page.getByRole("dialog", { name: "Delete conversation?" });
   await expect(deletion).toBeVisible();
   await expect(deletion.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
-  await expect(deletion).toContainText("permanently delete");
+  await expect(deletion).toContainText("This permanently deletes this conversation. This cannot be undone.");
   expect((await deletion.boundingBox()).width).toBeLessThanOrEqual(440);
   await page.screenshot({ path: testInfo.outputPath("delete-confirmation.png"), animations: "disabled" });
   await page.keyboard.press("Escape");
@@ -350,8 +361,8 @@ test("compact tool activity, history actions and fluid message width", async ({
   await expect(page.getByText("Checking the latest source.", { exact: true })).toBeVisible();
   await expect(page.locator('[data-slot="aui_assistant-message-indicator"]')).toHaveCount(0);
   await page.evaluate(() => window.finishToolFixture());
-  await expect(toolRow).toContainText("Completed bash");
-  await expect(page.locator('[data-slot="activity-progress"]').last()).toContainText("Completed bash");
+  await expect(toolRow).toContainText("Ran command");
+  await expect(page.locator('[data-slot="activity-progress"]').last()).toContainText("Ran command");
   await expect(groups.nth(1)).toHaveText(/Working for/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByText("Checking the latest source.", { exact: true })).toBeVisible();

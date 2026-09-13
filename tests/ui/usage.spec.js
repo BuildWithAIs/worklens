@@ -261,3 +261,16 @@ test("live global arriving before first bootstrap is retained", async ({
   await page.getByRole("tab", { name: "Details", exact: true }).click();
   await expect(page.locator(".usage-total strong")).toHaveText("5M");
 });
+
+
+test("usage popover stays above the header fade", async ({ page }) => {
+  await fixture(page);
+  await page.getByRole("button", { name: "Open current usage details" }).click();
+  const popup = page.locator(".usage-popover");
+  await expect(popup).toBeVisible();
+  const layers = await popup.evaluate(node => ({
+    popup: Number(getComputedStyle(node.parentElement).zIndex),
+    header: Number(getComputedStyle(document.querySelector(".chat-header")).zIndex),
+  }));
+  expect(layers.popup).toBeGreaterThan(layers.header);
+});

@@ -34,11 +34,13 @@ async function setup(page, thinkingOnly = false) {
       messages = [],
       phase = "generating",
       finishTool = false,
+      patch,
     }) => {
       if (finishTool)
         for (const message of view.messages)
           if (message.role === "tool") message.status = "success";
-      view.messages.push(...messages);
+      if (patch) Object.assign(view.messages.find(message => message.id === patch.id), patch);
+    view.messages.push(...messages);
       view.phase = phase;
       window.deliver({
         conversationId: view.id,
@@ -98,6 +100,9 @@ for (const theme of ["light", "dark"]) {
         i,
       );
       await expect(row).toHaveText(`Searching · query-${i}`);
+      await row.locator("span").hover();
+      await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(`Searching · query-${i}`);
+      await page.mouse.move(0, 0);
       await expect(root.locator('[data-slot="activity-progress"]')).toHaveCount(
         1,
       );
@@ -153,7 +158,10 @@ for (const theme of ["light", "dark"]) {
     );
     await expect(row.locator(".lucide-square-terminal")).toHaveCount(1);
     await expect(row.locator("span")).toHaveCSS("white-space", "nowrap");
-    expect(await row.textContent()).toBe("Running bash · rg --files " + "long-path/".repeat(100));
+    await expect(row).toHaveText("Running bash · rg --files " + "long-path/".repeat(100));
+    await row.locator("span").hover();
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText("Running bash · rg --files " + "long-path/".repeat(100));
+    await page.mouse.move(0, 0);
     await expect(row.locator("span")).toHaveCSS("text-overflow", "ellipsis");
     const text = row.locator("span");
     expect(await text.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
@@ -189,7 +197,9 @@ for (const theme of ["light", "dark"]) {
     await expect(
       root.locator('[data-slot="tool-fallback-trigger"]'),
     ).toHaveCount(13);
+    await root.locator('[data-slot="tool-fallback-trigger"]').first().click();
     await expect(root).toContainText("query-0");
+    await root.locator('[data-slot="tool-fallback-trigger"]').nth(11).click();
     await expect(root).toContainText("query-11");
   });
 }
@@ -229,7 +239,7 @@ test("latest status covers special phases, unknown tools and cancelled answers",
   );
   await expect(row.locator(".lucide-wrench")).toHaveCount(1);
   await page.evaluate(() => window.updateActivity({ finishTool: true }));
-  await expect(row).toContainText("Completed future_connector");
+  await expect(row).toContainText("Used tool");
   await expect(row.locator(".shimmer")).toHaveCount(0);
   await page.evaluate(() =>
     window.updateActivity({
@@ -355,7 +365,7 @@ test("new narration appends below the previous tool without rewriting earlier te
   await page.evaluate(() => window.updateActivity({ finishTool: true, messages: [{ id: "second-text", role: "assistant", text: "Now I will check another source." }] }));
   const second = page.getByText("Now I will check another source.", { exact: true });
   await expect(second).toBeVisible();
-  const read = page.locator('[data-slot="activity-progress"]').filter({ hasText: "Read · first.md" });
+  const read = page.locator('[data-slot="activity-progress"]').filter({ hasText: "Read file" });
   await expect(read).toBeVisible();
   expect((await read.boundingBox()).y).toBeGreaterThan((await first.boundingBox()).y);
   expect((await second.boundingBox()).y).toBeGreaterThan((await read.boundingBox()).y);
@@ -393,4 +403,41 @@ test("finishing a live turn does not invent alternative message versions", async
   await expect(page.getByText("The only final answer.", { exact: true })).toBeVisible();
   await expect(page.getByText("Another single answer.", { exact: true })).toBeVisible();
   await expect(page.locator(".aui-branch-picker-root")).toHaveCount(0);
+});
+
+test("completed tools aggregate within narration boundaries", async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => window.updateActivity({ phase: "tool", messages: [
+    { id: "r1", role: "tool", toolName: "read", args: '{"path":"a.md"}', status: "success", text: "" },
+    { id: "r2", role: "tool", toolName: "read", args: '{"path":"b.md"}', status: "success", text: "" },
+    { id: "b1", role: "tool", toolName: "bash", args: '{"command":"echo hello"}', status: "running", text: "" },
+  ] }));
+  const rows = page.locator('[data-slot="activity-progress"]');
+  await expect(rows).toHaveText("Running bash · echo hello");
+  await page.evaluate(() => window.updateActivity({ finishTool: true, messages: [
+    { id: "next-narration", role: "assistant", text: "Next step." },
+  ] }));
+  await expect(rows).toHaveText("Read files, ran command");
+  await expect(rows.locator(".shimmer")).toHaveCount(0);
+  await page.evaluate(() => window.updateActivity({ phase: "tool", messages: [
+    { id: "b2", role: "tool", toolName: "bash", args: '{"command":"echo next"}', status: "running", text: "" },
+  ] }));
+  await expect(rows).toHaveText(["Read files, ran command", "Running bash · echo next"]);
+  await page.evaluate(() => window.updateActivity({ finishTool: true }));
+  await expect(rows).toHaveText(["Read files, ran command", "Ran command"]);
+});
+
+
+test("empty narration never reserves a row and late text stays below the visible command", async ({ page }) => {
+  await setup(page, true);
+  await page.evaluate(() => window.updateActivity({ phase: "tool", patch: { id: "first", text: " \n " }, messages: [{ id: "early-command", role: "tool", toolName: "bash", args: '{"command":"pwd"}', text: "", status: "running" }] }));
+  const row = page.locator('[data-slot="activity-progress"]');
+  await expect(row).toHaveCount(1);
+  await expect(page.locator('[data-slot="aui_assistant-message-root"][data-has-activity="true"]')).toHaveCount(0);
+  const y = (await row.boundingBox()).y;
+  await page.evaluate(() => window.updateActivity({ finishTool: true, patch: { id: "first", text: "The description arrived later." } }));
+  const text = page.getByText("The description arrived later.", { exact: true });
+  await expect(text).toBeVisible();
+  expect((await row.boundingBox()).y).toBe(y);
+  expect((await text.boundingBox()).y).toBeGreaterThan((await row.boundingBox()).y);
 });
