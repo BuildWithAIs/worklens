@@ -59,7 +59,7 @@ export async function result(ctx: Execution, input: Json) {
         {},
         ctx.signal,
       );
-      artifacts.push(saved);
+      // Internal retrieval files are available to the Agent, not user-facing file cards.
       resultPath = saved.path;
     } catch (error) {
       // Output persistence must not turn a completed remote mutation into a failed mutation.

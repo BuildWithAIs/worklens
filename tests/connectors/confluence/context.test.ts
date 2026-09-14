@@ -38,6 +38,7 @@ test("Pi compaction retains page offsets and retrieval handle before long conten
   const saved = JSON.parse(await readFile(out.data.resultPath, "utf8"));
   expect(saved.content).toHaveLength(4000);
   expect(saved.version).toBe(7);
+  expect(out.result.details).toMatchObject({ artifacts: [] });
 });
 
 test("list projection keeps navigation compact and preserves original records in a file", async () => {
@@ -71,6 +72,7 @@ test("list projection keeps navigation compact and preserves original records in
   const compacted = summary(out.content as { type: "text"; text: string }[]);
   expect(compacted).toContain(data.continuation);
   expect(compacted).toContain(data.resultPath);
+  expect(out.details).toMatchObject({ artifacts: [] });
   expect(
     JSON.parse(await readFile(data.resultPath, "utf8")).items[0].custom,
   ).toBe("preserved");

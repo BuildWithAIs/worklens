@@ -32,6 +32,7 @@ test("downloads return registered files; export uses source links and reports pa
   });
   expect(downloaded.result.isError).toBe(false);
   const artifact = downloaded.data.artifacts[0];
+  expect(downloaded.result.details).toMatchObject({ artifacts: [artifact] });
   expect(artifact.name).toBe("diagram.txt");
   expect(artifact.path).toContain("session1");
   expect(await readFile(artifact.path, "utf8")).toBe(
@@ -44,6 +45,9 @@ test("downloads return registered files; export uses source links and reports pa
     attachmentIds: ["999"],
   });
   expect(exported.data.status).toBe("partial");
+  expect(exported.result.details).toMatchObject({
+    artifacts: exported.data.artifacts,
+  });
   expect(await readFile(exported.data.artifacts[0].path, "utf8")).toContain(
     f.fixture.url,
   );
