@@ -74,7 +74,7 @@ export class LocalArtifacts {
   }
   async directory(
     sessionId: string,
-    connector: "confluence" | "jira" = "confluence",
+    connector: "confluence" | "jira" | "github" = "confluence",
   ) {
     if (!/^[\w-]+$/.test(sessionId)) throw new Error("Invalid session ID");
     const directory = join(
@@ -93,7 +93,7 @@ export class LocalArtifacts {
     source: AsyncIterable<Uint8Array> | string,
     destination: Destination = {},
     signal?: AbortSignal,
-    connector: "confluence" | "jira" = "confluence",
+    connector: "confluence" | "jira" | "github" = "confluence",
   ): Promise<LocalArtifact> {
     if (destination.path && destination.directory)
       throw new Error("只能指定文件路径或目录其中之一");

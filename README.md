@@ -12,6 +12,10 @@ Built with Electron, React, TypeScript, Tailwind CSS, and Pi.
 
 Connect one Confluence site in **Settings → Connections** using your URL and token. Search/read documents, make version-aware edits, publish Markdown with attachments, and download/export files into the current conversation. Cloud supports email/API-token authentication; Data Center supports PAT authentication. See [setup, operations, safeguards and validation limits](docs/connectors/confluence.md).
 
+## GitHub
+
+Connect one GitHub site in **Settings → Connections** by entering its URL and a Personal Access Token. The address starts empty and supports your company's GitHub instance as well as GitHub.com. Explore code, manage issues and PRs, review changes, investigate CI, maintain releases, and work with Projects and Discussions. The integration uses Octokit and requires no GitHub CLI installation. See [setup, supported operations and validation limits](docs/connectors/github.md).
+
 ## Local development
 
 Requires Node.js 24 and npm.

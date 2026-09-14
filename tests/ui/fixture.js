@@ -162,6 +162,17 @@ export async function mockWorklens(page, options = {}) {
           data.jira = { ...settings, configured: true };
           return structuredClone(data.jira);
         }
+        if (name === "githubSave") {
+          if (!input.url) throw Error("Enter a GitHub URL");
+          const { token, ...settings } = input;
+          data.github = { ...settings, configured: true, login: "fixture-user" };
+          return structuredClone(data.github);
+        }
+        if (name === "githubRemove") { data.github = undefined; return; }
+        if (name === "githubTest") {
+          if (!input.url) throw Error("Enter a GitHub URL");
+          return `fixture-user · ${input.url}`;
+        }
         if (name === "jiraRemove") { data.jira = undefined; return; }
         if (name === "jiraTest") {
           if (!input.url) throw Error("Enter a Jira URL");

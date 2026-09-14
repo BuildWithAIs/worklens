@@ -43,7 +43,7 @@ for (const theme of ["light", "dark"]) {
       const before = await page.evaluate(() => window.calls.length);
       for (const name of ["Jira", "GitHub"]) {
         const button = content.getByRole("button", { name: `${language === "en" ? "Connect" : "连接"} ${name}`, exact: true });
-        await expect(button).toBeDisabled();
+        await expect(button).toBeEnabled();
       }
       await expect(content.getByRole("button", { name: `${language === "en" ? "Connect" : "连接"} Confluence`, exact: true })).toBeEnabled();
       expect(await page.evaluate(() => window.calls.length)).toBe(before);

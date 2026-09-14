@@ -176,6 +176,7 @@ export interface Recovery {
 export interface Bootstrap {
   confluence?: ConfluenceConnection;
   jira?: JiraConnection;
+  github?: GitHubConnection;
   globalUsage?: GlobalUsage;
   settings: Settings;
   providers: ProviderInfo[];
@@ -190,6 +191,9 @@ export interface Requests {
   jiraSave: { input: JiraSettingsInput; output: JiraConnection };
   jiraTest: { input: JiraSettingsInput; output: string };
   jiraRemove: { input: undefined; output: void };
+  githubSave: { input: GitHubSettingsInput; output: GitHubConnection };
+  githubTest: { input: GitHubSettingsInput; output: string };
+  githubRemove: { input: undefined; output: void };
   htmlFileAction: {
     input: {
       id: string;
@@ -301,6 +305,16 @@ export interface JiraSettingsInput {
   token?: string;
   cloudId?: string;
   tokenType: "classic" | "scoped";
+}
+export interface GitHubSettingsInput {
+  url: string;
+  token?: string;
+}
+export interface GitHubConnection extends Omit<GitHubSettingsInput, "token"> {
+  configured: boolean;
+  login?: string;
+  serverVersion?: string;
+  error?: string;
 }
 export interface JiraConnection extends Omit<JiraSettingsInput, "token"> {
   configured: boolean;

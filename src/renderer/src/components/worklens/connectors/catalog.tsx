@@ -5,6 +5,7 @@ import jira from "@/assets/brands/jira.svg?url";
 import confluence from "@/assets/brands/confluence.svg?url";
 import { JiraSettings } from "./jira/JiraSettings";
 import { ConfluenceSettings } from "./confluence/ConfluenceSettings";
+import { GitHubSettings } from "./github/GitHubSettings";
 
 export interface ConnectorSettingsProps {
   data: Bootstrap;
@@ -45,5 +46,14 @@ export const connectorCatalog: readonly CatalogEntry[] = [
     connection: (data) => data.confluence,
     Settings: ConfluenceConfiguration,
   },
-  { id: "github", name: "GitHub", icon: github },
+  {
+    id: "github",
+    name: "GitHub",
+    icon: github,
+    keywords: "Enterprise code issues pull requests",
+    connection: (data) => data.github,
+    Settings: ({ data, ...props }) => (
+      <GitHubSettings connection={data.github} {...props} />
+    ),
+  },
 ];
