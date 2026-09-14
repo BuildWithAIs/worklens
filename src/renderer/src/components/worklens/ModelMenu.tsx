@@ -17,20 +17,20 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "./SearchInput";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 import type {
   Bootstrap,
   Selection,
   Thinking,
 } from "../../../../shared/contracts";
-const levels: Record<Thinking, [string, string]> = {
-  off: ["Off", "关闭"],
-  minimal: ["Minimal", "最少"],
-  low: ["Low", "低"],
-  medium: ["Medium", "中"],
-  high: ["High", "高"],
-  xhigh: ["Extra high", "极高"],
-  max: ["Max", "最高"],
+const levelKeys: Record<Thinking, `models.levels.${Thinking}`> = {
+  off: "models.levels.off",
+  minimal: "models.levels.minimal",
+  low: "models.levels.low",
+  medium: "models.levels.medium",
+  high: "models.levels.high",
+  xhigh: "models.levels.xhigh",
+  max: "models.levels.max",
 };
 export function ModelMenu({
   data,
@@ -45,7 +45,7 @@ export function ModelMenu({
   onChange: (value: Selection) => void;
   onManage: () => void;
 }) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [showThinking, setShowThinking] = useState(false);
@@ -102,15 +102,15 @@ export function ModelMenu({
             />
           }
           disabled={disabled}
-          aria-label={t("Choose model", "选择模型")}
+          aria-label={t("models.chooseModel")}
         >
           <ProviderIcon provider={value?.provider} />
           <span className="chat-model-name truncate">
-            {current?.name ?? t("Choose model", "选择模型")}
+            {current?.name ?? t("models.chooseModel")}
           </span>
           {current?.available && value && current.levels.length > 1 && (
             <span className="text-muted-foreground shrink-0">
-              · {t(...levels[value.thinking])}
+              · {t(levelKeys[value.thinking])}
             </span>
           )}
           <ChevronDown />
@@ -131,17 +131,17 @@ export function ModelMenu({
                 <Button
                   variant="ghost"
                   className="chat-thinking-back"
-                  aria-label={t("Back to models", "返回模型列表")}
+                  aria-label={t("models.backToModels")}
                   onClick={() => setShowThinking(false)}
                 >
                   <ChevronLeft data-icon="inline-start" />
-                  {t("Thinking", "思考强度")}
+                  {t("models.thinking")}
                 </Button>
               </div>
               <RadioGroup
                 ref={thinkingList}
                 className="chat-thinking-options"
-                aria-label={t("Thinking level", "思考强度")}
+                aria-label={t("models.thinkingLevel")}
                 value={value.thinking}
                 onValueChange={(thinking) => {
                   onChange({ ...value, thinking: thinking as Thinking });
@@ -163,7 +163,7 @@ export function ModelMenu({
                     className="chat-thinking-option"
                     onClick={() => setShowThinking(false)}
                   >
-                    <span>{t(...levels[level])}</span>
+                    <span>{t(levelKeys[level])}</span>
                     <Radio.Indicator>
                       <Check />
                     </Radio.Indicator>
@@ -176,8 +176,8 @@ export function ModelMenu({
             <div className="chat-model-search">
               <SearchInput
                 autoFocus
-                aria-label={t("Search models", "搜索模型")}
-                placeholder={t("Search models…", "搜索模型…")}
+                aria-label={t("models.searchModels")}
+                placeholder={t("models.searchModelsPlaceholder")}
                 value={query}
                 onValueChange={setQuery}
                 onKeyDown={(e) => {
@@ -252,19 +252,10 @@ export function ModelMenu({
               {!groups.length && (
                 <p className="chat-model-empty">
                   {query.trim()
-                    ? t(
-                        "No matching models. Try another search.",
-                        "没有匹配的模型，请调整搜索条件。",
-                      )
+                    ? t("models.emptySearch")
                     : hasConfiguredProvider
-                      ? t(
-                          "No models to show. Check availability and visibility in Models.",
-                          "暂无可显示的模型，请在模型管理中检查可用状态与显示设置。",
-                        )
-                      : t(
-                          "Connect a provider to choose a model.",
-                          "连接供应商后即可选择模型。",
-                        )}
+                      ? t("models.emptyVisibleModels")
+                      : t("models.emptyProviders")}
                 </p>
               )}
             </div>
@@ -274,13 +265,13 @@ export function ModelMenu({
                   ref={thinkingTrigger}
                   variant="ghost"
                   className="chat-thinking-trigger"
-                  aria-label={t("Thinking level", "思考强度")}
+                  aria-label={t("models.thinkingLevel")}
                   aria-expanded={showThinking}
                   onClick={() => setShowThinking(true)}
                 >
-                  <span>{t("Thinking", "思考强度")}</span>
+                  <span>{t("models.thinking")}</span>
                   <span className="chat-thinking-value">
-                    {t(...levels[value.thinking])}
+                    {t(levelKeys[value.thinking])}
                   </span>
                   <ChevronRight data-icon="inline-end" />
                 </Button>
@@ -297,8 +288,8 @@ export function ModelMenu({
               >
                 {hasConfiguredProvider ? <SlidersHorizontal /> : <Plug />}
                 {hasConfiguredProvider
-                  ? t("Manage models", "管理模型")
-                  : t("Connect a provider", "连接供应商")}
+                  ? t("models.manageModels")
+                  : t("models.connectAProvider")}
               </Button>
             </div>
           </div>

@@ -30,7 +30,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
+import type { TFunction } from "i18next";
 
 const ANIMATION_DURATION = 200;
 
@@ -48,21 +49,33 @@ function formatToolArgs(value: string) {
   }
 }
 
-function ToolCodeBlock({ text, className }: { text: string; className: string }) {
-  const { t } = useLocale();
+function ToolCodeBlock({
+  text,
+  className,
+}: {
+  text: string;
+  className: string;
+}) {
+  const { t } = useAppTranslation();
   const { isCopied, copyToClipboard } = useCopyToClipboard();
   return (
     <div className="group/tool-code relative min-w-0 w-full max-w-[720px] overflow-hidden rounded-lg border border-border/50 bg-muted/40">
       <div className="absolute top-2 right-2 text-muted-foreground transition-opacity [@media(hover:hover)]:opacity-0 group-hover/tool-code:opacity-100 group-focus-within/tool-code:opacity-100">
         <TooltipIconButton
-          tooltip={isCopied ? t("Copied", "已复制") : t("Copy", "复制")}
+          tooltip={isCopied ? t("common.copied") : t("common.copy")}
           onClick={() => copyToClipboard(text)}
           disabled={!text}
         >
           {isCopied ? <CheckIcon /> : <CopyIcon />}
         </TooltipIconButton>
       </div>
-      <pre className={cn(toolCodeClassName, "rounded-none border-0 bg-transparent pr-12", className)}>
+      <pre
+        className={cn(
+          toolCodeClassName,
+          "rounded-none border-0 bg-transparent pr-12",
+          className,
+        )}
+      >
         <code>{text}</code>
       </pre>
     </div>
@@ -177,6 +190,7 @@ function ToolFallbackTrigger({
   icon?: React.ElementType;
   status?: ToolCallMessagePartStatus;
 }) {
+  const { t } = useAppTranslation();
   const shimmerRef = useShimmer();
   const statusType: ToolStatus = status?.type ?? "complete";
   const isRunning = statusType === "running";
@@ -184,7 +198,9 @@ function ToolFallbackTrigger({
     status?.type === "incomplete" && status.reason === "cancelled";
 
   const Icon = SummaryIcon ?? statusIconMap[statusType];
-  const label = isCancelled ? "Cancelled tool" : "Used tool";
+  const label = isCancelled
+    ? t("toolApproval.cancelledTool")
+    : t("toolApproval.usedTool");
 
   return (
     <CollapsibleTrigger
@@ -212,7 +228,11 @@ function ToolFallbackTrigger({
           isRunning && "shimmer motion-reduce:animate-none",
         )}
       >
-        {summary ?? <>{label}: <b>{toolName}</b></>}
+        {summary ?? (
+          <>
+            {label}: <b>{toolName}</b>
+          </>
+        )}
       </span>
       <ToolFallbackDuration />
       <ChevronDownIcon
@@ -278,7 +298,10 @@ function ToolFallbackArgs({
       className={cn("aui-tool-fallback-args", className)}
       {...props}
     >
-      <ToolCodeBlock className="aui-tool-fallback-args-value" text={formatToolArgs(argsText)} />
+      <ToolCodeBlock
+        className="aui-tool-fallback-args-value"
+        text={formatToolArgs(argsText)}
+      />
     </div>
   );
 }
@@ -298,7 +321,12 @@ function ToolFallbackResult({
       className={cn("aui-tool-fallback-result", className)}
       {...props}
     >
-      <ToolCodeBlock className="aui-tool-fallback-result-content" text={typeof result === "string" ? result : JSON.stringify(result, null, 2)} />
+      <ToolCodeBlock
+        className="aui-tool-fallback-result-content"
+        text={
+          typeof result === "string" ? result : JSON.stringify(result, null, 2)
+        }
+      />
     </div>
   );
 }
@@ -310,6 +338,7 @@ function ToolFallbackError({
 }: React.ComponentProps<"div"> & {
   status?: ToolCallMessagePartStatus;
 }) {
+  const { t } = useAppTranslation();
   if (status?.type !== "incomplete") return null;
 
   const error = status.error;
@@ -322,7 +351,9 @@ function ToolFallbackError({
   if (!errorText) return null;
 
   const isCancelled = status.reason === "cancelled";
-  const headerText = isCancelled ? "Cancelled reason:" : "Error:";
+  const headerText = isCancelled
+    ? t("toolApproval.cancelledReason")
+    : t("toolApproval.error");
 
   return (
     <div
@@ -343,23 +374,27 @@ function ToolFallbackError({
 const APPROVED_RESULT = "Approved by user";
 const DENIED_RESULT = "User denied tool execution";
 
-const APPROVAL_OPTION_DEFAULT_LABELS: Record<string, string> = {
-  "allow-once": "Allow",
-  "allow-always": "Always allow",
-  "reject-once": "Deny",
-  "reject-always": "Always deny",
-};
+const APPROVAL_OPTION_DEFAULT_KEYS = {
+  "allow-once": "toolApproval.allow",
+  "allow-always": "toolApproval.alwaysAllow",
+  "reject-once": "toolApproval.deny",
+  "reject-always": "toolApproval.alwaysDeny",
+} as const;
 
 const isKnownKind = (kind: string) =>
-  Object.hasOwn(APPROVAL_OPTION_DEFAULT_LABELS, kind);
+  Object.hasOwn(APPROVAL_OPTION_DEFAULT_KEYS, kind);
 
 const isAllowKind = (kind: string) =>
   kind === "allow-once" || kind === "allow-always";
 
-const approvalOptionLabel = (option: ToolApprovalOption) =>
+const approvalOptionLabel = (option: ToolApprovalOption, t: TFunction) =>
   option.label ??
   (isKnownKind(option.kind)
-    ? APPROVAL_OPTION_DEFAULT_LABELS[option.kind]
+    ? t(
+        APPROVAL_OPTION_DEFAULT_KEYS[
+          option.kind as keyof typeof APPROVAL_OPTION_DEFAULT_KEYS
+        ],
+      )
     : undefined) ??
   option.id;
 
@@ -399,6 +434,7 @@ function ToolFallbackApproval({
     interrupt?: ToolCallMessagePart["interrupt"];
     approval?: ToolCallMessagePart["approval"];
   }) {
+  const { t } = useAppTranslation();
   const [submitted, setSubmitted] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
@@ -516,9 +552,15 @@ function ToolFallbackApproval({
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
         disabled={submitted}
-        aria-label={question ? (approval?.prompt ?? "Answer") : "Note"}
+        aria-label={
+          question
+            ? (approval?.prompt ?? t("toolApproval.answer"))
+            : t("toolApproval.note")
+        }
         placeholder={
-          question ? "Type your answer" : "Add a note to your decision"
+          question
+            ? t("toolApproval.answerPlaceholder")
+            : t("toolApproval.notePlaceholder")
         }
       />
       {question && (
@@ -528,7 +570,7 @@ function ToolFallbackApproval({
           onClick={submitAnswer}
           disabled={submitted || !answer.trim()}
         >
-          Send
+          {t("toolApproval.send")}
         </Button>
       )}
     </div>
@@ -549,7 +591,7 @@ function ToolFallbackApproval({
         {...props}
       >
         <p className="aui-tool-fallback-approval-confirm-title font-semibold">
-          {confirmMeta?.title ?? `${approvalOptionLabel(confirming)}?`}
+          {confirmMeta?.title ?? `${approvalOptionLabel(confirming, t)}?`}
         </p>
         {confirmDescription && (
           <p className="aui-tool-fallback-approval-confirm-description text-muted-foreground">
@@ -574,7 +616,7 @@ function ToolFallbackApproval({
             onClick={() => respondWithOption(confirming)}
             disabled={submitted}
           >
-            Confirm
+            {t("toolApproval.confirm")}
           </Button>
           <Button
             size="sm"
@@ -583,7 +625,7 @@ function ToolFallbackApproval({
             onClick={() => setConfirmingId(null)}
             disabled={submitted}
           >
-            Back
+            {t("toolApproval.back")}
           </Button>
         </div>
       </div>
@@ -617,7 +659,7 @@ function ToolFallbackApproval({
                 onClick={() => handleOption(option)}
                 disabled={submitted}
               >
-                {approvalOptionLabel(option)}
+                {approvalOptionLabel(option, t)}
               </Button>
             ),
           )}
@@ -629,7 +671,7 @@ function ToolFallbackApproval({
               onClick={() => respond(false)}
               disabled={submitted}
             >
-              Deny
+              {t("toolApproval.deny")}
             </Button>
           )}
         </div>
@@ -675,7 +717,7 @@ function ToolFallbackApproval({
           onClick={() => respond(true)}
           disabled={submitted}
         >
-          Allow
+          {t("toolApproval.allow")}
         </Button>
         <Button
           size="sm"
@@ -684,7 +726,7 @@ function ToolFallbackApproval({
           onClick={() => respond(false)}
           disabled={submitted}
         >
-          Deny
+          {t("toolApproval.deny")}
         </Button>
       </div>
       {answerField}
@@ -693,7 +735,10 @@ function ToolFallbackApproval({
   );
 }
 
-type PresentedToolProps = ToolCallMessagePartProps & { summary?: string; icon?: React.ElementType };
+type PresentedToolProps = ToolCallMessagePartProps & {
+  summary?: string;
+  icon?: React.ElementType;
+};
 
 const ToolFallbackImpl: React.FC<PresentedToolProps> = ({
   summary,
@@ -724,7 +769,12 @@ const ToolFallbackImpl: React.FC<PresentedToolProps> = ({
 
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger toolName={toolName} summary={summary} icon={icon} status={status} />
+      <ToolFallbackTrigger
+        toolName={toolName}
+        summary={summary}
+        icon={icon}
+        status={status}
+      />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs

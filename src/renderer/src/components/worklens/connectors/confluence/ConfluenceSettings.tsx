@@ -20,7 +20,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 export function ConfluenceSettings({
   connection,
   refresh,
@@ -32,7 +32,7 @@ export function ConfluenceSettings({
   onSuccess: (message: string) => void;
   onClose: () => void;
 }) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const [form, setForm] = useState<ConfluenceSettingsInput>({
     url: connection?.url ?? "",
     deployment: connection?.deployment ?? "data-center",
@@ -65,7 +65,7 @@ export function ConfluenceSettings({
         await window.worklens.invoke("confluenceSave", input);
         setForm((current) => ({ ...current, token: "" }));
         await refresh();
-        onSuccess(t("Confluence settings saved", "Confluence 设置已保存"));
+        onSuccess(t("connectors.confluence.confluenceSettingsSaved"));
         onClose();
       } else {
         await window.worklens.invoke("confluenceRemove", undefined);
@@ -76,7 +76,7 @@ export function ConfluenceSettings({
           token: "",
         });
         await refresh();
-        onSuccess(t("Confluence disconnected", "Confluence 已断开"));
+        onSuccess(t("connectors.confluence.confluenceDisconnected"));
         onClose();
       }
     } catch (error) {
@@ -101,10 +101,7 @@ export function ConfluenceSettings({
             Confluence
           </DialogTitle>
           <DialogDescription>
-            {t(
-              "Connect your team's knowledge base to search and maintain documents.",
-              "连接团队知识库，搜索资料并维护文档。",
-            )}
+            {t("connectors.confluence.description")}
           </DialogDescription>
         </DialogHeader>
         {connection?.error && (
@@ -122,7 +119,7 @@ export function ConfluenceSettings({
           <fieldset disabled={busy} className="flex flex-col gap-4">
             <Field>
               <FieldLabel htmlFor="confluence-deployment">
-                {t("Deployment", "部署类型")}
+                {t("connectors.confluence.deployment")}
               </FieldLabel>
               <NativeSelect
                 id="confluence-deployment"
@@ -143,7 +140,7 @@ export function ConfluenceSettings({
             </Field>
             <Field>
               <FieldLabel htmlFor="confluence-url">
-                {t("Confluence URL", "Confluence 地址")}
+                {t("connectors.confluence.confluenceURL")}
               </FieldLabel>
               <Input
                 id="confluence-url"
@@ -153,17 +150,14 @@ export function ConfluenceSettings({
                 autoComplete="off"
               />
               <FieldDescription>
-                {t(
-                  "Use the site address, including /wiki or /confluence when present.",
-                  "填写站点地址，保留地址中的 /wiki 或 /confluence。",
-                )}
+                {t("connectors.confluence.urlHelp")}
               </FieldDescription>
             </Field>
             {form.deployment === "cloud" && (
               <>
                 <Field>
                   <FieldLabel htmlFor="confluence-email">
-                    {t("Atlassian account email", "Atlassian 账户邮箱")}
+                    {t("connectors.confluence.atlassianAccountEmail")}
                   </FieldLabel>
                   <Input
                     id="confluence-email"
@@ -174,7 +168,7 @@ export function ConfluenceSettings({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="confluence-token-type">
-                    {t("Token type", "Token 类型")}
+                    {t("connectors.confluence.tokenType")}
                   </FieldLabel>
                   <NativeSelect
                     id="confluence-token-type"
@@ -187,10 +181,10 @@ export function ConfluenceSettings({
                     }
                   >
                     <NativeSelectOption value="classic">
-                      {t("Classic API token", "普通 API token")}
+                      {t("connectors.confluence.classicAPIToken")}
                     </NativeSelectOption>
                     <NativeSelectOption value="scoped">
-                      {t("API token with scopes", "带 scopes 的 API token")}
+                      {t("connectors.confluence.apiTokenWithScopes")}
                     </NativeSelectOption>
                   </NativeSelect>
                 </Field>
@@ -205,10 +199,7 @@ export function ConfluenceSettings({
                       onChange={(e) => update({ cloudId: e.target.value })}
                     />
                     <FieldDescription>
-                      {t(
-                        "Enter your Atlassian site's Cloud ID.",
-                        "填写该 Atlassian 站点的 Cloud ID。",
-                      )}
+                      {t("connectors.confluence.cloudIdHelp")}
                     </FieldDescription>
                   </Field>
                 )}
@@ -224,11 +215,8 @@ export function ConfluenceSettings({
                 onChange={(e) => update({ token: e.target.value })}
                 placeholder={
                   connection?.configured
-                    ? t(
-                        "Leave blank to keep the saved token",
-                        "留空保留已保存的 token",
-                      )
-                    : t("Enter your token", "填写 token")
+                    ? t("connectors.confluence.leaveBlankToKeepTheSavedToken")
+                    : t("connectors.confluence.enterYourToken")
                 }
               />
             </Field>
@@ -251,7 +239,7 @@ export function ConfluenceSettings({
               disabled={busy}
               onClick={() => void act("remove")}
             >
-              {t("Disconnect", "断开连接")}
+              {t("common.disconnect")}
             </Button>
           )}
           <Button
@@ -259,10 +247,10 @@ export function ConfluenceSettings({
             disabled={busy}
             onClick={() => void act("test")}
           >
-            {t("Test connection", "测试连接")}
+            {t("connectors.confluence.testConnection")}
           </Button>
           <Button type="submit" form="confluence-settings-form" disabled={busy}>
-            {busy ? t("Working…", "处理中…") : t("Save", "保存")}
+            {busy ? t("common.workingPlaceholder") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { BrandIcon } from "../../ProviderIcon";
 import githubIcon from "@lobehub/icons-static-svg/icons/github.svg?url";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 
 export function GitHubSettings({
   connection,
@@ -29,7 +29,7 @@ export function GitHubSettings({
   onSuccess: (message: string) => void;
   onClose: () => void;
 }) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const [form, setForm] = useState<GitHubSettingsInput>({
     url: connection?.url ?? "",
     token: "",
@@ -48,20 +48,20 @@ export function GitHubSettings({
     setError("");
     try {
       if (action !== "remove" && !form.url.trim())
-        throw new Error(t("Enter a GitHub URL", "请填写 GitHub 地址"));
+        throw new Error(t("connectors.github.enterAGitHubURL"));
       if (action === "test")
         setResult(await window.worklens.invoke("githubTest", form));
       else if (action === "save") {
         await window.worklens.invoke("githubSave", form);
         setForm((current) => ({ ...current, token: "" }));
         await refresh();
-        onSuccess(t("GitHub settings saved", "GitHub 设置已保存"));
+        onSuccess(t("connectors.github.githubSettingsSaved"));
         onClose();
       } else {
         await window.worklens.invoke("githubRemove", undefined);
         setForm({ url: "", token: "" });
         await refresh();
-        onSuccess(t("GitHub disconnected", "GitHub 已断开"));
+        onSuccess(t("connectors.github.githubDisconnected"));
         onClose();
       }
     } catch (e) {
@@ -85,10 +85,7 @@ export function GitHubSettings({
             GitHub
           </DialogTitle>
           <DialogDescription>
-            {t(
-              "Connect your GitHub site to explore code, manage issues and review pull requests.",
-              "连接你的 GitHub 站点，查找代码、管理 Issue 并评审 PR。",
-            )}
+            {t("connectors.github.description")}
           </DialogDescription>
         </DialogHeader>
         {connection?.error && (
@@ -98,7 +95,7 @@ export function GitHubSettings({
         )}
         {connection?.login && (
           <p className="text-sm">
-            {t("Account", "账号")}: {connection.login}
+            {t("connectors.github.account")}: {connection.login}
             {connection.serverVersion
               ? ` · Enterprise ${connection.serverVersion}`
               : ""}
@@ -114,23 +111,17 @@ export function GitHubSettings({
           <fieldset disabled={busy} className="flex flex-col gap-4">
             <Field>
               <FieldLabel htmlFor="github-url">
-                {t("GitHub URL", "GitHub 地址")}
+                {t("connectors.github.githubURL")}
               </FieldLabel>
               <Input
                 id="github-url"
                 value={form.url}
                 onChange={(e) => update({ url: e.target.value, token: "" })}
-                placeholder={t(
-                  "Enter your GitHub site URL",
-                  "填写你的 GitHub 站点地址",
-                )}
+                placeholder={t("connectors.github.enterYourGitHubSiteURL")}
                 autoComplete="off"
               />
               <FieldDescription>
-                {t(
-                  "Use the address of GitHub.com or your company's GitHub site, without a repository path.",
-                  "填写 GitHub.com 或公司 GitHub 站点的地址，不包含仓库路径。",
-                )}
+                {t("connectors.github.urlHelp")}
               </FieldDescription>
             </Field>
             <Field>
@@ -145,18 +136,12 @@ export function GitHubSettings({
                 onChange={(e) => update({ token: e.target.value })}
                 placeholder={
                   connection?.configured && form.url === connection.url
-                    ? t(
-                        "Leave blank to keep the saved token",
-                        "留空保留已保存的 token",
-                      )
-                    : t("Enter your token", "填写 token")
+                    ? t("connectors.github.leaveBlankToKeepTheSavedToken")
+                    : t("connectors.github.enterYourToken")
                 }
               />
               <FieldDescription>
-                {t(
-                  "Use a token from this site with access to the repositories and actions you need.",
-                  "使用该站点的 token，并授予所需仓库和操作的权限。",
-                )}
+                {t("connectors.github.tokenHelp")}
               </FieldDescription>
             </Field>
           </fieldset>
@@ -178,7 +163,7 @@ export function GitHubSettings({
               disabled={busy}
               onClick={() => void act("remove")}
             >
-              {t("Disconnect", "断开连接")}
+              {t("common.disconnect")}
             </Button>
           )}
           <Button
@@ -186,10 +171,10 @@ export function GitHubSettings({
             disabled={busy}
             onClick={() => void act("test")}
           >
-            {t("Test connection", "测试连接")}
+            {t("connectors.github.testConnection")}
           </Button>
           <Button type="submit" form="github-settings-form" disabled={busy}>
-            {busy ? t("Working…", "处理中…") : t("Save", "保存")}
+            {busy ? t("common.workingPlaceholder") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

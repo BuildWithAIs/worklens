@@ -25,6 +25,7 @@ import type {
   ImageMessagePartComponent,
 } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
+import { useAppTranslation } from "@/i18n";
 
 const extensionForMimeType = (mimeType?: string): string => {
   switch (mimeType) {
@@ -163,10 +164,11 @@ function ImagePreview({
   containerClassName,
   onLoad,
   onError,
-  alt = "Image content",
+  alt,
   src,
   ...props
 }: ImagePreviewProps) {
+  const { t } = useAppTranslation();
   const imgRef = useRef<HTMLImageElement>(null);
   const [loadedSrc, setLoadedSrc] = useState<string | undefined>(undefined);
   const [errorSrc, setErrorSrc] = useState<string | undefined>(undefined);
@@ -205,7 +207,7 @@ function ImagePreview({
         <img
           ref={imgRef}
           src={src}
-          alt={alt}
+          alt={alt ?? t("image.content")}
           className={cn(
             "block h-auto w-full object-contain",
             !loaded && "invisible",
@@ -252,7 +254,8 @@ type ImageZoomProps = PropsWithChildren<{
   alt?: string;
 }>;
 
-function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
+function ImageZoom({ src, alt, children }: ImageZoomProps) {
+  const { t } = useAppTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -312,7 +315,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
         role="button"
         tabIndex={0}
         className="aui-image-zoom-trigger cursor-zoom-in"
-        aria-label="Click to zoom image"
+        aria-label={t("image.clickToZoom")}
       >
         {children}
       </div>
@@ -325,12 +328,12 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
             aria-modal="true"
             className="aui-image-zoom-overlay fade-in animate-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 duration-200"
             onClick={handleClose}
-            aria-label="Zoomed image"
+            aria-label={t("image.zoomed")}
           >
             <img
               data-slot="image-zoom-content"
               src={src}
-              alt={alt}
+              alt={alt ?? t("image.preview")}
               className="aui-image-zoom-content fade-in zoom-in-95 animate-in max-h-[90vh] max-w-[90vw] cursor-zoom-out object-contain duration-200"
               onClick={(e) => {
                 e.stopPropagation();
@@ -340,7 +343,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
             <button
               ref={closeRef}
               type="button"
-              aria-label="Close zoomed image"
+              aria-label={t("image.closeZoomed")}
               onClick={(e) => {
                 e.stopPropagation();
                 handleClose();
@@ -357,6 +360,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
 }
 
 function ImageGenerating({ className }: { className?: string }) {
+  const { t } = useAppTranslation();
   return (
     <div
       data-slot="image-generating"
@@ -366,7 +370,7 @@ function ImageGenerating({ className }: { className?: string }) {
       )}
     >
       <Loader2Icon className="text-muted-foreground size-8 animate-spin" />
-      <span className="sr-only">Generating image…</span>
+      <span className="sr-only">{t("image.generating")}</span>
     </div>
   );
 }
@@ -378,6 +382,7 @@ function ImageContentFilterError({
   className?: string;
   reason?: string;
 }) {
+  const { t } = useAppTranslation();
   return (
     <div
       data-slot="image-content-filter-error"
@@ -387,7 +392,7 @@ function ImageContentFilterError({
       )}
     >
       <ShieldAlertIcon className="text-muted-foreground size-8" />
-      <p className="text-sm font-medium">Image could not be generated</p>
+      <p className="text-sm font-medium">{t("image.generationFailed")}</p>
       {reason && <p className="text-muted-foreground text-xs">{reason}</p>}
     </div>
   );
@@ -408,6 +413,7 @@ function RegenerateButton({
 }: {
   onRegenerate: () => void | Promise<void>;
 }) {
+  const { t } = useAppTranslation();
   const [isRegenerating, setIsRegenerating] = useState(false);
   return (
     <button
@@ -423,7 +429,7 @@ function RegenerateButton({
       }}
       disabled={isRegenerating}
       data-slot="image-regenerate"
-      aria-label="Regenerate image"
+      aria-label={t("image.regenerate")}
       className="hover:bg-muted inline-flex size-7 items-center justify-center rounded disabled:opacity-50"
     >
       <RefreshCwIcon
@@ -434,6 +440,7 @@ function RegenerateButton({
 }
 
 function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
+  const { t } = useAppTranslation();
   return (
     <div
       data-slot="image-actions"
@@ -443,7 +450,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         type="button"
         onClick={() => downloadImagePart(part)}
         data-slot="image-download"
-        aria-label="Download image"
+        aria-label={t("image.download")}
         className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
       >
         <DownloadIcon className="size-4" />
@@ -454,7 +461,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
           copyImagePart(part).catch(() => {});
         }}
         data-slot="image-copy"
-        aria-label="Copy image"
+        aria-label={t("image.copy")}
         className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
       >
         <CopyIcon className="size-4" />
@@ -465,6 +472,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
 }
 
 const ImageImpl: ImageMessagePartComponent = (props) => {
+  const { t } = useAppTranslation();
   const { image, filename, status } = props;
 
   if (status?.type === "running") {
@@ -479,15 +487,15 @@ const ImageImpl: ImageMessagePartComponent = (props) => {
   if (status?.type === "incomplete" && status.reason === "content-filter") {
     return (
       <ImageRoot>
-        <ImageContentFilterError reason="The provider blocked this image." />
+        <ImageContentFilterError reason={t("image.providerBlocked")} />
       </ImageRoot>
     );
   }
 
   return (
     <ImageRoot>
-      <ImageZoom src={image} alt={filename || "Image content"}>
-        <ImagePreview src={image} alt={filename || "Image content"} />
+      <ImageZoom src={image} alt={filename || t("image.content")}>
+        <ImagePreview src={image} alt={filename || t("image.content")} />
       </ImageZoom>
       <ImageFilename>{filename}</ImageFilename>
     </ImageRoot>

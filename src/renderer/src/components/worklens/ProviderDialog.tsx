@@ -17,7 +17,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 import { systemText } from "@/lib/system-text";
 import type { AuthStep, ProviderInfo } from "../../../../shared/contracts";
 const api = window.worklens;
@@ -25,26 +25,22 @@ type Method = "api_key" | "oauth";
 const endpointFields = [
   {
     key: "baseUrl",
-    en: "Base URL",
-    zh: "基础地址",
+    label: "provider.endpoint.baseUrl",
     placeholder: "https://example.openai.azure.com",
   },
   {
     key: "resource",
-    en: "Resource name",
-    zh: "资源名",
+    label: "provider.endpoint.resourceName",
     placeholder: "example",
   },
   {
     key: "apiVersion",
-    en: "API version",
-    zh: "接口版本",
+    label: "provider.endpoint.apiVersion",
     placeholder: "2024-10-21",
   },
   {
     key: "deployments",
-    en: "Model = deployment",
-    zh: "模型 = 部署名",
+    label: "provider.endpoint.modelDeployment",
     placeholder: "gpt-4.1=my-deployment",
   },
 ] as const;
@@ -61,7 +57,7 @@ export function ProviderDialog({
   onSaved: () => Promise<void>;
   onError: (message: string) => void;
 }) {
-  const { t, language } = useLocale();
+  const { t, language } = useAppTranslation();
   const initialMethod =
     provider.credentialType ??
     provider.methods.find((m) => m.interactive)?.type ??
@@ -228,9 +224,12 @@ export function ProviderDialog({
     >
       <DialogContent className="settings-dialog" showCloseButton={!submitting}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><ProviderIcon provider={provider.id} />{provider.name}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <ProviderIcon provider={provider.id} />
+            {provider.name}
+          </DialogTitle>
           <DialogDescription className="sr-only">
-            {t("Configure authentication", "配置认证")}
+            {t("provider.configureAuthentication")}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -243,7 +242,7 @@ export function ProviderDialog({
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="provider-method">
-                {t("Authentication", "认证方式")}
+                {t("provider.authentication")}
               </FieldLabel>
               {provider.methods.length > 1 ? (
                 <NativeSelect
@@ -261,24 +260,18 @@ export function ProviderDialog({
                 </NativeSelect>
               ) : (
                 <span className="text-sm">
-                  {selected?.name ?? t("System credentials", "系统凭据")}
+                  {selected?.name ?? t("provider.systemCredentials")}
                 </span>
               )}
             </Field>
             {provider.credentialType && method !== provider.credentialType && (
               <p className="settings-hint">
-                {t(
-                  "Replaces the current method after successful sign-in.",
-                  "登录成功后替换当前认证方式。",
-                )}
+                {t("provider.methodReplacementHint")}
               </p>
             )}
             {!selected?.interactive && (
               <p className="settings-hint">
-                {t(
-                  "Managed through your system environment.",
-                  "通过系统环境配置。",
-                )}
+                {t("provider.systemCredentialsHint")}
               </p>
             )}
             {steps
@@ -301,7 +294,7 @@ export function ProviderDialog({
                           )
                       }
                     >
-                      {t("Open browser", "打开浏览器")}
+                      {t("provider.openBrowser")}
                     </Button>
                   )}
                 </div>
@@ -310,7 +303,7 @@ export function ProviderDialog({
               <Field>
                 <FieldLabel htmlFor="auth-answer">
                   {systemText(
-                    prompt.message ?? t("Credential", "凭据"),
+                    prompt.message ?? t("provider.credential"),
                     language,
                   )}
                 </FieldLabel>
@@ -323,7 +316,7 @@ export function ProviderDialog({
                     onChange={(e) => setAnswer(e.target.value)}
                   >
                     <NativeSelectOption value="">
-                      {t("Select an option", "请选择")}
+                      {t("provider.selectAnOption")}
                     </NativeSelectOption>
                     {prompt.options?.map((option) => (
                       <NativeSelectOption key={option.id} value={option.id}>
@@ -359,7 +352,7 @@ export function ProviderDialog({
                 role="status"
               >
                 <LoaderCircle className="spin" size={16} />
-                {t("Waiting for authentication…", "等待认证…")}
+                {t("provider.waitingForAuthenticationPlaceholder")}
               </p>
             )}
             {fields && method === "api_key" && (
@@ -372,21 +365,18 @@ export function ProviderDialog({
                     onCheckedChange={setEditEndpoint}
                   />
                   <FieldLabel htmlFor="edit-endpoint">
-                    {t("Update endpoint settings", "更新端点设置")}
+                    {t("provider.updateEndpointSettings")}
                   </FieldLabel>
                 </Field>
                 {editEndpoint && (
                   <>
                     <p className="settings-hint">
-                      {t(
-                        "Replaces endpoint settings. Blank fields are cleared.",
-                        "替换端点配置，空白字段会被清除。",
-                      )}
+                      {t("provider.endpointReplacementHint")}
                     </p>
                     {fields.map((field) => (
                       <Field key={field.key}>
                         <FieldLabel htmlFor={field.key}>
-                          {t(field.en, field.zh)}
+                          {t(field.label)}
                         </FieldLabel>
                         <Input
                           id={field.key}
@@ -422,14 +412,14 @@ export function ProviderDialog({
                 onClose();
               }}
             >
-              {t("Cancel", "取消")}
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSubmit}>
               {submitting && <LoaderCircle className="spin" />}
               {endpointOnly ||
               (method === "api_key" && prompt?.type === "secret")
-                ? t("Save", "保存")
-                : t("Continue", "继续")}
+                ? t("common.save")
+                : t("provider.continue")}
             </Button>
           </DialogFooter>
         </form>

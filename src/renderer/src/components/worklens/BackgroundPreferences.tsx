@@ -12,7 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 import { useDarkAppearance } from "./BackgroundEffect";
 import type { Settings } from "../../../../shared/contracts";
 
@@ -25,16 +25,16 @@ export function BackgroundPreferences({
   save: (patch: Partial<Settings>) => Promise<unknown>;
   onError: (message: string) => void;
 }) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const dark = useDarkAppearance(settings);
   const [pending, setPending] = useState(false);
   const effect = settings.backgroundEffect ?? "none";
   // Retain stored electric/ice IDs so existing preferences remain valid.
   const tones = [
-    ["violet", t("Blue violet", "蓝紫")],
-    ["electric", t("Jade", "青碧")],
-    ["ice", t("Silver mist", "银雾")],
-    ["sunset", t("Dusk", "暮霞")],
+    ["violet", t("appearance.blueViolet")],
+    ["electric", t("appearance.jade")],
+    ["ice", t("appearance.silverMist")],
+    ["sunset", t("appearance.dusk")],
   ] as const;
   const tone = settings.backgroundTone ?? "violet";
   const update = async (patch: Partial<Settings>) => {
@@ -42,7 +42,7 @@ export function BackgroundPreferences({
     try {
       await save(patch);
     } catch {
-      onError(t("Could not save background appearance.", "背景外观保存失败。"));
+      onError(t("appearance.couldNotSaveBackgroundAppearance"));
     } finally {
       setPending(false);
     }
@@ -52,10 +52,10 @@ export function BackgroundPreferences({
     <>
       <Item size="sm" role="listitem" className="settings-entry">
         <ItemTitle className="settings-entry-title">
-          {t("Background effect", "背景效果")}
+          {t("appearance.backgroundEffect")}
         </ItemTitle>
         <NativeSelect
-          aria-label={t("Background effect", "背景效果")}
+          aria-label={t("appearance.backgroundEffect")}
           value={effect}
           disabled={pending}
           onChange={(event) =>
@@ -66,25 +66,27 @@ export function BackgroundPreferences({
           }
         >
           <NativeSelectOption value="none">
-            {t("Off", "关闭")}
+            {t("appearance.off")}
           </NativeSelectOption>
           <NativeSelectOption value="surface">
-            {t("Soft surface", "柔光曲面")}
+            {t("appearance.softSurface")}
           </NativeSelectOption>
-          <NativeSelectOption value="aurora">{t("Aurora", "极光")}</NativeSelectOption>
+          <NativeSelectOption value="aurora">
+            {t("appearance.aurora")}
+          </NativeSelectOption>
           <NativeSelectOption value="fluid">
-            {t("Fluid texture", "流体纹理")}
+            {t("appearance.fluidTexture")}
           </NativeSelectOption>
         </NativeSelect>
       </Item>
       {effect !== "none" && (
         <Item size="sm" role="listitem" className="settings-entry">
           <ItemTitle className="settings-entry-title">
-            {t("Color", "颜色")}
+            {t("appearance.color")}
           </ItemTitle>
           <RadioGroup
             className="background-tones"
-            aria-label={t("Color palette", "色调")}
+            aria-label={t("appearance.colorPalette")}
             value={tone}
             disabled={pending}
             onValueChange={(value) =>

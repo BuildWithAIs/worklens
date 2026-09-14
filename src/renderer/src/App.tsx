@@ -1,10 +1,19 @@
-import { shortTitle, titleCharacters, RENAME_LIMIT } from "@/lib/conversation-title";
+import {
+  shortTitle,
+  titleCharacters,
+  RENAME_LIMIT,
+} from "@/lib/conversation-title";
 import { BackgroundEffect } from "@/components/worklens/BackgroundEffect";
 import { BrandMark } from "@/components/worklens/BrandMark";
 import { HistoryTitle } from "@/components/worklens/HistoryTitle";
 import { Input } from "@/components/ui/input";
 import { Hint, OverflowHint } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -30,7 +39,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { systemText } from "@/lib/system-text";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 import { UsagePopover } from "@/components/worklens/UsagePopover";
 import { newerGlobalUsage } from "../../shared/usage";
 import { AgentThread } from "@/components/worklens/AgentThread";
@@ -49,16 +58,25 @@ const active = (phase?: Phase) =>
   !!phase &&
   ["generating", "tool", "compacting", "retrying", "stopping"].includes(phase);
 export function App() {
-  const { t, language } = useLocale();
+  const { t, i18n, language } = useAppTranslation();
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("general");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try { return localStorage.getItem("worklens.sidebarCollapsed") === "true"; }
-    catch { return false; }
+    try {
+      return localStorage.getItem("worklens.sidebarCollapsed") === "true";
+    } catch {
+      return false;
+    }
   });
   useEffect(() => {
-    try { localStorage.setItem("worklens.sidebarCollapsed", String(sidebarCollapsed)); }
-    catch { /* Keep the toggle usable when storage is unavailable. */ }
+    try {
+      localStorage.setItem(
+        "worklens.sidebarCollapsed",
+        String(sidebarCollapsed),
+      );
+    } catch {
+      /* Keep the toggle usable when storage is unavailable. */
+    }
   }, [sidebarCollapsed]);
   const [data, setData] = useState<Bootstrap>();
   const [views, setViews] = useState<Record<string, ConversationView>>({});
@@ -71,12 +89,13 @@ export function App() {
   const notifiedRuns = useRef(new Set<string>());
   useEffect(() => {
     visibleConversation.current = page === "chat" ? current : undefined;
-    if (page === "chat" && current) setUnread(previous => {
-      if (!previous.has(current)) return previous;
-      const next = new Set(previous);
-      next.delete(current);
-      return next;
-    });
+    if (page === "chat" && current)
+      setUnread((previous) => {
+        if (!previous.has(current)) return previous;
+        const next = new Set(previous);
+        next.delete(current);
+        return next;
+      });
   }, [current, page]);
   const [selection, setSelection] = useState<Selection>();
   const [text, setText] = useState("");
@@ -95,17 +114,21 @@ export function App() {
   );
   useEffect(() => {
     if (!notice) return;
-    const isModelSwitchReminder = notice.type === "error" &&
-      systemText(notice.text.replace(/^Error: /, ""), "en") === "Can’t switch models while responding.";
+    const englishText = systemText(notice.text.replace(/^Error: /, ""), "en");
+    const english = i18n.getFixedT("en");
+    const isModelSwitchReminder =
+      notice.type === "error" &&
+      englishText === english("system.cantSwitchModels");
     const needsSettings =
-      notice.type === "error" && /模型尚未配置|模型.*不可用/.test(notice.text);
+      notice.type === "error" &&
+      [
+        english("system.connectProvider"),
+        english("system.modelUnavailable"),
+      ].some((message) => message === englishText);
     let disposed = false;
     const id = toast.add({
       title: needsSettings
-        ? t(
-            "Connect a provider to start chatting.",
-            "请先选择并连接一个可用模型。",
-          )
+        ? t("app.connectAProviderToStartChatting")
         : systemText(notice.text.replace(/^Error: /, ""), language),
       onClose: () => {
         if (!disposed)
@@ -116,7 +139,7 @@ export function App() {
       priority: notice.type === "error" ? "high" : "low",
       actionProps: needsSettings
         ? {
-            children: t("Open settings", "前往设置"),
+            children: t("app.openSettings"),
             onClick: () => {
               setSettingsSection("providers");
               setPage("settings");
@@ -129,7 +152,7 @@ export function App() {
       disposed = true;
       toast.close(id);
     };
-  }, [notice, language, t]);
+  }, [notice, i18n, language, t]);
   const [pendingSends, setPendingSends] = useState(new Set<string>());
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
   const navigation = useRef(0);
@@ -209,10 +232,14 @@ export function App() {
       if ((sequences.current.get(key) ?? 0) >= event.sequence) return;
       sequences.current.set(key, event.sequence);
       acceptView(event.view);
-      if (event.type === "run_end" && event.view.phase === "completed" && !notifiedRuns.current.has(key)) {
+      if (
+        event.type === "run_end" &&
+        event.view.phase === "completed" &&
+        !notifiedRuns.current.has(key)
+      ) {
         notifiedRuns.current.add(key);
         if (visibleConversation.current !== event.conversationId) {
-          setUnread(previous => new Set(previous).add(event.conversationId));
+          setUnread((previous) => new Set(previous).add(event.conversationId));
         }
       }
     });
@@ -262,11 +289,16 @@ export function App() {
     setPinPending(true);
     try {
       const existing = (data.settings.pinnedConversationIds ?? []).filter(
-        pinnedId => data.conversations.some(conversation => conversation.id === pinnedId),
+        (pinnedId) =>
+          data.conversations.some(
+            (conversation) => conversation.id === pinnedId,
+          ),
       );
-      await settings({ pinnedConversationIds: existing.includes(id)
-        ? existing.filter(pinnedId => pinnedId !== id)
-        : [...existing, id] });
+      await settings({
+        pinnedConversationIds: existing.includes(id)
+          ? existing.filter((pinnedId) => pinnedId !== id)
+          : [...existing, id],
+      });
     } catch (error) {
       notifyError(String(error));
     } finally {
@@ -355,12 +387,10 @@ export function App() {
         <h1>WorkLens</h1>
         <p>
           {systemText(error, language) ||
-            t("Preparing your workspace…", "正在准备你的本地工作助手…")}
+            t("app.preparingYourWorkspacePlaceholder")}
         </p>
         {error && (
-          <button onClick={() => location.reload()}>
-            {t("Reload", "重新加载")}
-          </button>
+          <button onClick={() => location.reload()}>{t("app.reload")}</button>
         )}
       </main>
     );
@@ -369,29 +399,66 @@ export function App() {
     ?.models.find((m) => m.id === selection?.model);
   const pinnedIds = new Set(data.settings.pinnedConversationIds ?? []);
   const groups = [
-    { key: "pinned", label: t("Pinned", "置顶"), conversations: data.conversations.filter(c => pinnedIds.has(c.id)) },
-    { key: "recents", label: t("Recents", "最近会话"), conversations: data.conversations.filter(c => !pinnedIds.has(c.id)) },
+    {
+      key: "pinned",
+      label: t("app.pinned"),
+      conversations: data.conversations.filter((c) => pinnedIds.has(c.id)),
+    },
+    {
+      key: "recents",
+      label: t("app.recents"),
+      conversations: data.conversations.filter((c) => !pinnedIds.has(c.id)),
+    },
   ];
   return (
-    <div className="app-shell" data-sidebar-collapsed={sidebarCollapsed ? "true" : undefined} data-settings-open={page === "settings" && !(showRecovery && data.recoveries.length) ? "true" : undefined}>
-      <Hint content={sidebarCollapsed ? t("Expand sidebar", "展开侧栏") : t("Collapse sidebar", "折叠侧栏")}>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="sidebar-toggle"
-        aria-label={sidebarCollapsed ? t("Expand sidebar", "展开侧栏") : t("Collapse sidebar", "折叠侧栏")}
-        aria-expanded={!sidebarCollapsed}
-        aria-controls="conversation-sidebar"
-        onClick={() => setSidebarCollapsed(value => !value)}
+    <div
+      className="app-shell"
+      data-sidebar-collapsed={sidebarCollapsed ? "true" : undefined}
+      data-settings-open={
+        page === "settings" && !(showRecovery && data.recoveries.length)
+          ? "true"
+          : undefined
+      }
+    >
+      <Hint
+        content={
+          sidebarCollapsed ? t("app.expandSidebar") : t("app.collapseSidebar")
+        }
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="5" />
-          <path d="M9 4v16" />
-        </svg>
-      </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="sidebar-toggle"
+          aria-label={
+            sidebarCollapsed ? t("app.expandSidebar") : t("app.collapseSidebar")
+          }
+          aria-expanded={!sidebarCollapsed}
+          aria-controls="conversation-sidebar"
+          onClick={() => setSidebarCollapsed((value) => !value)}
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="5" />
+            <path d="M9 4v16" />
+          </svg>
+        </Button>
       </Hint>
-      <aside id="conversation-sidebar" className="sidebar" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed}>
-        {!sidebarCollapsed && page !== "settings" && <BackgroundEffect settings={data.settings} />}
+      <aside
+        id="conversation-sidebar"
+        className="sidebar"
+        inert={sidebarCollapsed}
+        aria-hidden={sidebarCollapsed}
+      >
+        {!sidebarCollapsed && page !== "settings" && (
+          <BackgroundEffect settings={data.settings} />
+        )}
         <div className="brand">
           <BrandMark />
           <span>WorkLens</span>
@@ -403,97 +470,122 @@ export function App() {
           aria-keyshortcuts={isMac ? "Meta+N" : "Control+N"}
         >
           <Plus size={17} />
-          {t("New chat", "新建会话")}
+          {t("app.newChat")}
           <kbd aria-hidden="true">{isMac ? "⌘ N" : "Ctrl N"}</kbd>
         </Button>
-        <nav
-          aria-label={t("Conversations", "会话列表")}
-          className="conversation-list"
-        >
-          {groups.filter(group => group.key === "recents" || group.conversations.length > 0).map(group => (
-            <section key={group.key} className="conversation-group" aria-label={group.label}>
-              <div className="section-label">{group.label}</div>
-              {group.key === "recents" && !data.conversations.length && (
-                <p className="sidebar-empty">{t("No conversations yet", "暂无历史会话")}</p>
-              )}
-              {group.conversations.map((conversation) => (
-            <div
-              key={conversation.id}
-              className={`conversation-item ${current === conversation.id ? "selected" : ""}`}
-            >
-              <OverflowHint content={conversation.title}><Button
-                variant="ghost"
-                aria-current={current === conversation.id ? "page" : undefined}
-
-                aria-label={conversation.title}
-                className="conversation-open"
-                onClick={() => void open(conversation.id)}
+        <nav aria-label={t("app.conversations")} className="conversation-list">
+          {groups
+            .filter(
+              (group) =>
+                group.key === "recents" || group.conversations.length > 0,
+            )
+            .map((group) => (
+              <section
+                key={group.key}
+                className="conversation-group"
+                aria-label={group.label}
               >
-                <span className="conversation-title">
-                  <HistoryTitle title={conversation.title} />
-                </span>
-              </Button></OverflowHint>
-              {active(conversation.phase) && (
-                <span className="history-loading-ring" aria-hidden="true" />
-              )}
-              {unread.has(conversation.id) && !active(conversation.phase) && (
-                <span className="conversation-unread" role="img" aria-label={t("Unread reply", "未读回复")} />
-              )}
-              <div className="conversation-actions">
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
+                <div className="section-label">{group.label}</div>
+                {group.key === "recents" && !data.conversations.length && (
+                  <p className="sidebar-empty">{t("app.noConversationsYet")}</p>
+                )}
+                {group.conversations.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    className={`conversation-item ${current === conversation.id ? "selected" : ""}`}
+                  >
+                    <OverflowHint content={conversation.title}>
                       <Button
                         variant="ghost"
-                        size="icon-sm"
-                        aria-label={
-                          t("Conversation options: ", "会话选项：") +
-                          conversation.title
+                        aria-current={
+                          current === conversation.id ? "page" : undefined
                         }
+                        aria-label={conversation.title}
+                        className="conversation-open"
+                        onClick={() => void open(conversation.id)}
+                      >
+                        <span className="conversation-title">
+                          <HistoryTitle title={conversation.title} />
+                        </span>
+                      </Button>
+                    </OverflowHint>
+                    {active(conversation.phase) && (
+                      <span
+                        className="history-loading-ring"
+                        aria-hidden="true"
                       />
-                    }
-                  >
-                    <MoreHorizontal size={16} />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" side="right">
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem disabled={pinPending} onClick={() => void togglePin(conversation.id)}>
-                        {pinnedIds.has(conversation.id) ? <PinOff /> : <Pin />}
-                        {pinnedIds.has(conversation.id) ? t("Unpin", "取消置顶") : t("Pin", "置顶")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          setDialog({
-                            type: "rename",
-                            id: conversation.id,
-                            title: conversation.title,
-                          })
-                        }
-                      >
-                        <Pencil />
-                        {t("Rename", "重命名")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() =>
-                          setDialog({
-                            type: "delete",
-                            id: conversation.id,
-                            title: conversation.title,
-                          })
-                        }
-                      >
-                        <Trash2 />
-                        {t("Delete", "删除")}
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-              ))}
-            </section>
-          ))}
+                    )}
+                    {unread.has(conversation.id) &&
+                      !active(conversation.phase) && (
+                        <span
+                          className="conversation-unread"
+                          role="img"
+                          aria-label={t("app.unreadReply")}
+                        />
+                      )}
+                    <div className="conversation-actions">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={t("app.conversationOptions", {
+                                title: conversation.title,
+                              })}
+                            />
+                          }
+                        >
+                          <MoreHorizontal size={16} />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="right">
+                          <DropdownMenuGroup>
+                            <DropdownMenuItem
+                              disabled={pinPending}
+                              onClick={() => void togglePin(conversation.id)}
+                            >
+                              {pinnedIds.has(conversation.id) ? (
+                                <PinOff />
+                              ) : (
+                                <Pin />
+                              )}
+                              {pinnedIds.has(conversation.id)
+                                ? t("app.unpin")
+                                : t("app.pin")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setDialog({
+                                  type: "rename",
+                                  id: conversation.id,
+                                  title: conversation.title,
+                                })
+                              }
+                            >
+                              <Pencil />
+                              {t("app.rename")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() =>
+                                setDialog({
+                                  type: "delete",
+                                  id: conversation.id,
+                                  title: conversation.title,
+                                })
+                              }
+                            >
+                              <Trash2 />
+                              {t("common.delete")}
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            ))}
         </nav>
         <div className="sidebar-bottom">
           <Button
@@ -505,7 +597,7 @@ export function App() {
             }}
           >
             <SettingsIcon />
-            {t("Settings", "设置")}
+            {t("app.settings")}
           </Button>
         </div>
       </aside>
@@ -513,16 +605,28 @@ export function App() {
         <>
           <header className="chat-header">
             <div>
-              {currentView && <Hint content={currentView.title}><h1 data-slot="chat-title" tabIndex={0} aria-label={currentView.title}>{shortTitle(currentView.title)}</h1></Hint>}
+              {currentView && (
+                <Hint content={currentView.title}>
+                  <h1
+                    data-slot="chat-title"
+                    tabIndex={0}
+                    aria-label={currentView.title}
+                  >
+                    {shortTitle(currentView.title)}
+                  </h1>
+                </Hint>
+              )}
             </div>
-            {currentView && <div className="chat-header-actions">
-              <UsagePopover
-                global={data.globalUsage}
-                usage={currentView?.usage}
-                selection={currentView?.selection ?? selection}
-                providers={data.providers}
-              />
-            </div>}
+            {currentView && (
+              <div className="chat-header-actions">
+                <UsagePopover
+                  global={data.globalUsage}
+                  usage={currentView?.usage}
+                  selection={currentView?.selection ?? selection}
+                  providers={data.providers}
+                />
+              </div>
+            )}
           </header>
           <AgentThread
             key={current ?? draftId}
@@ -539,7 +643,9 @@ export function App() {
               onManage: () => {
                 setPage("settings");
                 setSettingsSection(
-                  data.providers.some((p) => p.configured) ? "models" : "providers",
+                  data.providers.some((p) => p.configured)
+                    ? "models"
+                    : "providers",
                 );
               },
             }}
@@ -558,7 +664,7 @@ export function App() {
           showCloseButton={false}
           aria-describedby={undefined}
         >
-          <DialogTitle className="sr-only">{t("Settings", "设置")}</DialogTitle>
+          <DialogTitle className="sr-only">{t("app.settings")}</DialogTitle>
           {page === "settings" && (
             <SettingsPage
               data={data}
@@ -574,15 +680,10 @@ export function App() {
       </Dialog>
       {showRecovery && data.recoveries.length > 0 && (
         <Modal
-          title={t("An earlier task was interrupted", "上次有任务意外中断")}
+          title={t("app.anEarlierTaskWasInterrupted")}
           onClose={() => setShowRecovery(false)}
         >
-          <p>
-            {t(
-              "History and completed tool results are preserved. Review any changes before continuing; interrupted tasks do not restart automatically.",
-              "历史与工具结果已保留。请核对工具产生的更改后再继续；中断任务不会自动重新执行。",
-            )}
-          </p>
+          <p>{t("app.recoveryDescription")}</p>
           {data.recoveries.map((item) => (
             <div className="recovery-item" key={item.runId}>
               <p>{item.text.slice(0, 180)}</p>
@@ -603,7 +704,7 @@ export function App() {
                     })
                   }
                 >
-                  {t("Load draft for review", "载入草稿，核对后继续")}
+                  {t("app.loadDraftForReview")}
                 </button>
                 <button
                   className="danger"
@@ -614,7 +715,7 @@ export function App() {
                       .catch((e) => notifyError(String(e)))
                   }
                 >
-                  {t("Dismiss recovery record", "已核对，清除此恢复记录")}
+                  {t("app.dismissRecoveryRecord")}
                 </button>
               </div>
             </div>
@@ -625,35 +726,69 @@ export function App() {
         <ConversationDialog
           title={
             dialog.type === "delete"
-              ? t("Delete conversation?", "删除会话？")
-              : t("Rename conversation", "重命名会话")
+              ? t("app.deleteConversationQuestion")
+              : t("app.renameConversation")
           }
           onClose={() => setDialog(undefined)}
         >
           {dialog.type === "delete" ? (
             <DialogDescription className="text-sm leading-6">
-              {t("This permanently deletes this conversation. This cannot be undone.", "这将永久删除此会话，且无法撤销。")}
+              {t("app.deleteConversationDescription")}
             </DialogDescription>
           ) : (
             <div className="space-y-2">
               <Input
-                aria-label={t("Conversation name", "会话名称")}
+                aria-label={t("app.conversationName")}
                 aria-describedby="rename-count"
                 autoFocus
                 value={dialog.title}
-                onChange={(e) => setDialog({ ...dialog, title: (e.nativeEvent as InputEvent).isComposing ? e.target.value : titleCharacters(e.target.value).slice(0, RENAME_LIMIT).join("") })}
-                onCompositionEnd={(e) => setDialog({ ...dialog, title: titleCharacters(e.currentTarget.value).slice(0, RENAME_LIMIT).join("") })}
+                onChange={(e) =>
+                  setDialog({
+                    ...dialog,
+                    title: (e.nativeEvent as InputEvent).isComposing
+                      ? e.target.value
+                      : titleCharacters(e.target.value)
+                          .slice(0, RENAME_LIMIT)
+                          .join(""),
+                  })
+                }
+                onCompositionEnd={(e) =>
+                  setDialog({
+                    ...dialog,
+                    title: titleCharacters(e.currentTarget.value)
+                      .slice(0, RENAME_LIMIT)
+                      .join(""),
+                  })
+                }
               />
-              <p id="rename-count" className="text-right text-xs text-muted-foreground" aria-live="polite">{titleCharacters(dialog.title).length}/{RENAME_LIMIT}</p>
+              <p
+                id="rename-count"
+                className="text-right text-xs text-muted-foreground"
+                aria-live="polite"
+              >
+                {titleCharacters(dialog.title).length}/{RENAME_LIMIT}
+              </p>
             </div>
           )}
           <div className="mt-1 flex justify-end gap-2">
-            <Button variant="outline" autoFocus={dialog.type === "delete"} onClick={() => setDialog(undefined)}>
-              {t("Cancel", "取消")}
+            <Button
+              variant="outline"
+              autoFocus={dialog.type === "delete"}
+              onClick={() => setDialog(undefined)}
+            >
+              {t("common.cancel")}
             </Button>
             <Button
-              className={dialog.type === "delete" ? "bg-destructive text-white hover:bg-destructive/90 focus-visible:border-destructive focus-visible:ring-destructive/30" : undefined}
-              disabled={!dialog.title.trim() || (dialog.type === "rename" && titleCharacters(dialog.title).length > RENAME_LIMIT)}
+              className={
+                dialog.type === "delete"
+                  ? "bg-destructive text-white hover:bg-destructive/90 focus-visible:border-destructive focus-visible:ring-destructive/30"
+                  : undefined
+              }
+              disabled={
+                !dialog.title.trim() ||
+                (dialog.type === "rename" &&
+                  titleCharacters(dialog.title).length > RENAME_LIMIT)
+              }
               onClick={() =>
                 void (
                   dialog.type === "delete"
@@ -675,8 +810,8 @@ export function App() {
               }
             >
               {dialog.type === "delete"
-                ? t("Delete", "删除")
-                : t("Save name", "保存名称")}
+                ? t("common.delete")
+                : t("app.saveName")}
             </Button>
           </div>
         </ConversationDialog>
@@ -685,15 +820,29 @@ export function App() {
   );
 }
 
-function ConversationDialog({ title, children, onClose }: {
+function ConversationDialog({
+  title,
+  children,
+  onClose,
+}: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
 }) {
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent showCloseButton={false} className="gap-5 p-6 sm:max-w-[440px]">
-        <DialogTitle className="text-lg leading-7 font-normal">{title}</DialogTitle>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="gap-5 p-6 sm:max-w-[440px]"
+      >
+        <DialogTitle className="text-lg leading-7 font-normal">
+          {title}
+        </DialogTitle>
         {children}
       </DialogContent>
     </Dialog>
@@ -709,7 +858,7 @@ function Modal({
   children: React.ReactNode;
   onClose: () => void;
 }) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     ref.current?.showModal();
@@ -720,7 +869,7 @@ function Modal({
         <h2>{title}</h2>
         <button
           className="icon"
-          aria-label={t("Close dialog", "关闭对话框")}
+          aria-label={t("app.closeDialog")}
           onClick={onClose}
         >
           <X size={18} />

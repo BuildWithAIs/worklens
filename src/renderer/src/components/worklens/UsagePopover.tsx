@@ -8,7 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 import { formatCost, formatTokens } from "@/lib/usage-format";
 import { nonNegative } from "../../../../shared/usage";
 import type {
@@ -32,7 +32,7 @@ export function UsagePopover({
   selection?: Selection;
   providers: ProviderInfo[];
 }) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const run = usage?.run;
   const conversation = usage?.conversation;
   const context = usage?.context;
@@ -41,28 +41,26 @@ export function UsagePopover({
     `${formatTokens(value?.total)}${value?.status === "partial" && nonNegative(value.total) ? "+" : ""}`;
   const cost = (value?: CostUsage) => {
     if (!value || value.status === "unavailable" || !nonNegative(value.usd))
-      return t("Cost unavailable", "费用不可用");
+      return t("usage.costUnavailable");
     const source =
-      value.source === "provider"
-        ? t("reported", "已报告")
-        : t("estimated", "估算");
-    return `${formatCost(value.usd, true)} ${value.status === "partial" ? t("partial · ", "部分 · ") : ""}${source}`;
+      value.source === "provider" ? t("usage.reported") : t("usage.estimated");
+    return `${formatCost(value.usd, true)} ${value.status === "partial" ? t("usage.partial") : ""}${source}`;
   };
   const state = run
     ? {
-        active: t("In progress", "运行中"),
-        completed: t("Completed", "已完成"),
-        cancelled: t("Cancelled", "已取消"),
-        failed: t("Failed", "失败"),
-        incomplete: t("Incomplete", "未完整结束"),
+        active: t("usage.inProgress"),
+        completed: t("usage.completed"),
+        cancelled: t("usage.cancelled"),
+        failed: t("common.failed"),
+        incomplete: t("usage.incomplete"),
       }[run.state]
-    : t("No recorded run", "没有可归因的运行记录");
+    : t("usage.noRecordedRun");
   const totalTitle =
-    t("All retained local sessions", "所有保留的本地会话") +
+    t("usage.allRetainedLocalSessions") +
     (global?.status === "partial"
-      ? t(" · Partial data", " · 数据不完整")
+      ? t("usage.partialDataSuffix")
       : global?.status !== "complete"
-        ? t(" · Usage unavailable", " · 用量不可用")
+        ? t("usage.usageUnavailableSuffix")
         : "");
   const metadata = run?.selection ?? selection;
   const provider = providers.find((item) => item.id === metadata?.provider);
@@ -76,12 +74,12 @@ export function UsagePopover({
     nonNegative(context?.contextWindow);
   const percent = contextKnown ? Math.min(100, context!.percent!) : 0;
   const breakdown = [
-    ["input", t("Input", "输入")],
-    ["output", t("Output", "输出")],
-    ["cacheRead", t("Cache read", "缓存读取")],
-    ["cacheWrite", t("Cache write", "缓存写入")],
+    ["input", t("usage.input")],
+    ["output", t("usage.output")],
+    ["cacheRead", t("usage.cacheRead")],
+    ["cacheWrite", t("usage.cacheWrite")],
     ...(nonNegative(conversation?.reasoning)
-      ? [["reasoning", t("Reasoning · part of output", "推理 · 包含在输出中")]]
+      ? [["reasoning", t("usage.reasoningPartOfOutput")]]
       : []),
   ] as [
     keyof Pick<
@@ -103,50 +101,61 @@ export function UsagePopover({
     0,
   );
   const providerLabel =
-    provider?.name ??
-    metadata?.provider ??
-    t("Provider unavailable", "服务商不可用");
+    provider?.name ?? metadata?.provider ?? t("usage.providerUnavailable");
   return (
     <div className="usage-header" data-testid="usage-header">
       <Popover>
         <PopoverTrigger
           render={<Button variant="ghost" size="sm" />}
           className="usage-trigger"
-          aria-label={t("Open current usage details", "打开当前用量详情")}
+          aria-label={t("usage.openCurrentUsageDetails")}
         >
-          <Gauge data-slot="usage-icon" className="size-4" strokeWidth={1.75} aria-hidden="true" />
+          <Gauge
+            data-slot="usage-icon"
+            className="size-4"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
           <span>{percentText}</span>
-          <ChevronDown data-icon="inline-end" className="size-3" aria-hidden="true" />
+          <ChevronDown
+            data-icon="inline-end"
+            className="size-3"
+            aria-hidden="true"
+          />
         </PopoverTrigger>
         <PopoverContent
           className="usage-popover"
           sideOffset={10}
           align="end"
-          aria-label={t("Usage details", "用量详情")}
+          aria-label={t("usage.usageDetails")}
         >
           <Tabs.Root defaultValue="overview" className="usage-tabs">
             <div className="usage-heading">
-              <h2 data-slot="usage-title">{t("Usage", "用量")}</h2>
+              <h2 data-slot="usage-title">{t("usage.usage")}</h2>
               <Tabs.List
                 activateOnFocus
                 className="usage-tab-list"
-                aria-label={t("Usage view", "用量视图")}
+                aria-label={t("usage.usageView")}
               >
-                <Tabs.Tab data-slot="usage-tab" value="overview">{t("Overview", "概览")}</Tabs.Tab>
-                <Tabs.Tab data-slot="usage-tab" value="details">{t("Details", "明细")}</Tabs.Tab>
+                <Tabs.Tab data-slot="usage-tab" value="overview">
+                  {t("usage.overview")}
+                </Tabs.Tab>
+                <Tabs.Tab data-slot="usage-tab" value="details">
+                  {t("usage.details")}
+                </Tabs.Tab>
                 <Tabs.Indicator className="usage-tab-indicator" />
               </Tabs.List>
             </div>
             <Tabs.Panel value="overview" className="usage-tab-panel">
               <div className="usage-context" data-known={contextKnown}>
                 <div className="usage-context-labels">
-                  <span>{t("Context", "上下文")}</span>
+                  <span>{t("usage.context")}</span>
                   <strong>{percentText}</strong>
                 </div>
                 <div
                   className="usage-progress"
                   role={contextKnown ? "progressbar" : undefined}
-                  aria-label={t("Context usage", "上下文占用")}
+                  aria-label={t("usage.contextUsage")}
                   aria-valuemin={contextKnown ? 0 : undefined}
                   aria-valuemax={contextKnown ? 100 : undefined}
                   aria-valuenow={contextKnown ? percent : undefined}
@@ -156,28 +165,26 @@ export function UsagePopover({
                 <p>
                   {contextKnown
                     ? `${formatTokens(context!.tokens)} / ${formatTokens(context!.contextWindow)} tokens`
-                    : `${t("Unavailable", "暂不可用")}${nonNegative(context?.contextWindow) ? ` / ${formatTokens(context.contextWindow)}` : ""}`}
+                    : `${t("usage.unavailable")}${nonNegative(context?.contextWindow) ? ` / ${formatTokens(context.contextWindow)}` : ""}`}
                 </p>
               </div>
               <table className="usage-summary">
                 <thead>
                   <tr>
-                    <th aria-label={t("Scope", "范围")} />
+                    <th aria-label={t("usage.scope")} />
                     <th>Tokens</th>
-                    <th>{t("Cost", "费用")}</th>
+                    <th>{t("usage.cost")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {[
                     [
-                      active
-                        ? t("Current run", "当前运行")
-                        : t("Last run", "最近一轮"),
+                      active ? t("usage.currentRun") : t("usage.lastRun"),
                       run,
                       "run-usage",
                     ],
                     [
-                      t("Conversation", "整个会话"),
+                      t("usage.conversation"),
                       conversation,
                       "conversation-usage",
                     ],
@@ -187,13 +194,22 @@ export function UsagePopover({
                       <tr key={String(testId)} data-testid={String(testId)}>
                         <th scope="row">{String(label)}</th>
                         <td>
-                          <span aria-label={item?.status === "partial" ? `${tokens(item)} · ${t("Partial token data", "Token 数据不完整")}` : undefined}>{tokens(item)}</span>
+                          <span
+                            aria-label={
+                              item?.status === "partial"
+                                ? `${tokens(item)} · ${t("usage.partialTokenData")}`
+                                : undefined
+                            }
+                          >
+                            {tokens(item)}
+                          </span>
                         </td>
                         <td>
                           <span aria-label={cost(item?.cost)}>
-                          {nonNegative(item?.cost.usd) && item?.cost.status !== "unavailable"
-                            ? `${formatCost(item.cost.usd, true)}${item.cost.source === "provider" ? "" : " ≈"}${item.cost.status === "partial" ? "+" : ""}`
-                            : "—"}
+                            {nonNegative(item?.cost.usd) &&
+                            item?.cost.status !== "unavailable"
+                              ? `${formatCost(item.cost.usd, true)}${item.cost.source === "provider" ? "" : " ≈"}${item.cost.status === "partial" ? "+" : ""}`
+                              : "—"}
                           </span>
                         </td>
                       </tr>
@@ -208,10 +224,13 @@ export function UsagePopover({
                   ? ` · ${(run.elapsedMs / 1000).toFixed(1)}s`
                   : ""}
                 {run?.status === "partial"
-                  ? ` · ${t("Partial data", "Token 数据不完整")}`
+                  ? ` · ${t("usage.partialData")}`
                   : ""}
               </p>
-              <div className="usage-model" aria-label={`${modelLabel} · ${providerLabel}`}>
+              <div
+                className="usage-model"
+                aria-label={`${modelLabel} · ${providerLabel}`}
+              >
                 <ProviderIcon provider={metadata?.provider ?? ""} />
                 <strong>{modelLabel}</strong>
               </div>
@@ -219,7 +238,7 @@ export function UsagePopover({
             <Tabs.Panel value="details" className="usage-tab-panel">
               <div className="usage-breakdown">
                 <div className="usage-breakdown-heading">
-                  <span>{t("Conversation tokens", "会话 Token")}</span>
+                  <span>{t("usage.conversationTokens")}</span>
                   <strong>{tokens(conversation)}</strong>
                 </div>
                 <div
@@ -233,7 +252,7 @@ export function UsagePopover({
                               `${label}: ${formatTokens(conversation?.[field])}`,
                           )
                           .join(", ")
-                      : t("Token composition unavailable", "Token 组成暂不可用")
+                      : t("usage.tokenCompositionUnavailable")
                   }
                 >
                   {compositionKnown &&
@@ -261,19 +280,24 @@ export function UsagePopover({
                 </dl>
                 {nonNegative(conversation?.reasoning) && (
                   <p className="usage-reasoning">
-                    {t("Reasoning · part of output", "推理 · 包含在输出中")}
+                    {t("usage.reasoningPartOfOutput")}
                     <span>{formatTokens(conversation.reasoning)}</span>
                   </p>
                 )}
               </div>
               <div
                 className="usage-total"
-                aria-label={`${t("All models total", "所有模型累计")} ${formatTokens(global?.totalTokens)} tokens · ${totalTitle}`}
+                aria-label={`${t("usage.allModelsTotal")} ${formatTokens(global?.totalTokens)} tokens · ${totalTitle}`}
               >
                 <span className="usage-total-label">
-                  {t("All models total", "所有模型累计")}
+                  {t("usage.allModelsTotal")}
                   <Hint content={totalTitle}>
-                    <Button variant="ghost" size="icon-xs" className="size-5" aria-label={t("About total usage", "关于累计用量")}>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="size-5"
+                      aria-label={t("usage.aboutTotalUsage")}
+                    >
                       <Info aria-hidden="true" />
                     </Button>
                   </Hint>
