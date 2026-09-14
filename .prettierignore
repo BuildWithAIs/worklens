@@ -5,3 +5,4 @@ release
 test-results
 package-lock.json
 prd.md
+website/src/routeTree.gen.ts

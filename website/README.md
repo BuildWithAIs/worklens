@@ -1,86 +1,45 @@
 # WorkLens website
 
-Live site: https://worklens.buildwithais.com/
+WorkLens 的中文产品官网。当前实现使用 TanStack Start、TanStack Router、React、TypeScript、Tailwind CSS v4 和 Vite，在构建阶段预渲染为可独立托管的静态文件。
 
-The Chinese homepage is plain HTML and CSS with local images. A fixed Worker
-serves files from the **private worklens-site R2 bucket**. CI/CD updates static
-content using S3 credentials scoped to that bucket only.
+迁移范围与后续方向见 [TanStack 迁移方案](TANSTACK_MIGRATION_PLAN.md)，生产发布所需配置与切换步骤见 [Cloudflare 部署方案](docs/CLOUDFLARE_DEPLOYMENT_PLAN.md)。首期保留原首页的内容、图片、布局和 FAQ，不包含登录、用户系统、数据库或业务 API。
 
-## CI/CD
+## 本地开发
 
-`.github/workflows/website.yml` runs tests, validates assets, and performs a
-Wrangler dry run on PRs. PR jobs receive no deployment credentials.
-After a website change merges to `main`, the deploy job:
-
-1. Uploads files under `releases/<full-commit-sha>/`.
-2. Reads each object back and verifies its bytes. Partial uploads can resume;
-   conflicting content at an existing revision fails without overwriting it.
-3. Writes `current.json` only after all files pass verification.
-4. Verifies the live domain's exact content, release header, security headers and 404.
-
-Manual `workflow_dispatch` is available on `main` once merged. Production jobs
-are serialized and do not cancel active uploads. Desktop dependencies are not
-installed in CI.
-
-GitHub Actions Secrets contain only these S3 credentials:
-
-- `WORKLENS_R2_ACCESS_KEY_ID`
-- `WORKLENS_R2_SECRET_ACCESS_KEY`
-
-Token: `worklens-site-github-actions`. Permission: **Object Read & Write**, applied
-to **only worklens-site**. Cloudflare resource policy:
-`com.cloudflare.edge.r2.bucket.60e88110eacab548b2028b6f76e2b97f_default_worklens-site`.
-Do not substitute an account-wide token. CI has no `CLOUDFLARE_API_TOKEN`.
-Rotate the two S3 secrets together.
-
-Anyone able to run privileged repository workflows may use these credentials to
-read, replace, or delete this site's objects. The Cloudflare bucket policy,
-not the hard-coded bucket name in the workflow, protects other resources.
-
-## Owner-only infrastructure
-
-Worker code, binding, fixed security headers and the domain are maintained by
-the owner using local Wrangler authentication:
+使用 Node.js 24 和 npm：
 
 ```sh
-npx wrangler@4.127.1 deploy --config website/wrangler.jsonc --dry-run
-npx wrangler@4.127.1 deploy --config website/wrangler.jsonc
+npm ci --prefix website
+npm run dev --prefix website
 ```
 
-CI never runs the second command. Changing `worker.mjs` in Git alone does not
-update live serving code. The Worker accepts GET/HEAD only and exposes neither
-internal manifests nor directory listings. The bucket is private with no public
-R2 endpoint. Cache revalidation prevents stale content without a zone-wide
-cache-purge credential. R2 operations and Worker requests use their respective
-Cloudflare quotas.
+开发服务器默认监听 `http://localhost:3000`。
 
-Prior releases remain for rollback; CI does not delete them. The owner may clean
-up old releases separately, preserving the active release.
-
-## Local checks and manual content deployment
+## 构建与验证
 
 ```sh
-node --test website/worker.test.mjs
-python -m unittest discover -s website -p '*_test.py'
-python website/deploy.py --check
-python -m pip install -r website/requirements.txt
+npm run typecheck --prefix website
+npm run build --prefix website
+npm run verify:static --prefix website
+npm run test:e2e --prefix website
+npm run preview:static --prefix website
 ```
 
-Supply `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `SITE_REVISION` securely
-in the environment, then run `python website/deploy.py` and
-`python website/verify.py`. Use a full commit SHA and its matching checkout.
-Redeploy an older checkout to roll back; never reuse a revision for different
-bytes. Do not put credentials in files or shell history.
+预渲染产物位于 `website/.output/public/`。`verify:static` 会确认首页 HTML 已包含正文、图片字节未被构建过程改写、公共资源完整，并检查没有模板残留或业务 API 路径。`test:e2e` 使用本机 Chrome 检查响应式布局、导航、FAQ、API 请求和 404。`preview:static` 默认监听 `http://localhost:4173`，只提供静态产物，不启动 Start SSR 服务。
 
-For UI preview, serve `website/public/` with a local static server. A local Worker
-needs a release seeded in local R2; it does not read the remote bucket by default.
+`website/wrangler.jsonc` 已改为 Cloudflare Workers Static Assets 配置；`.github/workflows/website.yml` 目前仍只运行依赖安装、类型检查、构建、静态产物验证和页面测试，不会发布网站。待 GitHub `website-production` Environment 配置 Cloudflare API Token 后，再按部署方案加入 Production Job。
 
-## Content and screenshots
+旧 Worker + R2、Python/Boto3 发布脚本及其测试已经从仓库移除。Cloudflare 中仍存在的旧 R2 Bucket 和 GitHub R2 Secret 属于首次上线后的独立基础设施清理项，新站代码和构建均不引用它们。
 
-Product claims follow the repository and app. No public installer is advertised;
-memory and one-click enterprise integrations remain future work.
-`public/assets/icon.png` comes from `build/icon.png`. To refresh the real desktop
-screenshot, run `npm run build` then `node website/capture-app.mjs`, which uses a
-fresh temporary `WORKLENS_TEST_ROOT` without real user sessions.
+## 内容与截图
 
-Check 375px and 1280px layouts, links, keyboard focus and FAQ after UI changes.
+首页文案、能力描述、下载信息和链接目前都是占位内容，首期按原内容迁移。产品状态和正式发布入口将在内容定稿后单独核验；连接器实现情况不会自动改变长期记忆或公开安装包的状态。
+
+`public/assets/icon.png` 来自根目录的 `build/icon.png`。需要刷新桌面端真实截图时，在仓库根目录运行：
+
+```sh
+npm run build
+node website/capture-app.mjs
+```
+
+截图脚本使用临时 `WORKLENS_TEST_ROOT`，不会读取真实用户会话。界面修改后至少检查 390px、1024px 和 1280px 宽度、导航锚点、键盘焦点、FAQ 展开以及未知路径 404。

@@ -16,3 +16,5 @@ website/review/
 .DS_Store
 .wrangler/
 __pycache__/
+website/.output/
+website/.tanstack/
