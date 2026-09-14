@@ -1,9 +1,9 @@
 import { useState } from "react";
 import type { LocalArtifact } from "../../../../shared/contracts";
 import { Button } from "@/components/ui/button";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 export function ArtifactFiles({ result }: { result: unknown }) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const files =
@@ -28,7 +28,7 @@ export function ArtifactFiles({ result }: { result: unknown }) {
   return (
     <div
       className="my-2 flex flex-col gap-2"
-      aria-label={t("Saved files", "已保存文件")}
+      aria-label={t("artifacts.savedFiles")}
     >
       {files.map((file) => (
         <div
@@ -49,7 +49,7 @@ export function ArtifactFiles({ result }: { result: unknown }) {
             disabled={busy}
             onClick={() => void act(file.id, "open")}
           >
-            {t("Open", "打开")}
+            {t("common.open")}
           </Button>
           <Button
             size="sm"
@@ -57,7 +57,7 @@ export function ArtifactFiles({ result }: { result: unknown }) {
             disabled={busy}
             onClick={() => void act(file.id, "show")}
           >
-            {t("Show in folder", "在文件夹中显示")}
+            {t("artifacts.showInFolder")}
           </Button>
           <Button
             size="sm"
@@ -65,7 +65,7 @@ export function ArtifactFiles({ result }: { result: unknown }) {
             disabled={busy}
             onClick={() => void act(file.id, "saveAs")}
           >
-            {t("Save as", "另存为")}
+            {t("artifacts.saveAs")}
           </Button>
         </div>
       ))}

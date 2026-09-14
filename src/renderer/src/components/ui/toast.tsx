@@ -11,6 +11,7 @@ import {
   CircleXIcon,
   Loader2Icon,
 } from "lucide-react";
+import { useAppTranslation } from "@/i18n";
 
 const toast = ToastPrimitive.createToastManager();
 
@@ -23,9 +24,11 @@ function ToastPortal({ ...props }: ToastPrimitive.Portal.Props) {
 }
 
 function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
+  const { t } = useAppTranslation();
   return (
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
+      aria-label={t("common.notifications")}
       className={cn(
         "pointer-events-none fixed inset-x-4 bottom-4 z-[100] mx-auto w-auto max-w-sm outline-none sm:right-4 sm:left-auto sm:mx-0 sm:w-full",
         className,
@@ -119,10 +122,11 @@ function ToastClose({
   render = <Button variant="ghost" size="icon-sm" />,
   ...props
 }: ToastPrimitive.Close.Props) {
+  const { t } = useAppTranslation();
   return (
     <ToastPrimitive.Close
       data-slot="toast-close"
-      aria-label="Close toast"
+      aria-label={t("common.closeToast")}
       render={render}
       className={cn(
         "relative shrink-0 text-muted-foreground after:absolute after:-inset-2 after:content-[''] hover:text-foreground",
@@ -182,7 +186,9 @@ function ToastList() {
       className="rounded-xl shadow-md"
     >
       <ToastContent className="items-start gap-3 px-4 py-3">
-        <div className="shrink-0 pt-1.5"><ToastIcon type={toastItem.type} /></div>
+        <div className="shrink-0 pt-1.5">
+          <ToastIcon type={toastItem.type} />
+        </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1 wrap-anywhere">
           <ToastTitle />
           <ToastDescription />

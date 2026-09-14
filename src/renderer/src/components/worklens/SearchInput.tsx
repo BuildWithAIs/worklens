@@ -3,7 +3,7 @@ import { useRef, type ComponentProps } from "react";
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 
 type Props = Omit<
   ComponentProps<typeof Input>,
@@ -14,7 +14,7 @@ type Props = Omit<
 };
 export function SearchInput({ value, onValueChange, ...props }: Props) {
   const input = useRef<HTMLInputElement>(null);
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   return (
     <div className="relative min-w-0 flex-1">
       <Input
@@ -26,19 +26,21 @@ export function SearchInput({ value, onValueChange, ...props }: Props) {
       />
       {value && (
         <div className="absolute inset-y-0 right-1 flex items-center">
-        <Hint content={t("Clear search", "清除搜索")}><Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          disabled={props.disabled || props.readOnly}
-          aria-label={t("Clear search", "清除搜索")}
-          onClick={() => {
-            onValueChange("");
-            input.current?.focus();
-          }}
-        >
-          <X />
-        </Button></Hint>
+          <Hint content={t("search.clearSearch")}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              disabled={props.disabled || props.readOnly}
+              aria-label={t("search.clearSearch")}
+              onClick={() => {
+                onValueChange("");
+                input.current?.focus();
+              }}
+            >
+              <X />
+            </Button>
+          </Hint>
         </div>
       )}
     </div>

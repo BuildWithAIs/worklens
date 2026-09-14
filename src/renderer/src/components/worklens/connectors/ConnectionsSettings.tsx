@@ -15,14 +15,14 @@ import {
   ItemDescription,
   ItemActions,
 } from "@/components/ui/item";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 import { connectorCatalog, type ConnectorSettingsProps } from "./catalog";
 export function ConnectionsSettings({
   data,
   refresh,
   onSuccess,
 }: Omit<ConnectorSettingsProps, "onClose">) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
   const [editing, setEditing] = useState<string>();
@@ -31,8 +31,8 @@ export function ConnectionsSettings({
   )?.Settings;
   const search = query.trim().toLocaleLowerCase();
   const groups = [
-    { id: "connected", label: t("Connected", "已连接"), connected: true },
-    { id: "available", label: t("Available", "可连接"), connected: false },
+    { id: "connected", label: t("common.connected"), connected: true },
+    { id: "available", label: t("common.available"), connected: false },
   ]
     .map((group) => ({
       ...group,
@@ -54,24 +54,24 @@ export function ConnectionsSettings({
     <>
       <div className="settings-toolbar">
         <SearchInput
-          aria-label={t("Search connectors", "搜索连接器")}
-          placeholder={t("Search connectors…", "搜索连接器…")}
+          aria-label={t("connectors.searchConnectors")}
+          placeholder={t("connectors.searchConnectorsPlaceholder")}
           value={query}
           onValueChange={setQuery}
         />
         <NativeSelect
-          aria-label={t("Filter connectors", "筛选连接器")}
+          aria-label={t("connectors.filterConnectors")}
           value={scope}
           onChange={(event) => setScope(event.target.value)}
         >
           <NativeSelectOption value="all">
-            {t("All connectors", "全部连接器")}
+            {t("connectors.allConnectors")}
           </NativeSelectOption>
           <NativeSelectOption value="connected">
-            {t("Connected", "已连接")}
+            {t("common.connected")}
           </NativeSelectOption>
           <NativeSelectOption value="available">
-            {t("Available", "可连接")}
+            {t("common.available")}
           </NativeSelectOption>
         </NativeSelect>
       </div>
@@ -109,16 +109,14 @@ export function ConnectionsSettings({
                     size="sm"
                     disabled={!Settings}
                     onClick={() => setEditing(id)}
-                    aria-label={`${group.connected ? t("Manage", "管理") : t("Connect", "连接")} ${name}`}
+                    aria-label={`${group.connected ? t("common.manage") : t("common.connect")} ${name}`}
                   >
                     {group.connected ? (
                       <Settings2 data-icon="inline-start" aria-hidden="true" />
                     ) : (
                       <Plus data-icon="inline-start" aria-hidden="true" />
                     )}
-                    {group.connected
-                      ? t("Manage", "管理")
-                      : t("Connect", "连接")}
+                    {group.connected ? t("common.manage") : t("common.connect")}
                   </Button>
                 </ItemActions>
               </Item>
@@ -129,8 +127,8 @@ export function ConnectionsSettings({
       {!groups.length && (
         <p className="settings-empty">
           {scope === "connected" && !search
-            ? t("No connections yet.", "暂无已连接的平台。")
-            : t("No connectors match your filters.", "没有匹配的连接器。")}
+            ? t("connectors.noConnectionsYet")
+            : t("connectors.noConnectorsMatchYourFilters")}
         </p>
       )}
       {Settings && (

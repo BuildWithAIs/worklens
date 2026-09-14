@@ -20,7 +20,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
-import { useLocale } from "@/lib/locale";
+import { useAppTranslation } from "@/i18n";
 export function JiraSettings({
   connection,
   refresh,
@@ -32,7 +32,7 @@ export function JiraSettings({
   onSuccess: (message: string) => void;
   onClose: () => void;
 }) {
-  const { t } = useLocale();
+  const { t } = useAppTranslation();
   const [form, setForm] = useState<JiraSettingsInput>({
     url: connection?.url ?? "",
     deployment: connection?.deployment ?? "data-center",
@@ -65,7 +65,7 @@ export function JiraSettings({
         await window.worklens.invoke("jiraSave", input);
         setForm((current) => ({ ...current, token: "" }));
         await refresh();
-        onSuccess(t("Jira settings saved", "Jira 设置已保存"));
+        onSuccess(t("connectors.jira.jiraSettingsSaved"));
         onClose();
       } else {
         await window.worklens.invoke("jiraRemove", undefined);
@@ -76,7 +76,7 @@ export function JiraSettings({
           token: "",
         });
         await refresh();
-        onSuccess(t("Jira disconnected", "Jira 已断开"));
+        onSuccess(t("connectors.jira.jiraDisconnected"));
         onClose();
       }
     } catch (error) {
@@ -101,10 +101,7 @@ export function JiraSettings({
             Jira
           </DialogTitle>
           <DialogDescription>
-            {t(
-              "Connect Jira to manage issues, collaborate and plan your work.",
-              "连接 Jira，管理工单、协作并规划工作。",
-            )}
+            {t("connectors.jira.description")}
           </DialogDescription>
         </DialogHeader>
         {connection?.error && (
@@ -122,7 +119,7 @@ export function JiraSettings({
           <fieldset disabled={busy} className="flex flex-col gap-4">
             <Field>
               <FieldLabel htmlFor="jira-deployment">
-                {t("Deployment", "部署类型")}
+                {t("connectors.jira.deployment")}
               </FieldLabel>
               <NativeSelect
                 id="jira-deployment"
@@ -143,7 +140,7 @@ export function JiraSettings({
             </Field>
             <Field>
               <FieldLabel htmlFor="jira-url">
-                {t("Jira URL", "Jira 地址")}
+                {t("connectors.jira.jiraURL")}
               </FieldLabel>
               <Input
                 id="jira-url"
@@ -153,17 +150,14 @@ export function JiraSettings({
                 autoComplete="off"
               />
               <FieldDescription>
-                {t(
-                  "Use the site address, including /jira when present.",
-                  "填写站点地址，保留地址中的 /jira。",
-                )}
+                {t("connectors.jira.urlHelp")}
               </FieldDescription>
             </Field>
             {form.deployment === "cloud" && (
               <>
                 <Field>
                   <FieldLabel htmlFor="jira-email">
-                    {t("Atlassian account email", "Atlassian 账户邮箱")}
+                    {t("connectors.jira.atlassianAccountEmail")}
                   </FieldLabel>
                   <Input
                     id="jira-email"
@@ -174,7 +168,7 @@ export function JiraSettings({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="jira-token-type">
-                    {t("Token type", "Token 类型")}
+                    {t("connectors.jira.tokenType")}
                   </FieldLabel>
                   <NativeSelect
                     id="jira-token-type"
@@ -187,10 +181,10 @@ export function JiraSettings({
                     }
                   >
                     <NativeSelectOption value="classic">
-                      {t("Classic API token", "普通 API token")}
+                      {t("connectors.jira.classicAPIToken")}
                     </NativeSelectOption>
                     <NativeSelectOption value="scoped">
-                      {t("API token with scopes", "带 scopes 的 API token")}
+                      {t("connectors.jira.apiTokenWithScopes")}
                     </NativeSelectOption>
                   </NativeSelect>
                 </Field>
@@ -203,10 +197,7 @@ export function JiraSettings({
                       onChange={(e) => update({ cloudId: e.target.value })}
                     />
                     <FieldDescription>
-                      {t(
-                        "Optional: leave blank to discover your site's Cloud ID.",
-                        "可留空自动获取；获取失败时手工填写本站 Cloud ID。",
-                      )}
+                      {t("connectors.jira.cloudIdHelp")}
                     </FieldDescription>
                   </Field>
                 )}
@@ -222,11 +213,8 @@ export function JiraSettings({
                 onChange={(e) => update({ token: e.target.value })}
                 placeholder={
                   connection?.configured
-                    ? t(
-                        "Leave blank to keep the saved token",
-                        "留空保留已保存的 token",
-                      )
-                    : t("Enter your token", "填写 token")
+                    ? t("connectors.jira.leaveBlankToKeepTheSavedToken")
+                    : t("connectors.jira.enterYourToken")
                 }
               />
             </Field>
@@ -249,7 +237,7 @@ export function JiraSettings({
               disabled={busy}
               onClick={() => void act("remove")}
             >
-              {t("Disconnect", "断开连接")}
+              {t("common.disconnect")}
             </Button>
           )}
           <Button
@@ -257,10 +245,10 @@ export function JiraSettings({
             disabled={busy}
             onClick={() => void act("test")}
           >
-            {t("Test connection", "测试连接")}
+            {t("connectors.jira.testConnection")}
           </Button>
           <Button type="submit" form="jira-settings-form" disabled={busy}>
-            {busy ? t("Working…", "处理中…") : t("Save", "保存")}
+            {busy ? t("common.workingPlaceholder") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
