@@ -29,9 +29,9 @@ export function ConnectionsSettings() {
   return (
     <>
       <div className="settings-toolbar">
-        <SearchInput aria-label={t("Search connections", "搜索连接")} placeholder={t("Search connections…", "搜索连接…")} value={query} onValueChange={setQuery} />
-        <NativeSelect aria-label={t("Filter connections", "筛选连接")} value={scope} onChange={event => setScope(event.target.value)}>
-          <NativeSelectOption value="all">{t("All connections", "全部连接")}</NativeSelectOption>
+        <SearchInput aria-label={t("Search connectors", "搜索连接器")} placeholder={t("Search connectors…", "搜索连接器…")} value={query} onValueChange={setQuery} />
+        <NativeSelect aria-label={t("Filter connectors", "筛选连接器")} value={scope} onChange={event => setScope(event.target.value)}>
+          <NativeSelectOption value="all">{t("All connectors", "全部连接器")}</NativeSelectOption>
           <NativeSelectOption value="connected">{t("Connected", "已连接")}</NativeSelectOption>
           <NativeSelectOption value="available">{t("Available", "可连接")}</NativeSelectOption>
         </NativeSelect>
@@ -55,7 +55,7 @@ export function ConnectionsSettings() {
     </section>}
       {!available.length && <p className="settings-empty">{scope === "connected" && !search
         ? t("No connections yet.", "暂无已连接的平台。")
-        : t("No connections match your filters.", "没有匹配的连接。")}</p>}
+        : t("No connectors match your filters.", "没有匹配的连接器。")}</p>}
     </>
   );
 }

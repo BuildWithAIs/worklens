@@ -1,6 +1,29 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
+test("Thinking returns to models and restores keyboard focus", async ({ page }, info) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  const trigger = page.getByRole("button", { name: "Thinking level", exact: true });
+  await trigger.click();
+  await expect(page.getByRole("radio", { name: "Medium", exact: true })).toBeFocused();
+  await expect(page.getByRole("textbox", { name: "Search models", exact: true })).toBeHidden();
+  await expect(page.getByRole("radio", { name: "High", exact: true })).toHaveCSS("font-size", "14px");
+  await page.screenshot({ path: info.outputPath("thinking-options.png") });
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  await trigger.press("Enter");
+  await page.getByRole("radio", { name: "High", exact: true }).click();
+  await expect(trigger).toContainText("High");
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await expect(page.getByRole("radio", { name: "High", exact: true })).toBeChecked();
+  await page.getByRole("button", { name: "Back to models", exact: true }).click();
+  await expect(trigger).toBeFocused();
+  await page.screenshot({ path: info.outputPath("thinking-entry.png") });
+});
+
 test("first launch stays in chat and both connection shortcuts open Providers", async ({
   page,
 }, info) => {
@@ -170,7 +193,7 @@ for (const allUnavailable of [true, false]) {
     await picker.click();
     await expect(page.locator(".chat-model-reasoning")).toHaveCount(0);
     await expect(
-      page.getByRole("combobox", { name: "Thinking level", exact: true }),
+      page.getByRole("button", { name: "Thinking level", exact: true }),
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Manage models", exact: true }),
@@ -195,8 +218,8 @@ for (const allUnavailable of [true, false]) {
         .filter({ hasText: "DeepSeek V4 Pro" })
         .click();
       await expect(
-        page.getByRole("combobox", { name: "Thinking level", exact: true }),
-      ).toHaveValue("medium");
+        page.getByRole("button", { name: "Thinking level", exact: true }),
+      ).toContainText("Medium");
       await page.keyboard.press("Escape");
       await expect(picker).toContainText("DeepSeek V4 Pro");
       await expect(picker).toContainText("Medium");

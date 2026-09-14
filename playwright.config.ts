@@ -4,6 +4,6 @@ export default defineConfig({
   timeout: 90000,
   workers: 1,
   reporter: "list",
-  outputDir: "test-results",
+  outputDir: "test-results/e2e",
   use: { trace: "retain-on-failure" },
 });

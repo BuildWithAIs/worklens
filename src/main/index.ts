@@ -8,6 +8,7 @@ import {
   shell,
   dialog,
   nativeTheme,
+  Menu,
 } from "electron";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -238,6 +239,39 @@ else {
             webSecurity: true,
           },
         });
+        // Keep web UI geometry aligned with the unscaled native window controls.
+        const contents = window.webContents;
+        contents.on("dom-ready", () => contents.setZoomFactor(1));
+        contents.on("zoom-changed", () => contents.setZoomFactor(1));
+        contents.on("before-input-event", (event, input) => {
+          const modifier = process.platform === "darwin" ? input.meta : input.control;
+          if (modifier && !input.alt && ["+", "=", "-", "0"].includes(input.key)) {
+            event.preventDefault();
+          }
+        });
+        const hidePageZoom = (menu: Menu) => {
+          for (const item of menu.items) {
+            if (["resetzoom", "zoomin", "zoomout"].includes(item.role ?? "")) {
+              item.visible = false;
+              item.enabled = false;
+            }
+            if (item.submenu) hidePageZoom(item.submenu);
+          }
+          // Hidden zoom entries must not leave consecutive menu dividers.
+          let divider = true;
+          for (const item of menu.items) {
+            if (!item.visible) continue;
+            if (item.type === "separator") {
+              item.visible = !divider;
+              divider = true;
+            } else divider = false;
+          }
+        };
+        const menu = Menu.getApplicationMenu();
+        if (menu) {
+          hidePageZoom(menu);
+          Menu.setApplicationMenu(menu);
+        }
         window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
         window.webContents.on("will-navigate", (event) =>
           event.preventDefault(),

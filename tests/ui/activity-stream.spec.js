@@ -101,7 +101,7 @@ for (const theme of ["light", "dark"]) {
       );
       await expect(row).toHaveText(`Searching · query-${i}`);
       await row.locator("span").hover();
-      await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(`Searching · query-${i}`);
+      await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
       await page.mouse.move(0, 0);
       await expect(root.locator('[data-slot="activity-progress"]')).toHaveCount(
         1,
@@ -160,7 +160,7 @@ for (const theme of ["light", "dark"]) {
     await expect(row.locator("span")).toHaveCSS("white-space", "nowrap");
     await expect(row).toHaveText("Running bash · rg --files " + "long-path/".repeat(100));
     await row.locator("span").hover();
-    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText("Running bash · rg --files " + "long-path/".repeat(100));
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
     await page.mouse.move(0, 0);
     await expect(row.locator("span")).toHaveCSS("text-overflow", "ellipsis");
     const text = row.locator("span");
@@ -203,6 +203,42 @@ for (const theme of ["light", "dark"]) {
     await expect(root).toContainText("query-11");
   });
 }
+
+test("completed command rows do not open hints on hover or beneath a stationary pointer", async ({ page }) => {
+  await setup(page);
+  const command = "printf " + "long-command-argument/".repeat(100);
+  await page.evaluate(command => window.updateActivity({ phase: "tool", messages: [
+    { id: "command-hint", role: "tool", toolName: "bash", args: JSON.stringify({ command }), status: "running", text: "" },
+  ] }), command);
+  const row = page.locator('[data-slot="activity-progress"]');
+  await row.hover();
+  await page.waitForTimeout(350);
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+  await page.evaluate(() => window.updateActivity({ finishTool: true, messages: [
+    { id: "after-command", role: "assistant", text: "Continue with the next step." },
+  ] }));
+  await expect(row).toHaveText("Ran command");
+  await row.hover();
+  await page.waitForTimeout(350);
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+  await expect(row.locator('[tabindex], [title], [data-slot="tooltip-trigger"]')).toHaveCount(0);
+  // Keep the pointer still while scrolling the row away and back beneath it.
+  const viewport = page.locator('[data-slot="aui_thread-viewport"]');
+  await viewport.evaluate(node => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "1200px";
+    spacer.style.flexShrink = "0";
+    node.append(spacer);
+    node.style.scrollBehavior = "auto";
+  });
+  await row.hover();
+  const initialScroll = await viewport.evaluate(node => node.scrollTop);
+  await viewport.evaluate(node => { node.scrollTop += 80; });
+  await expect.poll(() => viewport.evaluate(node => node.scrollTop)).toBeGreaterThan(initialScroll);
+  await viewport.evaluate((node, top) => { node.scrollTop = top; }, initialScroll);
+  await page.waitForTimeout(350);
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+});
 
 test("latest status covers special phases, unknown tools and cancelled answers", async ({
   page,

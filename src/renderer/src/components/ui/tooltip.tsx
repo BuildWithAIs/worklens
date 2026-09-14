@@ -64,10 +64,14 @@ function TooltipContent({
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
 
 // Shared hint for existing controls and focusable explanatory text.
-function Hint({ children, content }: { children: ReactElement; content: ReactNode }) {
+function Hint({ children, content, disabled = false }: {
+  children: ReactElement;
+  content: ReactNode;
+  disabled?: boolean;
+}) {
   return (
     <TooltipProvider>
-      <Tooltip>
+      <Tooltip disabled={disabled}>
         <TooltipTrigger render={children} />
         <TooltipContent>{content}</TooltipContent>
       </Tooltip>
@@ -87,7 +91,7 @@ function OverflowHint({ children, content }: { children: ReactElement; content: 
         disableHoverablePopup
         onOpenChange={(next) => {
           const label = trigger.current?.querySelector<HTMLElement>(".truncate")
-          setOpen(next && !!label && (label.scrollWidth > label.clientWidth || label.dataset.truncated === "true"))
+          setOpen(next && !!label && (label.scrollWidth > label.clientWidth || label.dataset.truncated === "true" || label.dataset.overflow === "true"))
         }}
       >
         <TooltipTrigger ref={trigger} render={children} onPointerLeave={() => setOpen(false)} onBlur={() => setOpen(false)} />

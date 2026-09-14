@@ -1,3 +1,5 @@
+import { BackgroundEffect } from "./BackgroundEffect";
+import { BackgroundPreferences } from "./BackgroundPreferences";
 import { ConnectionsSettings } from "./ConnectionsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
@@ -6,7 +8,7 @@ import {
   ArrowLeft,
   Plug,
   Cpu,
-  FolderOpen,
+  ArrowUpRight,
   Info,
   Globe,
   LoaderCircle,
@@ -229,7 +231,7 @@ export function SettingsPage({
     { id: "general" as const, label: t("General", "通用"), icon: Settings2 },
     { id: "providers" as const, label: t("Providers", "供应商"), icon: Globe },
     { id: "models" as const, label: t("Models", "模型"), icon: Cpu },
-    { id: "connections" as const, label: t("Connections", "连接"), icon: Plug },
+    { id: "connections" as const, label: t("Connectors", "连接器"), icon: Plug },
   ];
   function providerRows(items: ProviderInfo[], isConnected: boolean) {
     return (
@@ -292,6 +294,7 @@ export function SettingsPage({
   return (
     <div className="settings-workspace">
       <aside className="settings-navigation">
+        <BackgroundEffect settings={data.settings} />
         <Button variant="ghost" className="settings-back" onClick={onBack}>
           <ArrowLeft />
           {t("Back to app", "返回应用")}
@@ -311,6 +314,7 @@ export function SettingsPage({
         </nav>
       </aside>
       <div className="settings-pane">
+        <BackgroundEffect settings={data.settings} edge />
         <header className="settings-page-heading">
           <h1 data-slot="settings-page-title">{nav.find((n) => n.id === section)?.label}</h1>
 
@@ -657,27 +661,28 @@ export function SettingsPage({
                         </NativeSelectOption>
                       </NativeSelect>
                     </Item>
+                  <BackgroundPreferences settings={data.settings} save={save} onError={onError} onSuccess={onSuccess} />
                   </ItemGroup>
                 </section>
                 <section className="settings-section">
                   <h2 data-slot="settings-section-title" className="settings-section-heading settings-group-bar">
                     {t("Local data", "本地数据")}
-                    <TooltipIconButton
-                      aria-label={t("About local data", "关于本地数据")}
-                      tooltip={t(
-                        "History and encrypted credentials are stored on this device. Model requests are sent to your provider.",
-                        "历史与加密凭据保存在本机。模型请求会发送至所选供应商。",
+                    <Hint
+                      content={t(
+                        "Conversation history and encrypted credentials are stored on this device.",
+                        "会话历史与加密凭据保存在本机。",
                       )}
-                      side="top"
                     >
-                      <Info />
-                    </TooltipIconButton>
+                      <Button variant="ghost" size="icon-xs" className="size-5" aria-label={t("About local data", "关于本地数据")}>
+                        <Info aria-hidden="true" />
+                      </Button>
+                    </Hint>
                   </h2>
                   <ItemGroup className="settings-list">
                     {(
                       [
                         ["root", t("Data directory", "数据目录")],
-                        ["runtime", t("Working directory", "运行目录")],
+                        ["runtime", t("Runtime directory", "运行目录")],
                         ["sessions", t("Conversation history", "会话历史")],
                         ["userData", t("Settings & credentials", "设置与凭据")],
                       ] as const
@@ -685,8 +690,12 @@ export function SettingsPage({
                       <Item size="sm" role="listitem" className="settings-entry" key={which}>
                         <ItemContent className="settings-entry-copy">
                           <ItemTitle className="settings-entry-title">{label}</ItemTitle>
-                          <ItemDescription className="settings-entry-description settings-path">
-                            {data.paths[which]}
+                          <ItemDescription className="settings-entry-description">
+                            <Hint content={<span className="break-all">{data.paths[which]}</span>}>
+                              <span className="settings-path" tabIndex={0} aria-label={data.paths[which]}>
+                                <bdi dir="ltr">{data.paths[which]}</bdi>
+                              </span>
+                            </Hint>
                           </ItemDescription>
                         </ItemContent>
                         <Hint content={t("Open folder", "打开文件夹")}><Button
@@ -702,7 +711,7 @@ export function SettingsPage({
                               )
                           }
                         >
-                          <FolderOpen />
+                          <ArrowUpRight strokeWidth={1.75} />
                         </Button></Hint>
                       </Item>
                     ))}
