@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { readableStorage } from "../src/main/confluence/content";
-import { setup } from "./confluence-setup";
+import { readableStorage } from "../../../src/main/connectors/confluence/content";
+import { setup } from "./setup";
 
 const site = "https://example.com/confluence";
 const source = `${site}/pages/viewpage.action?pageId=1`;

@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { ConfluenceConnections } from "../src/main/confluence/connection";
-import { testConnection } from "../src/main/confluence/connection-test";
-import { setup } from "./confluence-setup";
+import { ConfluenceConnections } from "../../../src/main/connectors/confluence/connection";
+import { testConnection } from "../../../src/main/connectors/confluence/connection-test";
+import { setup } from "./setup";
 
 test("save validates automatically, failed replacement disables tools, and a corrected save re-enables them", async () => {
   const f = await setup();

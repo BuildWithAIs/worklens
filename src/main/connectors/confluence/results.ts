@@ -1,6 +1,6 @@
 import type { Execution } from "./operation-context";
 import type { Json } from "./http";
-import type { LocalArtifact } from "../../shared/contracts";
+import type { LocalArtifact } from "../../../shared/contracts";
 
 const RESOURCE_STATUSES = new Set([
   "current",

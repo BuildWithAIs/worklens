@@ -8,8 +8,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { confluenceFixture } from "../confluence-fixture";
-import { mockServer, fixtureModel } from "../mock-server";
+import { confluenceFixture } from "../../connectors/confluence/fixture";
+import { mockServer, fixtureModel } from "../../mock-server";
 
 test("Confluence settings, encrypted restart, Pi download and file card", async () => {
   const root = await mkdtemp(join(tmpdir(), "worklens-confluence-desktop-"));

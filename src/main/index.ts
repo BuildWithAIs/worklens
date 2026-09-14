@@ -25,8 +25,8 @@ import { ProviderService } from "./providers";
 import { schemas, externalUrl } from "./validation";
 import { toolNames } from "./resources";
 import type { Requests } from "../shared/contracts";
-import { ConfluenceConnections } from "./confluence/connection";
-import { ConfluenceService } from "./confluence/service";
+import { createConnectors } from "./connectors";
+import { isConnectorRequest } from "./connectors/ipc";
 import { LocalArtifacts } from "./local-artifacts";
 
 // Keep the original safeStorage identity: changing case selects a different
@@ -72,18 +72,18 @@ else {
       );
       const state = new StateStore(join(paths.userData, "app-state.json"));
       await state.load();
-      const connections = new ConfluenceConnections(
-        join(paths.userData, "confluence.json"),
-        safeStorage,
-      );
-      await connections.load();
       const artifacts = new LocalArtifacts(
         join(root, "artifacts"),
         paths.runtime,
       );
+      const connectors = createConnectors(
+        paths.userData,
+        safeStorage,
+        artifacts,
+      );
+      await connectors.registry.initialize();
       const redact = (text: string) =>
-        credentials.redact(connections.redact(text));
-      const confluence = new ConfluenceService(connections, artifacts);
+        credentials.redact(connectors.registry.redact(text));
       const runtime = await ModelRuntime.create({
         credentials,
         modelsPath: null,
@@ -100,7 +100,7 @@ else {
         paths,
         (event) => broadcast("worklens:chat", event),
         redact,
-        confluence,
+        connectors.registry,
       );
       await agents.initialize();
       providers = new ProviderService(runtime, credentials, (event) =>
@@ -119,129 +119,135 @@ else {
             if (!Object.hasOwn(schemas, method)) throw new Error("未知请求");
             const input = schemas[method].parse(raw) as any;
             let value: unknown;
-            switch (method) {
-              case "confluenceSave":
-                value = await connections.save(input);
-                break;
-              case "confluenceTest":
-                value = await confluence.test(input);
-                break;
-              case "confluenceRemove":
-                await connections.remove();
-                break;
-              case "artifact": {
-                const artifact = await artifacts.get(input.id);
-                if (input.action === "show")
-                  shell.showItemInFolder(artifact.path);
-                else if (input.action === "open") {
-                  const error = await shell.openPath(artifact.path);
-                  if (error) throw new Error(error);
-                } else {
-                  const chosen = await dialog.showSaveDialog(window!, {
-                    defaultPath: artifact.path,
-                    properties: [
-                      "showOverwriteConfirmation",
-                      "createDirectory",
-                    ],
+            if (isConnectorRequest(method)) {
+              value = await connectors.requests(method, input);
+            } else
+              switch (method) {
+                case "artifact": {
+                  const artifact = await artifacts.get(input.id);
+                  if (input.action === "show")
+                    shell.showItemInFolder(artifact.path);
+                  else if (input.action === "open") {
+                    const error = await shell.openPath(artifact.path);
+                    if (error) throw new Error(error);
+                  } else {
+                    const chosen = await dialog.showSaveDialog(window!, {
+                      defaultPath: artifact.path,
+                      properties: [
+                        "showOverwriteConfirmation",
+                        "createDirectory",
+                      ],
+                    });
+                    if (!chosen.canceled && chosen.filePath)
+                      await artifacts.copy(artifact.id, chosen.filePath);
+                  }
+                  break;
+                }
+                case "bootstrap":
+                  value = {
+                    settings: state.value,
+                    ...connectors.bootstrap(),
+                    providers: await providers!.list(),
+                    conversations: await agents!.list(),
+                    globalUsage: agents!.getGlobalUsage(),
+                    paths,
+                    version: app.getVersion(),
+                    tools: [...toolNames, ...connectors.registry.names()],
+                    diagnostics: agents!.diagnostics,
+                    recoveries: agents!.recoveries,
+                  };
+                  break;
+                case "settings":
+                  value = await state.update(input);
+                  nativeTheme.themeSource = state.value.theme;
+                  break;
+                case "providers":
+                  value = await providers!.list();
+                  break;
+                case "login":
+                  await providers!.login(
+                    input.provider,
+                    input.type,
+                    input.loginId,
+                  );
+                  break;
+                case "authReply":
+                  providers!.reply(input.loginId, input.promptId, input.value);
+                  break;
+                case "authCancel":
+                  providers!.cancel(input.loginId);
+                  break;
+                case "logout":
+                  await runtime.logout(input.provider, {
+                    signal: AbortSignal.timeout(15000),
                   });
-                  if (!chosen.canceled && chosen.filePath)
-                    await artifacts.copy(artifact.id, chosen.filePath);
+                  providers!.clearConnection(input.provider);
+                  break;
+                case "azure":
+                  await providers!.azure(input);
+                  break;
+                case "test":
+                  value = await providers!.test(input);
+                  break;
+                case "clearConnection":
+                  providers!.clearConnection(input.provider);
+                  break;
+                case "htmlFileAction": {
+                  const file = await agents!.htmlActionFile(input.id, {
+                    path: input.path,
+                    code: input.code,
+                  });
+                  if (input.action === "reveal") shell.showItemInFolder(file);
+                  else {
+                    if (process.platform !== "darwin")
+                      throw new Error(
+                        "Chrome opening is currently supported on macOS only",
+                      );
+                    await promisify(execFile)("/usr/bin/open", [
+                      "-a",
+                      "Google Chrome",
+                      file,
+                    ]);
+                  }
+                  break;
                 }
-                break;
+                case "previewHtml":
+                  value = await agents!.previewHtml(input.id, input.path);
+                  break;
+                case "open":
+                  value = await agents!.open(input.id);
+                  await state.update({ lastConversation: input.id });
+                  break;
+                case "rename":
+                  await agents!.rename(input.id, input.title);
+                  break;
+                case "delete":
+                  await agents!.delete(input.id);
+                  break;
+                case "send":
+                  value = await agents!.send(input);
+                  break;
+                case "cancel":
+                  await agents!.cancel(input.conversationId, input.runId);
+                  break;
+                case "model":
+                  value = await agents!.setModel(input.id, input.selection);
+                  break;
+                case "external":
+                  await shell.openExternal(externalUrl(input.url));
+                  break;
+                case "showPath":
+                  await shell.openPath(
+                    paths[input.which as keyof typeof paths],
+                  );
+                  break;
+                case "dismissRecovery":
+                  await agents!.dismissRecovery(input.runId);
+                  break;
+                case "refreshModels":
+                  value = await providers!.refreshModels(input.provider);
+                  break;
               }
-              case "bootstrap":
-                value = {
-                  settings: state.value,
-                  confluence: connections.info(),
-                  providers: await providers!.list(),
-                  conversations: await agents!.list(),
-                  globalUsage: agents!.getGlobalUsage(),
-                  paths,
-                  version: app.getVersion(),
-                  tools: [...toolNames, ...confluence.names()],
-                  diagnostics: agents!.diagnostics,
-                  recoveries: agents!.recoveries,
-                };
-                break;
-              case "settings":
-                value = await state.update(input);
-                nativeTheme.themeSource = state.value.theme;
-                break;
-              case "providers":
-                value = await providers!.list();
-                break;
-              case "login":
-                await providers!.login(
-                  input.provider,
-                  input.type,
-                  input.loginId,
-                );
-                break;
-              case "authReply":
-                providers!.reply(input.loginId, input.promptId, input.value);
-                break;
-              case "authCancel":
-                providers!.cancel(input.loginId);
-                break;
-              case "logout":
-                await runtime.logout(input.provider, {
-                  signal: AbortSignal.timeout(15000),
-                });
-                providers!.clearConnection(input.provider);
-                break;
-              case "azure":
-                await providers!.azure(input);
-                break;
-              case "test":
-                value = await providers!.test(input);
-                break;
-              case "clearConnection":
-                providers!.clearConnection(input.provider);
-                break;
-              case "htmlFileAction": {
-                const file = await agents!.htmlActionFile(input.id, { path: input.path, code: input.code });
-                if (input.action === "reveal") shell.showItemInFolder(file);
-                else {
-                  if (process.platform !== "darwin") throw new Error("Chrome opening is currently supported on macOS only");
-                  await promisify(execFile)("/usr/bin/open", ["-a", "Google Chrome", file]);
-                }
-                break;
-              }
-              case "previewHtml":
-                value = await agents!.previewHtml(input.id, input.path);
-                break;
-              case "open":
-                value = await agents!.open(input.id);
-                await state.update({ lastConversation: input.id });
-                break;
-              case "rename":
-                await agents!.rename(input.id, input.title);
-                break;
-              case "delete":
-                await agents!.delete(input.id);
-                break;
-              case "send":
-                value = await agents!.send(input);
-                break;
-              case "cancel":
-                await agents!.cancel(input.conversationId, input.runId);
-                break;
-              case "model":
-                value = await agents!.setModel(input.id, input.selection);
-                break;
-              case "external":
-                await shell.openExternal(externalUrl(input.url));
-                break;
-              case "showPath":
-                await shell.openPath(paths[input.which as keyof typeof paths]);
-                break;
-              case "dismissRecovery":
-                await agents!.dismissRecovery(input.runId);
-                break;
-              case "refreshModels":
-                value = await providers!.refreshModels(input.provider);
-                break;
-            }
             return {
               ok: true,
               value: redactStrings(value, redact),

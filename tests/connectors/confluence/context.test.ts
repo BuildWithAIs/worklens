@@ -2,15 +2,15 @@ import { expect, test, vi } from "vitest";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { serializeConversation } from "@earendil-works/pi-coding-agent";
-import { ConfluenceConnections } from "../src/main/confluence/connection";
-import { ConfluenceService } from "../src/main/confluence/service";
-import { Continuations } from "../src/main/confluence/continuations";
+import { ConfluenceConnections } from "../../../src/main/connectors/confluence/connection";
+import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
+import { Continuations } from "../../../src/main/connectors/confluence/continuations";
 import {
   discoverySchema,
   describeOperation,
   parseRequest,
-} from "../src/main/confluence/discovery";
-import { setup } from "./confluence-setup";
+} from "../../../src/main/connectors/confluence/discovery";
+import { setup } from "./setup";
 
 function summary(content: { type: "text"; text: string }[]) {
   return serializeConversation([

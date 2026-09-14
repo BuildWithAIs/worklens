@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { atomicJson } from "../storage";
+import { atomicJson } from "../../storage";
 import { ServiceError } from "./http";
 
 const recordSchema = z

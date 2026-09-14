@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
-import { ConfluenceAdapter } from "../src/main/confluence/adapter";
-import { ConfluenceHttp } from "../src/main/confluence/http";
-import { setup } from "./confluence-setup";
+import { ConfluenceAdapter } from "../../../src/main/connectors/confluence/adapter";
+import { ConfluenceHttp } from "../../../src/main/connectors/confluence/http";
+import { setup } from "./setup";
 
 test.each(["data-center", "cloud"] as const)(
   "%s historical reads select the appropriate status and reject unexpected versions",

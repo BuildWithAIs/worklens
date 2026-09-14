@@ -1,16 +1,19 @@
-import { ConfluenceService } from "../src/main/confluence/service";
+import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { expect, test, vi } from "vitest";
 import {
   ConfluenceConnections,
   normalizeSettings,
-} from "../src/main/confluence/connection";
-import { applyEdits } from "../src/main/confluence/content";
-import { ReadLimiter } from "../src/main/confluence/http";
-import { readSchema, writeSchema } from "../src/main/confluence/schema";
-import { setup } from "./confluence-setup";
-import * as storage from "../src/main/storage";
+} from "../../../src/main/connectors/confluence/connection";
+import { applyEdits } from "../../../src/main/connectors/confluence/content";
+import { ReadLimiter } from "../../../src/main/connectors/confluence/http";
+import {
+  readSchema,
+  writeSchema,
+} from "../../../src/main/connectors/confluence/schema";
+import { setup } from "./setup";
+import * as storage from "../../../src/main/storage";
 
 test("failed pending journal prevents remote writes and allows a later retry", async () => {
   const f = await setup();

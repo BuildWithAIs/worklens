@@ -1,12 +1,15 @@
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
-import { AgentService } from "../src/main/agent-service";
-import { ConfluenceHttp, ServiceError } from "../src/main/confluence/http";
-import { ConfluenceService } from "../src/main/confluence/service";
-import type { ChatEvent } from "../src/shared/contracts";
-import { cleanups, setup } from "./confluence-setup";
-import { fixtureModel, mockServer } from "./mock-server";
+import { AgentService } from "../../../src/main/agent-service";
+import {
+  ConfluenceHttp,
+  ServiceError,
+} from "../../../src/main/connectors/confluence/http";
+import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
+import type { ChatEvent } from "../../../src/shared/contracts";
+import { cleanups, setup } from "./setup";
+import { fixtureModel, mockServer } from "../../mock-server";
 test("Cloud scoped requests use the gateway and Basic auth; CDN redirect does not receive credentials", async () => {
   const f = await setup();
   await f.connections.save({
@@ -86,7 +89,7 @@ test("real Pi agent registers and selects Confluence tools, returns structured r
     },
     (e) => events.push(e),
     (v) => f.connections.redact(v),
-    f.service,
+    f.connectors,
   );
   await agents.initialize();
   cleanups.push(() => agents.shutdown());

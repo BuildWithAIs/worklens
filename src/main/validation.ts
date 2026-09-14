@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { connectionSchema } from "./confluence/connection";
+import { connectorSchemas } from "./connectors/ipc";
 const id = z
   .string()
   .min(1)
@@ -21,12 +21,24 @@ export const selection = z
   })
   .strict();
 export const schemas = {
-  htmlFileAction: z.object({ id, path: z.string().min(1).max(4096).optional(), code: z.string().min(1).max(2 * 1024 * 1024).optional(), action: z.enum(["chrome", "reveal"]) }).strict().refine(value => (value.path !== undefined) !== (value.code !== undefined)),
+  htmlFileAction: z
+    .object({
+      id,
+      path: z.string().min(1).max(4096).optional(),
+      code: z
+        .string()
+        .min(1)
+        .max(2 * 1024 * 1024)
+        .optional(),
+      action: z.enum(["chrome", "reveal"]),
+    })
+    .strict()
+    .refine(
+      (value) => (value.path !== undefined) !== (value.code !== undefined),
+    ),
 
   previewHtml: z.object({ id, path: z.string().min(1).max(4096) }).strict(),
-  confluenceSave: connectionSchema,
-  confluenceTest: connectionSchema,
-  confluenceRemove: z.undefined(),
+  ...connectorSchemas,
   artifact: z
     .object({
       id: z.string().uuid(),

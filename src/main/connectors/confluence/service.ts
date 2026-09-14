@@ -1,7 +1,7 @@
 import type { TSchema } from "typebox";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { ConfluenceConnections } from "./connection";
-import { LocalArtifacts } from "../local-artifacts";
+import { LocalArtifacts } from "../../local-artifacts";
 import { ConfluenceHttp, ServiceError, ReadLimiter } from "./http";
 import { ConfluenceAdapter } from "./adapter";
 import { discoverySchema, parseRequest, assertAvailable } from "./discovery";

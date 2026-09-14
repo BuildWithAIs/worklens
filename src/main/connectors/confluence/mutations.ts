@@ -4,7 +4,7 @@ import { ServiceError, type Json } from "./http";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { atomicJson } from "../storage";
+import { atomicJson } from "../../storage";
 import { ReadLimiter } from "./http";
 import { write } from "./write";
 export class MutationRunner {

@@ -6,7 +6,7 @@ This implementation delivers the first everyday read/write and document-publishi
 
 ## Setup
 
-Open **Settings → Connections** and choose **Connect Confluence**. Configured Confluence appears in the **Connected** group; choose **Manage Confluence** to change settings or disconnect. The catalog, search/filter controls, brand icons and configuration dialog share the provider settings components and theme tokens. See the [Connections catalog](screenshots/confluence-settings.png) and [configuration dialog](screenshots/confluence-dialog.png) captured by the desktop acceptance test.
+Open **Settings → Connections** and choose **Connect Confluence**. Configured Confluence appears in the **Connected** group; choose **Manage Confluence** to change settings or disconnect. The catalog, search/filter controls, brand icons and configuration dialog share the provider settings components and theme tokens. See the [Connections catalog](../screenshots/confluence-settings.png) and [configuration dialog](../screenshots/confluence-dialog.png) captured by the desktop acceptance test.
 
 - **Data Center:** enter the site URL (including a context path such as `/confluence`) and personal access token. WorkLens sends Bearer authentication.
 - **Cloud, classic token:** enter the site URL, account email and API token. WorkLens uses Basic authentication and defaults an empty context path to `/wiki`.
@@ -115,7 +115,7 @@ If saving the final exported document fails, the result reports `partial` with a
 
 ## Validation
 
-Tests use synthetic credentials and temporary directories. `tests/confluence-fixture.ts` hosts a local REST service. `tests/confluence*.test.ts` exercise encrypted persistence, strict contracts, source isolation, pagination, macro preservation, stale versions, unrestricted tool registration and legacy settings migration, uncertain writes, transfer collisions/cancellation, publication partial failures, Cloud payloads and real Pi registration/error handling. Context regressions exercise Pi’s actual compaction serializer, persistent/expired cursors, schema budgets, deployment filtering, existing-session refresh, and final-export storage failure. `tests/e2e/confluence.spec.ts` runs Electron Settings, connection testing, encrypted restart, a real Pi download and visible artifact card.
+Tests use synthetic credentials and temporary directories. `tests/connectors/confluence/fixture.ts` hosts a local REST service. `tests/connectors/confluence/*.test.ts` exercise encrypted persistence, strict contracts, source isolation, pagination, macro preservation, stale versions, unrestricted tool registration and legacy settings migration, uncertain writes, transfer collisions/cancellation, publication partial failures, Cloud payloads and real Pi registration/error handling. Context regressions exercise Pi’s actual compaction serializer, persistent/expired cursors, schema budgets, deployment filtering, existing-session refresh, and final-export storage failure. `tests/e2e/connectors/confluence.spec.ts` runs Electron Settings, connection testing, encrypted restart, a real Pi download and visible artifact card.
 
 Live validation: **not performed**. No company network, paid Cloud account or real Confluence token is required for automated tests. The API adapters should be smoke-tested against authorized Cloud and target Data Center versions before claiming full deployment support. Automated fixtures do not certify undocumented or version-dependent behavior.
 

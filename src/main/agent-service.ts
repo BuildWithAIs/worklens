@@ -23,7 +23,7 @@ import {
 } from "./usage";
 import { resources, toolNames } from "./resources";
 import { worklensTools } from "./tools";
-import type { ConfluenceService } from "./confluence/service";
+import { ConnectorRegistry } from "./connectors/registry";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import type {
@@ -113,7 +113,7 @@ export class AgentService {
     readonly paths: { runtime: string; sessions: string; userData: string },
     private emit: (event: ChatEvent) => void,
     private redact: (text: string) => string,
-    private confluence?: ConfluenceService,
+    private connectors = new ConnectorRegistry(),
   ) {}
   async initialize() {
     await Promise.all([
@@ -364,9 +364,7 @@ export class AgentService {
       ).some((m) => m.id === model.id)
     )
       throw new Error("模型尚未配置或不可用，请在设置中完成认证");
-    const integrationConfiguration = JSON.stringify(
-      this.confluence?.connections.info() ?? null,
-    );
+    const integrationConfiguration = this.connectors.configurationKey();
     if (
       runtime.session &&
       runtime.integrationConfiguration !== integrationConfiguration
@@ -378,6 +376,10 @@ export class AgentService {
       const local = await resources(
         this.paths.runtime,
         join(this.paths.userData, "pi"),
+        {
+          tools: this.connectors.names(),
+          instructions: this.connectors.instructions(),
+        },
       );
       const customTools = worklensTools(
         this.paths.runtime,
@@ -393,11 +395,10 @@ export class AgentService {
           );
         },
       );
-      const integrationTools =
-        this.confluence?.tools(
-          runtime.manager.getSessionId(),
-          () => runtime.active?.id ?? "idle",
-        ) ?? [];
+      const integrationTools = this.connectors.tools(
+        runtime.manager.getSessionId(),
+        () => runtime.active?.id ?? "idle",
+      );
       const previous = runtime.manager.buildSessionContext();
       runtime.session = (
         await createAgentSession({
@@ -434,7 +435,7 @@ export class AgentService {
     }
     runtime.session.setActiveToolsByName([
       ...toolNames,
-      ...(this.confluence?.names() ?? []),
+      ...this.connectors.names(),
     ]);
   }
   private onPiEvent(runtime: Runtime, event: AgentSessionEvent) {

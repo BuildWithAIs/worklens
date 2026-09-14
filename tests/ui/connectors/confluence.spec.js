@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mockWorklens } from "./fixture.js";
+import { mockWorklens } from "../fixture.js";
 
 for (const language of ["en", "zh"]) {
   for (const theme of ["light", "dark"]) {

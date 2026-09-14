@@ -4,12 +4,12 @@ import { ServiceError, type Json } from "./http";
 import { randomUUID } from "node:crypto";
 import { open } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { LocalArtifact } from "../../shared/contracts";
+import type { LocalArtifact } from "../../../shared/contracts";
 import {
   LocalArtifacts,
   MAX_FILE_BYTES,
   safeFilename,
-} from "../local-artifacts";
+} from "../../local-artifacts";
 import { readableStorage, markdownStorage, exportHtml } from "./content";
 import { attachmentReference } from "./content-links";
 export async function uploadFile(

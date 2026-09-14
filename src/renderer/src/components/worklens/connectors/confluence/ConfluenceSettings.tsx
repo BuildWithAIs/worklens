@@ -2,7 +2,7 @@ import { useState } from "react";
 import type {
   ConfluenceConnection,
   ConfluenceSettingsInput,
-} from "../../../../shared/contracts";
+} from "../../../../../../shared/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
@@ -14,7 +14,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { BrandIcon } from "./ProviderIcon";
+import { BrandIcon } from "../../ProviderIcon";
 import confluenceIcon from "@/assets/brands/confluence.svg?url";
 import {
   NativeSelect,

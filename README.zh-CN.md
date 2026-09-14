@@ -10,7 +10,7 @@ WorkLens 是一款本地优先的工作 Agent，面向中大型企业的员工�
 
 ## Confluence
 
-在 **设置 → 连接** 中填写站点地址和 token，即可连接一个 Confluence 服务，查找和阅读文档、按版本修改内容、发布带附件的 Markdown，并将下载和导出文件保存在当前会话中。Cloud 使用邮箱和 API token，Data Center 使用 PAT。详见[配置、操作范围与验证说明](docs/confluence.md)。
+在 **设置 → 连接** 中填写站点地址和 token，即可连接一个 Confluence 服务，查找和阅读文档、按版本修改内容、发布带附件的 Markdown，并将下载和导出文件保存在当前会话中。Cloud 使用邮箱和 API token，Data Center 使用 PAT。详见[配置、操作范围与验证说明](docs/connectors/confluence.md)。
 
 ## 本地运行
 
@@ -62,6 +62,8 @@ npx playwright test tests/e2e/packaged.spec.ts
 安装文件输出到 `release/`。构建默认不会上传、发布或自动更新应用。正式分发前需要自己的代码签名、macOS 公证和干净环境安装验收。
 
 ## 源码结构
+
+办公服务按服务划分在 `src/main/connectors/` 下，并配套组织设置组件和测试。详见[连接器目录与接入约定](docs/connectors/README.md)。
 
 ```text
 src/main/        应用生命周期、模型与认证、会话运行、调度、存储、输入校验

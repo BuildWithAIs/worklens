@@ -1,4 +1,4 @@
-import { OperationSupport } from "../src/main/confluence/operation-context";
+import { OperationSupport } from "../../../src/main/connectors/confluence/operation-context";
 import { readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -7,10 +7,10 @@ import {
   markdownStorage,
   readableStorage,
   storageContent,
-} from "../src/main/confluence/content";
-import { safeFilename } from "../src/main/local-artifacts";
-import { projectMessages } from "../src/main/projection";
-import { setup } from "./confluence-setup";
+} from "../../../src/main/connectors/confluence/content";
+import { safeFilename } from "../../../src/main/local-artifacts";
+import { projectMessages } from "../../../src/main/projection";
+import { setup } from "./setup";
 test("storage validation preserves code examples and export removes unsafe links", () => {
   const code = "```html\n<script>alert(1)</script>\n```";
   expect(storageContent(code, "markdown")).toContain("<![CDATA[<script>");

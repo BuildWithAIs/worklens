@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { readFile, unlink } from "node:fs/promises";
 import { z } from "zod";
-import { atomicJson, SerialQueue, type Encryption } from "../storage";
+import { atomicJson, SerialQueue, type Encryption } from "../../storage";
 import { testConnection } from "./connection-test";
 import type {
   ConfluenceConnection,
   ConfluenceSettingsInput,
-} from "../../shared/contracts";
+} from "../../../shared/contracts";
 
 export const connectionSchema = z
   .object({
@@ -135,6 +135,9 @@ export class ConfluenceConnections {
   }
   info(): ConfluenceConnection {
     return { ...this.value };
+  }
+  configurationKey() {
+    return JSON.stringify([this.revision, this.value]);
   }
   async candidate(raw: ConfluenceSettingsInput): Promise<ConnectionSnapshot> {
     const input = normalizeSettings(raw);

@@ -3,10 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach } from "vitest";
-import { ConfluenceConnections } from "../src/main/confluence/connection";
-import { ConfluenceService } from "../src/main/confluence/service";
-import { LocalArtifacts } from "../src/main/local-artifacts";
-import { confluenceFixture } from "./confluence-fixture";
+import { ConfluenceConnections } from "../../../src/main/connectors/confluence/connection";
+import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
+import { LocalArtifacts } from "../../../src/main/local-artifacts";
+import { confluenceFixture } from "./fixture";
+import { ConnectorRegistry } from "../../../src/main/connectors/registry";
+import { confluenceConnector } from "../../../src/main/connectors/confluence";
 export const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -95,6 +97,7 @@ export async function setup() {
     input,
     artifacts,
     service,
+    connectors: new ConnectorRegistry([confluenceConnector(service)]),
     call,
     nextRun: () => {
       run += "x";

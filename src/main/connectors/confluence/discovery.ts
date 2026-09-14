@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ConfluenceConnection } from "../../shared/contracts";
+import type { ConfluenceConnection } from "../../../shared/contracts";
 import {
   readOperations,
   writeOperations,

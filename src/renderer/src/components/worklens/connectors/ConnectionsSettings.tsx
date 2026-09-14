@@ -1,13 +1,10 @@
 import { useState } from "react";
-import { SearchInput } from "./SearchInput";
+import { SearchInput } from "../SearchInput";
 import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
-import github from "@lobehub/icons-static-svg/icons/github.svg?url";
-import jira from "@/assets/brands/jira.svg?url";
-import confluence from "@/assets/brands/confluence.svg?url";
-import { BrandIcon } from "./ProviderIcon";
+import { BrandIcon } from "../ProviderIcon";
 import { Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,27 +16,19 @@ import {
   ItemActions,
 } from "@/components/ui/item";
 import { useLocale } from "@/lib/locale";
-import { ConfluenceSettings } from "./ConfluenceSettings";
-import type { ConfluenceConnection } from "../../../../shared/contracts";
-
-const platforms = [
-  { id: "jira", name: "Jira", icon: jira },
-  { id: "confluence", name: "Confluence", icon: confluence },
-  { id: "github", name: "GitHub", icon: github },
-];
+import { connectorCatalog, type ConnectorSettingsProps } from "./catalog";
 export function ConnectionsSettings({
-  connection,
+  data,
   refresh,
   onSuccess,
-}: {
-  connection?: ConfluenceConnection;
-  refresh: () => Promise<unknown>;
-  onSuccess: (message: string) => void;
-}) {
+}: Omit<ConnectorSettingsProps, "onClose">) {
   const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<string>();
+  const Settings = connectorCatalog.find(
+    (entry) => entry.id === editing,
+  )?.Settings;
   const search = query.trim().toLocaleLowerCase();
   const groups = [
     { id: "connected", label: t("Connected", "已连接"), connected: true },
@@ -47,12 +36,11 @@ export function ConnectionsSettings({
   ]
     .map((group) => ({
       ...group,
-      platforms: platforms.filter((platform) => {
-        const configured =
-          platform.id === "confluence" && !!connection?.configured;
+      platforms: connectorCatalog.filter((platform) => {
+        const configured = !!platform.connection?.(data)?.configured;
         return (
           configured === group.connected &&
-          `${platform.name} ${platform.id === "github" ? "" : "Atlassian"}`
+          `${platform.name} ${platform.keywords ?? ""}`
             .toLocaleLowerCase()
             .includes(search)
         );
@@ -96,7 +84,7 @@ export function ConnectionsSettings({
             </span>
           </h2>
           <ItemGroup className="settings-list settings-connection-list">
-            {group.platforms.map(({ id, name, icon }) => (
+            {group.platforms.map(({ id, name, icon, connection, Settings }) => (
               <Item
                 key={id}
                 size="sm"
@@ -111,7 +99,7 @@ export function ConnectionsSettings({
                   </ItemTitle>
                   {group.connected && (
                     <ItemDescription className="settings-entry-description">
-                      {connection?.url}
+                      {connection?.(data)?.url}
                     </ItemDescription>
                   )}
                 </ItemContent>
@@ -119,8 +107,8 @@ export function ConnectionsSettings({
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={id !== "confluence"}
-                    onClick={() => setEditing(true)}
+                    disabled={!Settings}
+                    onClick={() => setEditing(id)}
                     aria-label={`${group.connected ? t("Manage", "管理") : t("Connect", "连接")} ${name}`}
                   >
                     {group.connected ? (
@@ -145,12 +133,12 @@ export function ConnectionsSettings({
             : t("No connectors match your filters.", "没有匹配的连接器。")}
         </p>
       )}
-      {editing && (
-        <ConfluenceSettings
-          connection={connection}
+      {Settings && (
+        <Settings
+          data={data}
           refresh={refresh}
           onSuccess={onSuccess}
-          onClose={() => setEditing(false)}
+          onClose={() => setEditing(undefined)}
         />
       )}
     </>

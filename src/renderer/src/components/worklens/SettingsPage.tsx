@@ -1,6 +1,6 @@
 import { BackgroundEffect } from "./BackgroundEffect";
 import { BackgroundPreferences } from "./BackgroundPreferences";
-import { ConnectionsSettings } from "./ConnectionsSettings";
+import { ConnectionsSettings } from "./connectors/ConnectionsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
 import { useEffect, useRef, useState } from "react";
@@ -595,7 +595,7 @@ export function SettingsPage({
                 )}
               </>
             )}
-            {section === "connections" && <ConnectionsSettings connection={data.confluence} refresh={refresh} onSuccess={onSuccess} />}
+            {section === "connections" && <ConnectionsSettings data={data} refresh={refresh} onSuccess={onSuccess} />}
             {section === "general" && (
               <>
                 <section className="settings-section">

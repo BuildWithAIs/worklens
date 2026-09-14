@@ -9,7 +9,7 @@ import {
   LocalArtifacts,
   fileIdentity,
   type Destination,
-} from "../local-artifacts";
+} from "../../local-artifacts";
 export interface Execution {
   operations: OperationSupport;
   adapter: ConfluenceAdapter;
