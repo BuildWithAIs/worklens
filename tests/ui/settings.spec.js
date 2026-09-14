@@ -1,6 +1,33 @@
 import { mockWorklens } from "./fixture.js";
 import { test, expect } from "@playwright/test";
 
+test("local paths stay compact and expose their full value on keyboard focus", async ({ page }, info) => {
+  await mockWorklens(page);
+  await page.addInitScript(() => {
+    const invoke = window.worklens.invoke;
+    window.worklens.invoke = async (method, input) => {
+      const result = await invoke(method, input);
+      if (method === "bootstrap") result.paths.runtime = "/Users/example/Library/Application Support/WorkLens/long-directory-name/runtime";
+      return result;
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "Runtime directory" });
+  const path = row.locator(".settings-path");
+  const full = await path.textContent();
+  await expect(path).toHaveCSS("white-space", "nowrap");
+  expect(await path.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+  await page.keyboard.press("Tab");
+  await page.mouse.move(0, 0);
+  await path.focus();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(full);
+  await row.getByRole("button", { name: "Open Runtime directory" }).focus();
+  await expect(page.locator('[data-slot="tooltip-content"][data-open]').filter({ hasText: full })).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath("local-data-compact.png") });
+});
+
 test("settings and chat model workflow", async ({ page }, testInfo) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -330,11 +357,12 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     .filter({ hasText: "GPT-5" })
     .click();
   await expect(
-    page.getByRole("combobox", { name: "Thinking level", exact: true }),
+    page.getByRole("button", { name: "Thinking level", exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("combobox", { name: "Thinking level", exact: true })
-    .selectOption("high");
+    .getByRole("button", { name: "Thinking level", exact: true })
+    .click();
+  await page.getByRole("radio", { name: "High", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Done", exact: true }),
   ).toHaveCount(0);
@@ -346,7 +374,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     page.getByRole("button", { name: "Choose model", exact: true }),
   ).toContainText("High");
   await expect(
-    page.getByRole("combobox", { name: "Thinking level", exact: true }),
+    page.getByRole("button", { name: "Thinking level", exact: true }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
   await page
@@ -460,7 +488,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   await page.keyboard.press("Tab");
   await localDataInfo.focus();
   await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
-  await expect(page.locator('[data-slot="tooltip-content"]')).toContainText("History and encrypted credentials are stored on this device.");
+  await expect(page.locator('[data-slot="tooltip-content"]')).toContainText("Conversation history and encrypted credentials are stored on this device.");
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings-hint")).toHaveCount(0);
   await page

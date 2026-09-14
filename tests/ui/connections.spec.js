@@ -17,10 +17,10 @@ for (const theme of ["light", "dark"]) {
       await page.goto("/");
       await page.getByRole("button", { name: language === "en" ? "Settings" : "设置", exact: true }).click();
       const nav = page.locator(".settings-navigation");
-      await nav.getByRole("button", { name: language === "en" ? "Connections" : "连接", exact: true }).click();
+      await nav.getByRole("button", { name: language === "en" ? "Connectors" : "连接器", exact: true }).click();
       const content = page.locator('[data-section="connections"]');
       await expect(content.getByRole("listitem")).toHaveCount(3);
-      const search = content.getByRole("textbox", { name: language === "en" ? "Search connections" : "搜索连接" });
+      const search = content.getByRole("textbox", { name: language === "en" ? "Search connectors" : "搜索连接器" });
       await search.fill("  GITHUB  ");
       await expect(content.getByRole("listitem")).toHaveCount(1);
       await expect(content.getByText("GitHub", { exact: true })).toBeVisible();
@@ -73,7 +73,7 @@ test("connection rows match available provider rows", async ({ page }) => {
     await nav.getByRole("button", { name: "Providers", exact: true }).click();
     const provider = page.locator(".settings-provider-list .settings-entry").filter({ hasText: "Anthropic" });
     const expected = await rowStyle(provider);
-    await nav.getByRole("button", { name: "Connections", exact: true }).click();
+    await nav.getByRole("button", { name: "Connectors", exact: true }).click();
     expect(await rowStyle(page.locator('[data-connection="jira"]'))).toEqual(expected);
   }
 });

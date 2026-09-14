@@ -38,7 +38,7 @@ for (const theme of ["light", "dark"]) {
       await search.press("Tab");
       const filter = page.getByRole("combobox", { name: "Filter providers" });
       await expect(filter).toBeFocused();
-      expect(await filter.evaluate(el => getComputedStyle(el).boxShadow)).toContain("2px");
+      expect(await filter.evaluate(el => getComputedStyle(el).boxShadow)).toContain("1px");
       expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
       await expect(page.getByRole("button", { name: "Back to app", exact: true })).toBeInViewport();
       await expect(page.getByRole("button", { name: "General", exact: true })).toBeInViewport();

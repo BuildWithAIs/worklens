@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens, mockExistingConversation } from "./fixture.js";
 
-test("sidebar and usage share custom hints without native titles", async ({ page }) => {
+test("sidebar and usage info use shared hints while the usage entry stays quiet", async ({ page }) => {
   await mockExistingConversation(page);
   await page.goto("/");
   const hint = page.locator('[data-slot="tooltip-content"]');
@@ -21,13 +21,29 @@ test("sidebar and usage share custom hints without native titles", async ({ page
   await expect(hint).toBeHidden();
   const usage = page.locator(".usage-trigger");
   await usage.hover();
-  await expect(hint).toContainText("Context usage");
+  await expect(hint).toBeHidden();
+  await expect(usage.locator('[data-slot="usage-icon"]')).toBeVisible();
+  await expect(page.locator(".usage-popover")).toHaveCount(0);
   await expect(usage).not.toHaveAttribute("title");
   await usage.click();
   await expect(page.locator(".usage-popover")).toBeVisible();
+  await usage.hover();
+  await expect(hint).toBeHidden();
   await expect(page.locator(".usage-popover [title]")).toHaveCount(0);
   await page.locator(".usage-model").hover();
-  await expect(hint).toBeVisible();
+  await expect(hint).toBeHidden();
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
+  await page.locator(".usage-total strong").hover();
+  await expect(hint).toBeHidden();
+  const info = page.getByRole("button", { name: "About total usage" });
+  await info.hover();
+  await expect(hint).toContainText("All retained local sessions");
+  await page.mouse.move(0, 0);
+  await info.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(info).toBeFocused();
+  await expect(hint).toContainText("All retained local sessions");
   await page.keyboard.press("Escape");
 });
 

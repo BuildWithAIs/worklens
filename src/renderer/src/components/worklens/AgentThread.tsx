@@ -1,6 +1,5 @@
 import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
-import { Hint } from "@/components/ui/tooltip";
 import { toolProgress, toolActivityLabel, toolActivitySummary } from "@/lib/activity-progress";
 import { activityIcon } from "@/lib/activity-icon";
 import { systemText } from "@/lib/system-text";
@@ -222,9 +221,7 @@ function ActivityProgress({ progress, kind, active = true, summary }: { progress
   return (
     <span data-slot="activity-progress" className="flex w-full min-w-0 items-start gap-2 text-sm leading-6 text-muted-foreground">
       {kind !== "thinking" && kind !== "working" && <Icon aria-hidden="true" className="mt-1 size-4 shrink-0" />}
-      <Hint content={progress}>
-        <span ref={shimmerRef} className={`min-w-0 truncate ${active ? "shimmer motion-reduce:animate-none" : ""}`} tabIndex={0}>{label}</span>
-      </Hint>
+      <span ref={shimmerRef} className={`min-w-0 truncate ${active ? "shimmer motion-reduce:animate-none" : ""}`}>{label}</span>
     </span>
   );
 }

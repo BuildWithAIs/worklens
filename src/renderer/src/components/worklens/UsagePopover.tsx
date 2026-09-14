@@ -1,7 +1,8 @@
 import { Hint } from "@/components/ui/tooltip";
 import { Tabs } from "@base-ui/react/tabs";
 import { ProviderIcon } from "./ProviderIcon";
-import { Gauge, Clock3 } from "lucide-react";
+import { Gauge, Clock3, Info, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -108,15 +109,15 @@ export function UsagePopover({
   return (
     <div className="usage-header" data-testid="usage-header">
       <Popover>
-        <Hint content={`${t("Context usage", "上下文占用")} · ${contextKnown ? percentText : t("Unavailable", "暂不可用")}`}>
         <PopoverTrigger
+          render={<Button variant="ghost" size="sm" />}
           className="usage-trigger"
           aria-label={t("Open current usage details", "打开当前用量详情")}
         >
-          <Gauge size={16} strokeWidth={1.5} aria-hidden="true" />
+          <Gauge data-slot="usage-icon" className="size-4" strokeWidth={1.75} aria-hidden="true" />
           <span>{percentText}</span>
+          <ChevronDown data-icon="inline-end" className="size-3" aria-hidden="true" />
         </PopoverTrigger>
-        </Hint>
         <PopoverContent
           className="usage-popover"
           sideOffset={10}
@@ -133,6 +134,7 @@ export function UsagePopover({
               >
                 <Tabs.Tab data-slot="usage-tab" value="overview">{t("Overview", "概览")}</Tabs.Tab>
                 <Tabs.Tab data-slot="usage-tab" value="details">{t("Details", "明细")}</Tabs.Tab>
+                <Tabs.Indicator className="usage-tab-indicator" />
               </Tabs.List>
             </div>
             <Tabs.Panel value="overview" className="usage-tab-panel">
@@ -185,14 +187,14 @@ export function UsagePopover({
                       <tr key={String(testId)} data-testid={String(testId)}>
                         <th scope="row">{String(label)}</th>
                         <td>
-                          {item?.status === "partial" ? <Hint content={t("Partial token data", "Token 数据不完整")}><span tabIndex={0}>{tokens(item)}</span></Hint> : tokens(item)}
+                          <span aria-label={item?.status === "partial" ? `${tokens(item)} · ${t("Partial token data", "Token 数据不完整")}` : undefined}>{tokens(item)}</span>
                         </td>
                         <td>
-                          <Hint content={cost(item?.cost)}><span tabIndex={0}>
+                          <span aria-label={cost(item?.cost)}>
                           {nonNegative(item?.cost.usd) && item?.cost.status !== "unavailable"
                             ? `${formatCost(item.cost.usd, true)}${item.cost.source === "provider" ? "" : " ≈"}${item.cost.status === "partial" ? "+" : ""}`
                             : "—"}
-                          </span></Hint>
+                          </span>
                         </td>
                       </tr>
                     );
@@ -209,10 +211,10 @@ export function UsagePopover({
                   ? ` · ${t("Partial data", "Token 数据不完整")}`
                   : ""}
               </p>
-              <Hint content={`${modelLabel} · ${providerLabel}`}><div className="usage-model" tabIndex={0}>
+              <div className="usage-model" aria-label={`${modelLabel} · ${providerLabel}`}>
                 <ProviderIcon provider={metadata?.provider ?? ""} />
                 <strong>{modelLabel}</strong>
-              </div></Hint>
+              </div>
             </Tabs.Panel>
             <Tabs.Panel value="details" className="usage-tab-panel">
               <div className="usage-breakdown">
@@ -264,12 +266,18 @@ export function UsagePopover({
                   </p>
                 )}
               </div>
-              <Hint content={totalTitle}><div
+              <div
                 className="usage-total"
-                tabIndex={0}
                 aria-label={`${t("All models total", "所有模型累计")} ${formatTokens(global?.totalTokens)} tokens · ${totalTitle}`}
               >
-                <span>{t("All models total", "所有模型累计")}</span>
+                <span className="usage-total-label">
+                  {t("All models total", "所有模型累计")}
+                  <Hint content={totalTitle}>
+                    <Button variant="ghost" size="icon-xs" className="size-5" aria-label={t("About total usage", "关于累计用量")}>
+                      <Info aria-hidden="true" />
+                    </Button>
+                  </Hint>
+                </span>
                 <strong>
                   {formatTokens(global?.totalTokens)}
                   {global?.status === "partial" &&
@@ -278,7 +286,7 @@ export function UsagePopover({
                     : ""}
                 </strong>
                 <span>tokens</span>
-              </div></Hint>
+              </div>
             </Tabs.Panel>
           </Tabs.Root>
         </PopoverContent>

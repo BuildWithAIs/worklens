@@ -1,4 +1,5 @@
 import { shortTitle, titleCharacters, RENAME_LIMIT } from "@/lib/conversation-title";
+import { BackgroundEffect } from "@/components/worklens/BackgroundEffect";
 import { BrandMark } from "@/components/worklens/BrandMark";
 import { HistoryTitle } from "@/components/worklens/HistoryTitle";
 import { Input } from "@/components/ui/input";
@@ -390,6 +391,7 @@ export function App() {
       </Button>
       </Hint>
       <aside id="conversation-sidebar" className="sidebar" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed}>
+        {!sidebarCollapsed && page !== "settings" && <BackgroundEffect settings={data.settings} />}
         <div className="brand">
           <BrandMark />
           <span>WorkLens</span>

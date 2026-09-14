@@ -1,0 +1,78 @@
+.sidebar,
+.settings-navigation,
+.settings-pane {
+  isolation: isolate;
+  position: relative;
+}
+.sidebar > .background-effect,
+.background-effect {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  transform: none;
+  opacity: 1;
+  transition: none;
+  mix-blend-mode: multiply;
+}
+.background-effect canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+:root[data-theme="dark"] .background-effect {
+  mix-blend-mode: screen;
+}
+.background-effect[data-fallback] {
+  background: radial-gradient(ellipse at 0 85%, #7182c21c, transparent 70%);
+}
+.background-effect[data-fallback] canvas {
+  visibility: hidden;
+}
+.background-effect[data-edge][data-fallback] {
+  background: linear-gradient(0deg, #7182c212, transparent 24px);
+}
+.background-tones {
+  width: auto;
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+}
+.background-tone {
+  border-radius: 50%;
+  padding: 5px;
+  width: 32px;
+  height: 32px;
+}
+.background-tone span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #172138;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+.background-tone [data-tone="violet"] {
+  background: linear-gradient(135deg, #6396ef, #ad7ed3);
+}
+.background-tone [data-tone="electric"] {
+  background: linear-gradient(135deg, #245be6, #39d8ff);
+}
+.background-tone [data-tone="ice"] {
+  background: linear-gradient(135deg, #6093c7, #c3f2f3);
+}
+
+.background-tone span svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.75;
+  color: rgb(255 255 255 / 92%);
+  filter: drop-shadow(0 1px 1px rgb(15 23 42 / 40%));
+}
+
+.sidebar:has(> .background-effect),
+.settings-navigation:has(> .background-effect) {
+  border-right-color: transparent;
+}

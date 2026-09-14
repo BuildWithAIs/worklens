@@ -15,7 +15,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command:
+    command: process.env.WORKLENS_UI_DEV === "1" ? "node tests/ui/serve-dev.mjs" :
       "node node_modules/vite/bin/vite.js preview --outDir dist/renderer --host 127.0.0.1 --port 4173 --strictPort",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: false,

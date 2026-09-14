@@ -18,8 +18,12 @@ test("sidebar collapses, preserves its preference and keeps the toggle reachable
   await expect(page.locator(".usage-trigger")).toHaveCSS("-webkit-app-region", "no-drag");
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(toggle.locator("svg rect")).toHaveAttribute("rx", "5");
+  const expandedBox = await toggle.boundingBox();
+  expect(expandedBox.x).toBe(96);
+  expect(expandedBox.y).toBe(13);
   await toggle.click();
   await expect(toggle.locator("svg rect")).toHaveAttribute("rx", "5");
+  expect(await toggle.boundingBox()).toEqual(expandedBox);
   await expect(sidebar).toHaveAttribute("inert", "");
   await expect(sidebar).toBeHidden();
   await expect(page.locator(".chat-header")).toHaveCSS("-webkit-app-region", "no-drag");
@@ -82,10 +86,17 @@ for (const width of [1280, 850]) {
       expect(box.y).toBeGreaterThanOrEqual(60);
       await expect(back).toBeInViewport();
       await expect(page.locator(".settings-navigation")).toHaveCSS("padding-top", "60px");
+      const dragStrip = await page.locator(".settings-workspace").evaluate(el => {
+        const style = getComputedStyle(el, "::before");
+        return { region: style.getPropertyValue("-webkit-app-region"), top: style.top, left: style.left, right: style.right, height: style.height };
+      });
+      expect(dragStrip).toEqual({ region: "drag", top: "0px", left: "96px", right: "0px", height: "54px" });
+      await expect(back).not.toHaveCSS("-webkit-app-region", "drag");
       for (const section of ["General", "Models", "Providers"]) {
         await page.locator(".settings-navigation").getByRole("button", { name: section, exact: true }).click();
         expect((await back.boundingBox()).y).toBe(box.y);
         await expect(page.locator('[data-slot="settings-page-title"]')).toHaveText(section);
+        await expect(page.locator(".settings-page-heading")).toHaveCSS("-webkit-app-region", "drag");
       }
       await page.screenshot({ path: info.outputPath(`settings-native-${theme}-${width}.png`) });
       await back.click();

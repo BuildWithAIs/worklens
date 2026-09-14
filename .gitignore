@@ -6,6 +6,12 @@ dist/
 release/
 test-results/
 playwright-report/
+.playwright-mcp/
+# Local UX review exports
+docs/review/
+docs/screenshots/
+designs/pr-previews/
+website/review/
 *.log
 .DS_Store
 .wrangler/

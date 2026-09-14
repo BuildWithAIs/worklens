@@ -14,6 +14,6 @@ export default defineConfig({
   renderer: {
     plugins: [react(), tailwind()],
     resolve: { alias: { "@": resolve("src/renderer/src") } },
-    build: { outDir: "dist/renderer" },
+    build: { outDir: "dist/renderer", minify: "esbuild" },
   },
 });

@@ -15,14 +15,11 @@
   padding: 0 8px;
   border: 0;
   border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   cursor: pointer;
 }
-.usage-trigger:hover,
-.usage-trigger[data-popup-open] {
+.usage-trigger:hover {
   background: var(--soft);
   color: var(--text);
 }
@@ -68,31 +65,38 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .usage-popover [data-slot="usage-title"] {
   margin: 0;
   font-size: 13px;
-  font-weight: 500;
-}
-.usage-tab-list {
-  display: flex;
-  gap: 2px;
+  font-weight: 600;
 }
 .usage-tab-list button {
   border: 0;
   background: transparent;
-  border-radius: 5px;
-  padding: 4px 8px;
+  border-radius: 7px;
+  height: 22px;
+  padding: 0 8px;
   font-size: 11px;
-  color: var(--faint);
+  font-weight: 500;
+  color: var(--muted);
   cursor: pointer;
 }
 .usage-tab-list button[aria-selected="true"] {
-  background: var(--soft);
   color: var(--text);
+}
+.usage-tab-list button:hover {
+  color: var(--text);
+}
+.usage-tab-indicator {
+  top: var(--active-tab-top);
+  left: 0;
+  width: var(--active-tab-width);
+  height: var(--active-tab-height);
+  transform: translateX(var(--active-tab-left));
 }
 .usage-tab-panel {
   display: flex;
@@ -270,6 +274,11 @@
 }
 .usage-total > span:first-child {
   margin-right: auto;
+}
+.usage-total-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 .usage-total strong {
   font-weight: 400;

@@ -138,10 +138,14 @@ test("prototype header, popover, keyboard and desktop layout", async ({
     name: "Open current usage details",
   });
   await expect(trigger).toContainText("34%");
+  await expect(trigger).toHaveCSS("border-top-width", "0px");
+  await expect(trigger.locator(".lucide-chevron-down")).toBeVisible();
   await expect(page.locator(".run-status")).toHaveCount(0);
   for (const width of [1440, 1024, 850, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await trigger.click();
+    await expect(page.locator(".usage-popover")).toBeVisible();
+    await page.mouse.move(0, 0);
     await expect(page.locator(".usage-popover")).toBeVisible();
     await expect(
       page.getByRole("progressbar", { name: "Context usage" }),
@@ -185,7 +189,8 @@ test("prototype header, popover, keyboard and desktop layout", async ({
   }
   await trigger.press("Enter");
   await expect(page.locator(".usage-popover")).toBeVisible();
-  await page.locator(".chat-header h1").click();
+  // At renderer stress widths the title may have no room beside header controls.
+  await page.mouse.click(10, 500);
   await expect(page.locator(".usage-popover")).toBeHidden();
 });
 
@@ -224,10 +229,17 @@ test("partial independent costs, unknown context, reasoning, dark Chinese", asyn
   await expect(page.getByTestId("conversation-usage")).not.toContainText(
     "Token 数据不完整",
   );
+  await page.getByTestId("conversation-usage").locator("td").last().hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
   await expect(page.locator(".usage-context")).toContainText("暂不可用");
   await expect(page.getByRole("progressbar")).toHaveCount(0);
   await page.getByRole("tab", { name: "明细", exact: true }).click();
   await expect(page.locator(".usage-total")).toHaveText("所有模型累计3.86M+tokens");
+  await page.locator(".usage-total strong").hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "关于累计用量" }).hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText("所有保留的本地会话 · 数据不完整");
+  await page.mouse.move(0, 0);
   await expect(page.locator(".usage-breakdown")).toContainText(
     "推理 · 包含在输出中",
   );

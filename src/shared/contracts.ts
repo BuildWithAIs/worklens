@@ -96,6 +96,8 @@ export interface ProviderInfo {
 export interface Settings {
   version: 1;
   theme: "light" | "dark" | "system";
+  backgroundEffect?: "none" | "surface" | "fluid";
+  backgroundTone?: "violet" | "electric" | "ice";
   riskAccepted: boolean;
   defaults?: Selection;
   hiddenModels?: string[];

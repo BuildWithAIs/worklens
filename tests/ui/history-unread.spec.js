@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
-test("history truncates long titles and marks only unseen completed replies", async ({ page }, testInfo) => {
+test("history scrolls long titles with hints and marks only unseen completed replies", async ({ page }, testInfo) => {
   await mockWorklens(page);
   await page.addInitScript(() => {
     const invoke = window.worklens.invoke;
@@ -27,14 +27,53 @@ test("history truncates long titles and marks only unseen completed replies", as
   const title = first.locator(".history-title-clip");
   await page.locator(".chat-header").hover();
   await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "28px");
-  await expect(title).toHaveAttribute("data-truncated", "true");
-  await expect(title).toHaveCSS("text-overflow", "ellipsis");
-  await expect(title).toHaveText("A long conversation tit…");
+  await expect(title).toHaveAttribute("data-overflow", "true");
+  await expect(title).toHaveText("A long conversation title that should fade and scroll without an ellipsis at the end");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await first.locator(".conversation-open").hover();
   await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "36px");
-  await expect(first.locator(".history-title-text")).toHaveCSS("animation-name", "none");
+  await expect(first.locator(".history-title-text")).toHaveCSS("animation-name", "history-title-pan");
+  await expect(first.locator(".history-title-text")).toHaveCSS("animation-delay", "0.5s");
+  await expect(first.locator(".history-title-text")).toHaveCSS("animation-timing-function", "linear");
+  const positions = await first.locator(".history-title-text").evaluate(node => {
+    const animation = node.getAnimations()[0];
+    animation.pause();
+    const samples = [250, 500, 1000, 1500].map(time => {
+      animation.currentTime = time;
+      return new DOMMatrix(getComputedStyle(node).transform).m41;
+    });
+    animation.play();
+    return samples;
+  });
+  expect(positions[0]).toBe(0);
+  expect(positions[1]).toBe(0);
+  expect(positions[2]).toBeCloseTo(-17.5, 1);
+  expect(positions[3]).toBeCloseTo(-35, 1);
+  const endPositions = await first.locator(".history-title-text").evaluate(node => {
+    const animation = node.getAnimations()[0];
+    animation.pause();
+    const { delay, duration } = animation.effect.getTiming();
+    const end = Number(delay) + Number(duration);
+    return [end, end + 1000, end + Number(duration)].map(time => {
+      animation.currentTime = time;
+      return new DOMMatrix(getComputedStyle(node).transform).m41;
+    });
+  });
+  expect(endPositions[0]).toBeLessThan(0);
+  expect(endPositions[1]).toBe(endPositions[0]);
+  expect(endPositions[2]).toBe(endPositions[0]);
   await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
+  await expect.poll(() => first.locator(".history-title-text").evaluate(node => new DOMMatrix(getComputedStyle(node).transform).m41)).toBeLessThan(-1);
+  await page.locator(".chat-header").hover();
+  await expect(first.locator(".history-title-text")).toHaveCSS("transform", "none");
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+  const short = page.getByRole("button", { name: "Other history", exact: true });
+  await short.hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+  await expect(short.locator(".history-title-text")).toHaveCSS("animation-name", "none");
+  await page.locator(".chat-header").hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+  await first.locator(".conversation-open").hover();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(first.locator(".history-title-text")).toHaveCSS("animation-name", "none");
   await page.getByRole("button", { name: "Other history", exact: true }).click();
@@ -102,6 +141,9 @@ test("history truncates long titles and marks only unseen completed replies", as
     const css = getComputedStyle(el);
     return { size: css.fontSize, weight: css.fontWeight, color: css.color, font: css.fontFamily };
   });
-  expect(settingsStyle).toEqual(navigationStyle);
+  expect(settingsStyle.size).toBe(navigationStyle.size);
+  expect(settingsStyle.font).toBe(navigationStyle.font);
+  expect(settingsStyle.weight).toBe("500");
+  expect(settingsStyle.color).toBe("rgb(24, 24, 27)");
   await expect(settingsSelected).toHaveCSS("background-color", selectionFill);
 });
