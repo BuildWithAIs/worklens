@@ -26,7 +26,7 @@ for (const language of ["en", "zh"]) {
         .click();
       await page
         .locator(".settings-navigation")
-        .getByRole("button", { name: t("Connections", "连接"), exact: true })
+        .getByRole("button", { name: t("Connectors", "连接器"), exact: true })
         .click();
       const content = page.locator('[data-section="connections"]');
       const connect = content.getByRole("button", {
@@ -90,7 +90,7 @@ for (const language of ["en", "zh"]) {
         content.getByText("https://jira.example.test", { exact: true }),
       ).toBeVisible();
       const filter = content.getByRole("combobox", {
-        name: t("Filter connections", "筛选连接"),
+        name: t("Filter connectors", "筛选连接器"),
       });
       await filter.selectOption("connected");
       await expect(content.getByRole("listitem")).toHaveCount(1);

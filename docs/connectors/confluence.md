@@ -6,7 +6,7 @@ This implementation delivers the first everyday read/write and document-publishi
 
 ## Setup
 
-Open **Settings → Connections** and choose **Connect Confluence**. Configured Confluence appears in the **Connected** group; choose **Manage Confluence** to change settings or disconnect. The catalog, search/filter controls, brand icons and configuration dialog share the provider settings components and theme tokens. See the [Connections catalog](../screenshots/confluence-settings.png) and [configuration dialog](../screenshots/confluence-dialog.png) captured by the desktop acceptance test.
+Open **Settings → Connectors** and choose **Connect Confluence**. Configured Confluence appears in the **Connected** group; choose **Manage Confluence** to change settings or disconnect. The catalog, search/filter controls, brand icons and configuration dialog share the provider settings components and theme tokens. See the [Connections catalog](../screenshots/confluence-settings.png) and [configuration dialog](../screenshots/confluence-dialog.png) captured by the desktop acceptance test.
 
 - **Data Center:** enter the site URL (including a context path such as `/confluence`) and personal access token. WorkLens sends Bearer authentication.
 - **Cloud, classic token:** enter the site URL, account email and API token. WorkLens uses Basic authentication and defaults an empty context path to `/wiki`.

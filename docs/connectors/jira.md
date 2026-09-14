@@ -6,7 +6,7 @@ This implements the daily-work categories from [issue #1](https://github.com/Bui
 
 ## Setup
 
-Open **Settings → Connections → Connect Jira**. See the [connections catalog](../screenshots/jira-settings.png).
+Open **Settings → Connectors → Connect Jira**. See the [connections catalog](../screenshots/jira-settings.png).
 
 | Deployment               | Settings                                  | Authentication / API                                                    |
 | ------------------------ | ----------------------------------------- | ----------------------------------------------------------------------- |

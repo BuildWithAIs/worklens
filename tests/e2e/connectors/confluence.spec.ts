@@ -34,7 +34,7 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
     let page = await launch();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page
-      .getByRole("button", { name: "Connections", exact: true })
+      .getByRole("button", { name: "Connectors", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Connect Confluence", exact: true })
@@ -191,7 +191,7 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
     expect(fixture.state.commentCount).toBe(1);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page
-      .getByRole("button", { name: "Connections", exact: true })
+      .getByRole("button", { name: "Connectors", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Manage Confluence", exact: true })
