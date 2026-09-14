@@ -75,13 +75,19 @@ export async function result(ctx: Execution, input: Json) {
     source: ctx.connection.settings.url,
     retrieval: resultPath
       ? "Use read on resultPath for the complete result after compaction; do not repeat a mutation."
-      : undefined,
-    ...(JSON.stringify(value).length > INLINE_BUDGET
+      : retrievalError
+        ? "Full result is included inline because saving failed. Preserve it before compaction; do not repeat successful writes."
+        : undefined,
+    ...(resultPath && JSON.stringify(value).length > INLINE_BUDGET
       ? {
           truncated: true,
           preview: JSON.stringify(value).slice(0, 4000),
         }
       : value),
+    // Summaries are sufficient only when the original records remain retrievable.
+    ...(!resultPath && rawItems
+      ? { items: rawItems, itemsSummarized: false }
+      : {}),
     status,
   };
   const text = ctx.operations.connections.redact(JSON.stringify(envelope));

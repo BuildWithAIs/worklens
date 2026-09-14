@@ -184,7 +184,73 @@ test("failure to persist a large mutation result never reports the successful mu
   );
   expect(out.data.status).toBe("success");
   expect(out.data.retrievalError).toBe("ENOSPC");
+  expect(out.data.truncated).toBeUndefined();
+  expect(out.data.resultPath).toBeUndefined();
+  expect(out.data.retrieval).toContain("do not repeat successful writes");
   expect(f.fixture.state.version).toBe(8);
+});
+
+test("failed result persistence returns long page content intact with its paging metadata", async () => {
+  const f = await setup();
+  const content = "x".repeat(20000);
+  f.fixture.state.storage = content;
+  vi.spyOn(f.artifacts, "save").mockRejectedValue(new Error("ENOSPC"));
+  const out = await f.call({
+    operation: "read_page",
+    page: "1",
+    representation: "storage",
+    length: 16000,
+  });
+  expect(out.data.content).toBe(content.slice(0, 16000));
+  expect(out.data).toMatchObject({
+    status: "success",
+    retrievalError: "ENOSPC",
+    nextOffset: 16000,
+    complete: false,
+  });
+  expect(out.data.resultPath).toBeUndefined();
+  expect(out.data.truncated).toBeUndefined();
+  expect(out.data.retrieval).toContain("included inline");
+});
+
+test("failed list persistence returns original records instead of summaries and still redacts secrets", async () => {
+  const f = await setup();
+  vi.spyOn(f.artifacts, "save").mockRejectedValue(new Error("ENOSPC"));
+  const content = "x".repeat(20000);
+  const service = new ConfluenceService(f.connections, f.artifacts, async () =>
+    Response.json({
+      results: [
+        {
+          id: "1",
+          title: "Guide",
+          body: { storage: { value: content } },
+          custom: "preserved",
+          secret: f.input.token,
+        },
+      ],
+      _links: { next: "/confluence/rest/api/search?start=2" },
+    }),
+  );
+  const out = await service
+    .tools("session1", () => "run")[0]
+    .execute(
+      "t",
+      { request: { operation: "search", cql: "type=page" } },
+      new AbortController().signal,
+      undefined,
+      {} as never,
+    );
+  const text = (out.content[0] as { text: string }).text;
+  const data = JSON.parse(text);
+  expect(data.items[0].body.storage.value).toBe(content);
+  expect(data.items[0].custom).toBe("preserved");
+  expect(data.itemsSummarized).toBe(false);
+  expect(data.continuation).toBeTruthy();
+  expect(data.complete).toBe(false);
+  expect(data.retrievalError).toBe("ENOSPC");
+  expect(data.resultPath).toBeUndefined();
+  expect(data.truncated).toBeUndefined();
+  expect(text).not.toContain(f.input.token);
 });
 
 test("discovery has a fixed small schema budget, filters deployment, and retains strict per-operation validation", async () => {
