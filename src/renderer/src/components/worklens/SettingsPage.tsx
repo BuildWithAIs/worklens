@@ -689,7 +689,6 @@ export function SettingsPage({
                           const next = e.target.value as "en" | "zh";
                           void i18n
                             .changeLanguage(next)
-                            .then(() => onSuccess(i18n.t("common.saved")))
                             .catch(() =>
                               onError(i18n.t("settings.couldNotSaveLanguage")),
                             );
@@ -713,11 +712,9 @@ export function SettingsPage({
                         onChange={(e) =>
                           void save({
                             theme: e.target.value as Settings["theme"],
-                          })
-                            .then(() => onSuccess(t("common.saved")))
-                            .catch((e) =>
-                              onError(systemText(String(e), language)),
-                            )
+                          }).catch((e) =>
+                            onError(systemText(String(e), language)),
+                          )
                         }
                       >
                         <NativeSelectOption value="light">
@@ -735,7 +732,6 @@ export function SettingsPage({
                       settings={data.settings}
                       save={save}
                       onError={onError}
-                      onSuccess={onSuccess}
                     />
                   </ItemGroup>
                 </section>

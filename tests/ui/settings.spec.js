@@ -513,7 +513,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     page.locator(
       '[data-slot="toast"]:not([data-ending-style]) [data-slot="toast-title"]',
     ),
-  ).toHaveText("Saved");
+  ).toHaveCount(0);
   await page.waitForTimeout(250);
   await page.screenshot({
     path: testInfo.outputPath("worklens-general-dark-v2.png"),

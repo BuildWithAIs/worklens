@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Check } from "lucide-react";
 import { Item, ItemTitle } from "@/components/ui/item";
 import {
   NativeSelect,
@@ -21,28 +20,27 @@ export function BackgroundPreferences({
   settings,
   save,
   onError,
-  onSuccess,
 }: {
   settings: Settings;
   save: (patch: Partial<Settings>) => Promise<unknown>;
   onError: (message: string) => void;
-  onSuccess: (message: string) => void;
 }) {
   const { t } = useAppTranslation();
   const dark = useDarkAppearance(settings);
   const [pending, setPending] = useState(false);
   const effect = settings.backgroundEffect ?? "none";
+  // Retain stored electric/ice IDs so existing preferences remain valid.
   const tones = [
     ["violet", t("appearance.blueViolet")],
-    ["electric", t("appearance.electricBlue")],
-    ["ice", t("appearance.glacierBlue")],
+    ["electric", t("appearance.jade")],
+    ["ice", t("appearance.silverMist")],
+    ["sunset", t("appearance.dusk")],
   ] as const;
   const tone = settings.backgroundTone ?? "violet";
   const update = async (patch: Partial<Settings>) => {
     setPending(true);
     try {
       await save(patch);
-      onSuccess(t("common.saved"));
     } catch {
       onError(t("appearance.couldNotSaveBackgroundAppearance"));
     } finally {
@@ -72,6 +70,9 @@ export function BackgroundPreferences({
           </NativeSelectOption>
           <NativeSelectOption value="surface">
             {t("appearance.softSurface")}
+          </NativeSelectOption>
+          <NativeSelectOption value="aurora">
+            {t("appearance.aurora")}
           </NativeSelectOption>
           <NativeSelectOption value="fluid">
             {t("appearance.fluidTexture")}
@@ -107,9 +108,7 @@ export function BackgroundPreferences({
                     />
                   }
                 >
-                  <span data-tone={value} aria-hidden="true">
-                    {tone === value && <Check />}
-                  </span>
+                  <span data-tone={value} aria-hidden="true" />
                 </TooltipTrigger>
                 <TooltipContent>{label}</TooltipContent>
               </Tooltip>
