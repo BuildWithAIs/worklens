@@ -3,6 +3,7 @@ import type { Bootstrap } from "../../../../../shared/contracts";
 import github from "@lobehub/icons-static-svg/icons/github.svg?url";
 import jira from "@/assets/brands/jira.svg?url";
 import confluence from "@/assets/brands/confluence.svg?url";
+import { JiraSettings } from "./jira/JiraSettings";
 import { ConfluenceSettings } from "./confluence/ConfluenceSettings";
 
 export interface ConnectorSettingsProps {
@@ -26,7 +27,16 @@ function ConfluenceConfiguration({ data, ...props }: ConnectorSettingsProps) {
 }
 // UI-only registration. Never import main-process clients or credentials here.
 export const connectorCatalog: readonly CatalogEntry[] = [
-  { id: "jira", name: "Jira", icon: jira, keywords: "Atlassian" },
+  {
+    id: "jira",
+    name: "Jira",
+    icon: jira,
+    keywords: "Atlassian",
+    connection: (data) => data.jira,
+    Settings: ({ data, ...props }) => (
+      <JiraSettings connection={data.jira} {...props} />
+    ),
+  },
   {
     id: "confluence",
     name: "Confluence",

@@ -47,7 +47,12 @@ export interface Destination {
   overwrite?: boolean;
   expectedFile?: string;
 }
-export function fileIdentity(info: { dev: number; ino: number; size: number; mtimeMs: number }) {
+export function fileIdentity(info: {
+  dev: number;
+  ino: number;
+  size: number;
+  mtimeMs: number;
+}) {
   return `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}`;
 }
 export class LocalArtifacts {
@@ -67,13 +72,16 @@ export class LocalArtifacts {
       ? resolve(expanded)
       : resolve(this.cwd, expanded);
   }
-  async directory(sessionId: string) {
+  async directory(
+    sessionId: string,
+    connector: "confluence" | "jira" = "confluence",
+  ) {
     if (!/^[\w-]+$/.test(sessionId)) throw new Error("Invalid session ID");
     const directory = join(
       this.root,
       "files",
       sessionId,
-      "confluence",
+      connector,
       randomUUID(),
     );
     await mkdir(directory, { recursive: true });
@@ -85,6 +93,7 @@ export class LocalArtifacts {
     source: AsyncIterable<Uint8Array> | string,
     destination: Destination = {},
     signal?: AbortSignal,
+    connector: "confluence" | "jira" = "confluence",
   ): Promise<LocalArtifact> {
     if (destination.path && destination.directory)
       throw new Error("只能指定文件路径或目录其中之一");
@@ -95,7 +104,7 @@ export class LocalArtifacts {
       ? dirname(exact)
       : destination.directory
         ? this.resolvePath(destination.directory)
-        : await this.directory(sessionId);
+        : await this.directory(sessionId, connector);
     await mkdir(directory, { recursive: true });
     const temp = join(directory, `.worklens-${randomUUID()}.part`);
     const handle = await open(temp, "wx", 0o600);
@@ -118,14 +127,20 @@ export class LocalArtifacts {
       let target = initial;
       if (exact && destination.overwrite) {
         await this.queue.run(exact, async () => {
-        const existing = await lstat(exact).catch((e) => {
-          if (e.code !== "ENOENT") throw e;
-        });
-        if (existing && (!existing.isFile() || existing.isSymbolicLink()))
-          throw new Error("覆盖目标必须是普通文件，不能是目录或符号链接");
-        if (destination.expectedFile && (!existing || fileIdentity(existing) !== destination.expectedFile)) throw new Error("目标文件在传输期间已变更，未覆盖。请重新读取目标。");
-        signal?.throwIfAborted();
-        await rename(temp, exact);
+          const existing = await lstat(exact).catch((e) => {
+            if (e.code !== "ENOENT") throw e;
+          });
+          if (existing && (!existing.isFile() || existing.isSymbolicLink()))
+            throw new Error("覆盖目标必须是普通文件，不能是目录或符号链接");
+          if (
+            destination.expectedFile &&
+            (!existing || fileIdentity(existing) !== destination.expectedFile)
+          )
+            throw new Error(
+              "目标文件在传输期间已变更，未覆盖。请重新读取目标。",
+            );
+          signal?.throwIfAborted();
+          await rename(temp, exact);
         });
       } else {
         for (let suffix = 0; ; suffix++) {

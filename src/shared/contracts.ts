@@ -175,6 +175,7 @@ export interface Recovery {
 }
 export interface Bootstrap {
   confluence?: ConfluenceConnection;
+  jira?: JiraConnection;
   globalUsage?: GlobalUsage;
   settings: Settings;
   providers: ProviderInfo[];
@@ -186,7 +187,18 @@ export interface Bootstrap {
   recoveries: Recovery[];
 }
 export interface Requests {
-  htmlFileAction: { input: { id: string; path?: string; code?: string; action: "chrome" | "reveal" }; output: void };
+  jiraSave: { input: JiraSettingsInput; output: JiraConnection };
+  jiraTest: { input: JiraSettingsInput; output: string };
+  jiraRemove: { input: undefined; output: void };
+  htmlFileAction: {
+    input: {
+      id: string;
+      path?: string;
+      code?: string;
+      action: "chrome" | "reveal";
+    };
+    output: void;
+  };
   previewHtml: { input: { id: string; path: string }; output: string };
   confluenceSave: {
     input: ConfluenceSettingsInput;
@@ -280,4 +292,17 @@ declare global {
   interface Window {
     worklens: WorkLensAPI;
   }
+}
+
+export interface JiraSettingsInput {
+  url: string;
+  deployment: "data-center" | "cloud";
+  email?: string;
+  token?: string;
+  cloudId?: string;
+  tokenType: "classic" | "scoped";
+}
+export interface JiraConnection extends Omit<JiraSettingsInput, "token"> {
+  configured: boolean;
+  error?: string;
 }

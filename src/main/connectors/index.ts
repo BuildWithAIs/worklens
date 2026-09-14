@@ -5,6 +5,9 @@ import { ConfluenceConnections } from "./confluence/connection";
 import { ConfluenceService } from "./confluence/service";
 import { confluenceConnector } from "./confluence";
 import { ConnectorRegistry } from "./registry";
+import { JiraConnections } from "./jira/connection";
+import { JiraService } from "./jira/service";
+import { jiraConnector } from "./jira";
 import { connectorRequests } from "./ipc";
 
 /** Explicit composition; no dynamic loading, dependency container or plugin system. */
@@ -18,9 +21,20 @@ export function createConnectors(
     encryption,
   );
   const confluence = new ConfluenceService(connections, artifacts);
+  const jiraConnections = new JiraConnections(
+    join(userData, "jira.json"),
+    encryption,
+  );
+  const jira = new JiraService(jiraConnections, artifacts);
   return {
-    registry: new ConnectorRegistry([confluenceConnector(confluence)]),
-    requests: connectorRequests(confluence),
-    bootstrap: () => ({ confluence: connections.info() }),
+    registry: new ConnectorRegistry([
+      confluenceConnector(confluence),
+      jiraConnector(jira),
+    ]),
+    requests: connectorRequests(confluence, jira),
+    bootstrap: () => ({
+      confluence: connections.info(),
+      jira: jiraConnections.info(),
+    }),
   };
 }

@@ -157,6 +157,16 @@ export async function mockWorklens(page, options = {}) {
           if (!input.url) throw Error("Enter a Confluence URL");
           return `Fixture User · ${input.url}`;
         }
+        if (name === "jiraSave") {
+          const { token, ...settings } = input;
+          data.jira = { ...settings, configured: true };
+          return structuredClone(data.jira);
+        }
+        if (name === "jiraRemove") { data.jira = undefined; return; }
+        if (name === "jiraTest") {
+          if (!input.url) throw Error("Enter a Jira URL");
+          return `Fixture User · ${input.url}`;
+        }
         if (name === "settings") {
           await new Promise((resolve) => setTimeout(resolve, 120));
           if (input.hiddenModels && window.failNextVisibilitySave) {
