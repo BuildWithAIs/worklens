@@ -617,7 +617,6 @@ export function SettingsPage({
                           try {
                             localStorage.setItem("worklens.language", next);
                             setLanguage(next);
-                            onSuccess(next === "en" ? "Saved" : "已保存");
                           } catch {
                             onError(
                               t("Could not save language", "语言保存失败"),
@@ -644,7 +643,6 @@ export function SettingsPage({
                           void save({
                             theme: e.target.value as Settings["theme"],
                           })
-                            .then(() => onSuccess(t("Saved", "已保存")))
                             .catch((e) =>
                               onError(systemText(String(e), language)),
                             )
@@ -661,7 +659,7 @@ export function SettingsPage({
                         </NativeSelectOption>
                       </NativeSelect>
                     </Item>
-                  <BackgroundPreferences settings={data.settings} save={save} onError={onError} onSuccess={onSuccess} />
+                  <BackgroundPreferences settings={data.settings} save={save} onError={onError} />
                   </ItemGroup>
                 </section>
                 <section className="settings-section">

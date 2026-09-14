@@ -25,13 +25,13 @@
   mix-blend-mode: screen;
 }
 .background-effect[data-fallback] {
-  background: radial-gradient(ellipse at 0 85%, #7182c21c, transparent 70%);
+  background: radial-gradient(ellipse at 0 85%, var(--background-fallback, #7182c21c), transparent 70%);
 }
 .background-effect[data-fallback] canvas {
   visibility: hidden;
 }
 .background-effect[data-edge][data-fallback] {
-  background: linear-gradient(0deg, #7182c212, transparent 24px);
+  background: linear-gradient(0deg, var(--background-fallback, #7182c212), transparent 24px);
 }
 .background-tones {
   width: auto;
@@ -40,6 +40,9 @@
   gap: 6px;
 }
 .background-tone {
+  /* Selection and focus outlines must not interpolate their radius or offset. */
+  transition: none;
+  translate: none;
   border-radius: 50%;
   padding: 5px;
   width: 32px;
@@ -58,19 +61,18 @@
   background: linear-gradient(135deg, #6396ef, #ad7ed3);
 }
 .background-tone [data-tone="electric"] {
-  background: linear-gradient(135deg, #245be6, #39d8ff);
+  background: linear-gradient(135deg, #167568, #81cda0);
 }
 .background-tone [data-tone="ice"] {
-  background: linear-gradient(135deg, #6093c7, #c3f2f3);
+  background: linear-gradient(135deg, #778797, #c0cbd3);
 }
 
-.background-tone span svg {
-  width: 12px;
-  height: 12px;
-  stroke-width: 1.75;
-  color: rgb(255 255 255 / 92%);
-  filter: drop-shadow(0 1px 1px rgb(15 23 42 / 40%));
-}
+.background-tone [data-tone="sunset"] { background: linear-gradient(135deg, #a74c72, #dda275); }
+.background-tone[aria-checked="true"] { outline: 1px solid color-mix(in srgb, var(--text) 60%, var(--bg)); outline-offset: -4px; background: transparent; }
+.background-tone:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.background-effect[data-tone="electric"] { --background-fallback: #4aa58b22; }
+.background-effect[data-tone="ice"] { --background-fallback: #97aabd20; }
+.background-effect[data-tone="sunset"] { --background-fallback: #c47b8a22; }
 
 .sidebar:has(> .background-effect),
 .settings-navigation:has(> .background-effect) {

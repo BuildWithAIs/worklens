@@ -88,7 +88,7 @@ export function BackgroundEffect({
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
     const uniforms = Object.fromEntries(
-      ["resolution", "time", "tone", "shape", "edge", "dark"].map((key) => [
+      ["resolution", "time", "tone", "shape", "edge"].map((key) => [
         key,
         gl.getUniformLocation(program, key),
       ]),
@@ -107,13 +107,9 @@ export function BackgroundEffect({
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.uniform2f(uniforms.resolution, element.width, element.height);
       gl.uniform1f(uniforms.time, time);
-      gl.uniform1f(uniforms.tone, { violet: 1, electric: 2, ice: 3 }[tone]);
-      gl.uniform1f(uniforms.shape, effect === "surface" ? 1 : 0);
+      gl.uniform1f(uniforms.tone, { violet: 1, electric: 2, ice: 3, sunset: 4 }[tone]);
+      gl.uniform1f(uniforms.shape, effect === "surface" ? 1 : effect === "aurora" ? 2 : 0);
       gl.uniform1f(uniforms.edge, Number(edge));
-      gl.uniform1f(
-        uniforms.dark,
-        Number(document.documentElement.dataset.theme === "dark"),
-      );
       if (edge) {
         gl.enable(gl.SCISSOR_TEST);
         gl.scissor(
