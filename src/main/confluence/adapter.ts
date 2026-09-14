@@ -31,14 +31,30 @@ export class ConfluenceAdapter {
     status = "current",
   ): Promise<Page> {
     const id = this.http.pageId(target);
+    const historical =
+      !this.cloud && version !== undefined && status === "current";
     const path = this.cloud
       ? this.v2(
           `/${this.collection(kind)}/${id}?body-format=storage${version ? `&version=${version}` : ""}&status=${status}`,
         )
       : this.v1(
-          `/content/${id}?expand=body.storage,version,space,ancestors,history&status=${status}${version ? `&version=${version}` : ""}`,
+          `/content/${id}?expand=body.storage,version,space,ancestors,history&status=${historical ? "historical" : status}${version ? `&version=${version}` : ""}`,
         );
-    const raw = await this.http.json(path);
+    let raw: Json;
+    try {
+      raw = await this.http.json(path);
+    } catch (error) {
+      // The requested version may still be current rather than historical.
+      if (
+        !historical ||
+        !(error instanceof ServiceError) ||
+        error.status !== 404
+      )
+        throw error;
+      const current = await this.page(target, kind);
+      if (current.version !== version) throw error;
+      return current;
+    }
     if (
       !raw.id ||
       !Number.isInteger(raw.version?.number) ||
@@ -47,6 +63,11 @@ export class ConfluenceAdapter {
       throw new ServiceError(
         "invalid_response",
         "页面缺少版本或 storage 正文，不能可靠读取或编辑",
+      );
+    if (version !== undefined && raw.version.number !== version)
+      throw new ServiceError(
+        "invalid_response",
+        "服务返回的版本与请求不一致，未使用该正文",
       );
     return {
       id: String(raw.id),

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, unlink } from "node:fs/promises";
 import { z } from "zod";
 import { atomicJson, SerialQueue, type Encryption } from "../storage";
+import { testConnection } from "./connection-test";
 import type {
   ConfluenceConnection,
   ConfluenceSettingsInput,
@@ -68,6 +69,7 @@ export class ConfluenceConnections {
   constructor(
     private path: string,
     private encryption: Encryption,
+    private fetcher: typeof fetch = fetch,
   ) {}
   private remember(token: string, email?: string) {
     if (token) {
@@ -117,7 +119,14 @@ export class ConfluenceConnections {
       this.token = token;
       this.remember(token, settings.email);
       this.revision = revision;
-      this.value.configured = true;
+      try {
+        await this.test(settings);
+        this.value.configured = true;
+      } catch (error) {
+        this.value.error = this.redact(
+          error instanceof Error ? error.message : "Confluence 连接验证失败",
+        );
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         this.value.error =
@@ -147,7 +156,8 @@ export class ConfluenceConnections {
     };
   }
   snapshot(): ConnectionSnapshot {
-    if (!this.token) throw new Error("请先在设置 → 连接中连接 Confluence");
+    if (!this.token || !this.value.configured)
+      throw new Error("请先在设置 → 连接中保存并验证 Confluence 连接");
     return {
       settings: this.info(),
       token: this.token,
@@ -160,11 +170,31 @@ export class ConfluenceConnections {
     if (snapshot.revision !== this.revision)
       throw new Error("Confluence 连接已变更，请重新读取目标");
   }
+  async test(input: ConfluenceSettingsInput) {
+    return testConnection(await this.candidate(input), this.fetcher);
+  }
+  private disable() {
+    this.controller.abort(new Error("Confluence 连接待验证或已失效"));
+    this.controller = new AbortController();
+    this.value.configured = false;
+  }
   save(input: ConfluenceSettingsInput) {
     return this.queue.run("connection", async () => {
+      // Suspend old tools while validating a replacement, including failed saves.
+      this.disable();
       const next = await this.candidate(input);
       if (!this.encryption.isEncryptionAvailable())
         throw new Error("操作系统安全存储不可用，无法保存凭据");
+      let failure: unknown;
+      try {
+        await testConnection(next, this.fetcher);
+      } catch (error) {
+        failure = error;
+        next.settings.configured = false;
+        next.settings.error = this.redact(
+          error instanceof Error ? error.message : "Confluence 连接验证失败",
+        );
+      }
       const revision = randomUUID();
       await atomicJson(this.path, {
         version: 1,
@@ -177,6 +207,7 @@ export class ConfluenceConnections {
       this.revision = revision;
       this.token = next.token;
       this.value = next.settings;
+      if (failure) throw new Error(next.settings.error);
       return this.info();
     });
   }

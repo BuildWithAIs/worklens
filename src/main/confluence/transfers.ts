@@ -11,6 +11,7 @@ import {
   safeFilename,
 } from "../local-artifacts";
 import { readableStorage, markdownStorage, exportHtml } from "./content";
+import { attachmentReference } from "./content-links";
 export async function uploadFile(
   ctx: Execution,
   path: string,
@@ -55,8 +56,13 @@ export async function exportPage(
   const assetsDirectory = join(directory, `assets-${randomUUID().slice(0, 8)}`);
   const artifacts: LocalArtifact[] = [];
   const failures: Json[] = [];
-  const readable = readableStorage(p.storage, p.url);
+  const readable = readableStorage(
+    p.storage,
+    p.url,
+    ctx.connection.settings.url,
+  );
   let markdown = readable.markdown;
+  const savedReferences = new Map<string, string>();
   for (const id of a.attachmentIds) {
     if (ctx.signal.aborted) {
       failures.push({ attachmentId: id, error: "已取消，未下载" });
@@ -74,11 +80,10 @@ export async function exportPage(
         ctx.signal,
       );
       artifacts.push(artifact);
-      markdown = markdown
-        .split(`attachment:${encodeURIComponent(raw.title)}`)
-        .join(
-          `${basename(assetsDirectory)}/${encodeURIComponent(artifact.name)}`,
-        );
+      savedReferences.set(
+        attachmentReference(raw.title),
+        `${basename(assetsDirectory)}/${attachmentReference(artifact.name).slice("attachment:".length)}`,
+      );
     } catch (e) {
       failures.push({
         attachmentId: id,
@@ -86,7 +91,11 @@ export async function exportPage(
       });
     }
   }
-  markdown = markdown.replace(/attachment:[^)\s]+/g, p.url);
+  // Match complete references in Markdown and preserved HTML tables, not filename prefixes.
+  markdown = markdown.replace(
+    /attachment:[^)\s"'<>]+/g,
+    (reference) => savedReferences.get(reference) ?? p.url,
+  );
   const header = `# ${p.title}\n\nSource: ${p.url}\nVersion: ${p.version}\nExported: ${new Date().toISOString()}\n\n`;
   const text =
     a.format === "html"

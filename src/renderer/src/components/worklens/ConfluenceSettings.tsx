@@ -80,6 +80,7 @@ export function ConfluenceSettings({
         onClose();
       }
     } catch (error) {
+      if (action === "save") await refresh().catch(() => {});
       const message = String(error).replace(/^Error: /, "");
       setError(message);
     } finally {
@@ -244,7 +245,7 @@ export function ConfluenceSettings({
           </p>
         )}
         <DialogFooter>
-          {connection?.configured && (
+          {connection?.url && (
             <Button
               variant="ghost"
               disabled={busy}

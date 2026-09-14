@@ -10,8 +10,9 @@ Open **Settings → Connections** and choose **Connect Confluence**. Configured 
 
 - **Data Center:** enter the site URL (including a context path such as `/confluence`) and personal access token. WorkLens sends Bearer authentication.
 - **Cloud, classic token:** enter the site URL, account email and API token. WorkLens uses Basic authentication and defaults an empty context path to `/wiki`.
-- **Cloud, scoped token:** also select the scoped token type and provide the site's Cloud ID. Requests use `https://api.atlassian.com/ex/confluence/{cloudId}/wiki`; source links still point to your site.
-- **Test connection** checks the authenticated identity using `/rest/api/user/current`; a scoped token may need additional permission for this check. **Save** persists configuration; “Configured” does not imply a successful test or permission for every operation.
+- **Cloud, scoped token:** also select the scoped token type and provide the site's Cloud ID. Requests use `https://api.atlassian.com/ex/confluence/{cloudId}/wiki`; source links still point to your site. Validation first checks the site's public `/_edge/tenant_info` endpoint to ensure that the URL and Cloud ID match, without sending credentials to that endpoint.
+- **Save** automatically checks the authenticated identity using `/rest/api/user/current` before enabling tools; the optional **Test connection** button uses the same check. A scoped token may need additional permission for this check. Missing settings, anonymous responses, authentication failures, redirects and unreachable services do not enable tools. A failed validation leaves the supplied credentials encrypted for correction, with tools disabled. Saving replacement settings also suspends the previous connection's tools and requests.
+- Startup revalidates saved credentials before enabling tools, including older configurations. An offline or failed check leaves the connection disabled; save again to retry. Successful validation establishes connectivity and authenticated identity, not permission for every operation. There is no periodic background health check.
 
 Token input is cleared after saving. Leaving it blank preserves the existing token only for the same URL, deployment, email, token type and Cloud ID. Changing account/site requires re-entering it. Disconnecting deletes the saved connection, aborts in-flight requests and invalidates outstanding authorization and pagination. Downloaded files and conversations remain.
 
@@ -43,6 +44,10 @@ To prepare an exact edit, read storage rather than round-tripping Markdown:
 ```
 
 Only text expressly matched by the edits changes. Empty replacement is allowed. Ambiguous/missing matches fail. Whole-page replacement is a separate `replace_page` operation. Storage input is explicit; Markdown is never heuristically treated as HTML. Unsupported macros are exposed as preserved source when reading, not silently discarded. Version conflicts require a fresh read and newly prepared changes.
+
+Internal page links with IDs retain a site URL and anchor. Title-only references retain their title, space and anchor for subsequent search, with a warning instead of an invented address. Attachment links retain an attachment reference; exports rewrite selected attachments to local paths and unselected attachments to the source page. Unsupported links and cross-page attachment references retain their source markup with a warning. Resolving every link does not trigger additional API requests.
+
+Data Center historical reads use `status=historical` when a version is requested; if that resource is absent, a current-page fallback is accepted only when its version matches exactly. Cloud and Data Center responses with an unexpected requested version are rejected before comparison or restoration.
 
 `publish_markdown` accepts an absolute or runtime-relative Markdown `filePath` and an explicit `assets` list of `{reference,filePath}`. Each reference must match the Markdown link/image target. Selected files are snapshotted before authorization; local images without a mapping fail before publishing. Files are uploaded as attachments and Markdown links are rewritten. A failed asset upload preserves the new page and successful attachments and returns per-file outcomes; retry the failed attachment instead of republishing the page.
 
@@ -96,10 +101,12 @@ If saving the final exported document fails, the result reports `partial` with a
 ## Execution semantics
 
 - Remote reads are limited to four simultaneous operations. Remote writes are serialized across conversations; other clients are protected through server versions where available.
-- Configured connections expose all implemented read and write operations for their deployment, without a WorkLens access mode or per-operation approval dialog. Confluence account permissions still apply. Account/site changes invalidate pending operations. Legacy access settings are removed on load while preserving encrypted credentials.
+- Validated connections expose all implemented read and write operations for their deployment, without a WorkLens access mode or per-operation approval dialog. Confluence account permissions still apply. Account/site changes invalidate pending operations. Legacy access settings are removed on load while preserving encrypted credentials.
 - Read requests retry bounded transient failures and respect Retry-After (long waits are returned to the caller). Mutations are never automatically retried after a network/5xx failure.
 - A journal records pending/completed/uncertain writes. Identical mutations within one run/connection are deduplicated, including ambiguous outcomes. This is not a server-side idempotency guarantee or a cross-request transaction. After an uncertain result, read the target before any new attempt.
+- If the pending journal cannot be saved, no remote mutation is sent. If saving the final journal fails, the tool preserves the received remote outcome and includes `journalWarning`; failure logging also cannot replace an uncertain remote outcome with a local storage error. The pending record remains, so identical retries (including after service restart) return `unknown` without resubmitting the mutation.
 - Versioned page/comment/property writes use expected versions. Some APIs (deletion, moving, restrictions, tasks and file upload) do not expose an atomic compare-and-swap: preflight checks reduce stale operations but cannot eliminate races with external clients.
+- Ordinary page edits prepare changes from one full-page GET and use the PUT version to detect concurrent edits, without redundant full-page preflight reads. Restoring a version additionally reads the requested historical body. Raw storage reads skip Markdown conversion.
 - Attachment redirects never receive the Confluence Authorization header after redirecting. API requests do not silently follow login/SSO redirects. HTTPS is required for Cloud and redirected downloads; explicitly configured intranet Data Center HTTP sites are allowed.
 
 ## Code organization

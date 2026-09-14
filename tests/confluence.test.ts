@@ -1,6 +1,6 @@
 import { ConfluenceService } from "../src/main/confluence/service";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { expect, test, vi } from "vitest";
 import {
   ConfluenceConnections,
@@ -10,6 +10,72 @@ import { applyEdits } from "../src/main/confluence/content";
 import { ReadLimiter } from "../src/main/confluence/http";
 import { readSchema, writeSchema } from "../src/main/confluence/schema";
 import { setup } from "./confluence-setup";
+import * as storage from "../src/main/storage";
+
+test("failed pending journal prevents remote writes and allows a later retry", async () => {
+  const f = await setup();
+  const request = { operation: "add_comment", page: "1", content: "comment" };
+  const original = storage.atomicJson;
+  const spy = vi
+    .spyOn(storage, "atomicJson")
+    .mockImplementation((path, value) => {
+      if (basename(dirname(path)) === "operations")
+        return Promise.reject(new Error("ENOSPC"));
+      return original(path, value);
+    });
+  try {
+    expect((await f.call(request, true)).data.status).toBe("storage_error");
+    expect(f.fixture.state.commentCount).toBe(0);
+  } finally {
+    spy.mockRestore();
+  }
+  expect((await f.call(request, true)).data.status).toBe("success");
+  expect(f.fixture.state.commentCount).toBe(1);
+});
+
+test.each([false, true])(
+  "final journal failure preserves remote outcome (lost response: %s) and blocks replay",
+  async (lostResponse) => {
+    const f = await setup();
+    f.fixture.state.failWrite = lostResponse;
+    const request = { operation: "add_comment", page: "1", content: "comment" };
+    const original = storage.atomicJson;
+    let journalWrites = 0;
+    const spy = vi
+      .spyOn(storage, "atomicJson")
+      .mockImplementation((path, value) => {
+        if (basename(dirname(path)) === "operations" && ++journalWrites > 1)
+          return Promise.reject(new Error("ENOSPC"));
+        return original(path, value);
+      });
+    try {
+      const out = await f.call(request, true);
+      expect(out.data.status).toBe(lostResponse ? "unknown" : "success");
+      expect(out.result.isError).toBe(lostResponse);
+      if (!lostResponse) {
+        expect(out.data.id).toBe("10");
+        expect(out.data.journalWarning).toContain("本地完成日志保存失败");
+      }
+      // The durable pending record still protects retries, including after restart.
+      const restarted = new ConfluenceService(f.connections, f.artifacts);
+      const replay = await restarted
+        .tools("session1", () => "run1")[1]
+        .execute(
+          "retry",
+          { request },
+          new AbortController().signal,
+          undefined,
+          {} as never,
+        );
+      const data = JSON.parse((replay.content[0] as { text: string }).text);
+      expect(data.status).toBe("unknown");
+      expect(data.replayed).toBe(true);
+      expect(f.fixture.state.commentCount).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
 test("queued operations cancel promptly without entering or blocking later work", async () => {
   const limiter = new ReadLimiter(1);
   let release!: () => void;

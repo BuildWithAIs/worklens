@@ -42,10 +42,17 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
     await expect(page.locator("#confluence-access")).toHaveCount(0);
     await page.locator("#confluence-url").fill(fixture.url);
     await page.locator("#confluence-token").fill("synthetic-desktop-token");
-    await page
-      .getByRole("button", { name: "Test connection", exact: true })
-      .click();
-    await expect(page.getByText(/Fixture User/)).toBeVisible();
+    // Save must validate even when the optional test button has never been used.
+    fixture.state.identityStatus = 401;
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText(/Confluence 返回 401/).first()).toBeVisible();
+    const invalid = await page.evaluate(() =>
+      window.worklens.invoke("bootstrap", undefined),
+    );
+    expect(invalid.confluence?.configured).toBe(false);
+    expect(invalid.tools).not.toContain("confluence_read");
+    expect(invalid.tools).not.toContain("confluence_write");
+    fixture.state.identityStatus = 200;
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Manage Confluence", exact: true }),
@@ -54,6 +61,10 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
       .getByRole("button", { name: "Manage Confluence", exact: true })
       .click();
     await expect(page.locator("#confluence-token")).toHaveValue("");
+    await page
+      .getByRole("button", { name: "Test connection", exact: true })
+      .click();
+    await expect(page.getByText(/Fixture User/)).toBeVisible();
     await page.screenshot({
       path: "test-results/confluence-dialog.png",
       fullPage: true,

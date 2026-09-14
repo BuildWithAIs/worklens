@@ -3,6 +3,7 @@ import TurndownService from "turndown";
 import { parseDocument, DomUtils } from "htmlparser2";
 import { XMLValidator } from "fast-xml-parser";
 import { ServiceError } from "./http";
+import { storageLink, attachmentReference } from "./content-links";
 export function escapeXml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -99,6 +100,7 @@ export function storageContent(
 export function readableStorage(
   storage: string,
   sourceUrl: string,
+  siteUrl?: string,
 ): { markdown: string; warnings: string[] } {
   const warnings: string[] = [];
   // Preserve unknown macros verbatim as fenced source instead of silently dropping them.
@@ -126,6 +128,19 @@ export function readableStorage(
           end: node.endIndex! + 1,
           value,
         });
+      } else if (node.name === "ac:link") {
+        replacements.push({
+          start: node.startIndex!,
+          end: node.endIndex! + 1,
+          value: storageLink(
+            node,
+            storage.slice(node.startIndex!, node.endIndex! + 1),
+            sourceUrl,
+            siteUrl,
+            escapeXml,
+            warnings,
+          ),
+        });
       } else if (node.name === "ac:image") {
         const attachment = DomUtils.findOne(
           (n) => n.name === "ri:attachment",
@@ -137,8 +152,17 @@ export function readableStorage(
           node.children,
           true,
         );
+        if (attachment?.children.some((child) => child.type === "tag")) {
+          warnings.push("跨页面图片附件引用已保留原文，请根据容器页面定位附件");
+          replacements.push({
+            start: node.startIndex!,
+            end: node.endIndex! + 1,
+            value: `<pre><code>${escapeXml(storage.slice(node.startIndex!, node.endIndex! + 1))}</code></pre>`,
+          });
+          continue;
+        }
         const src = attachment
-          ? `attachment:${encodeURIComponent(attachment.attribs["ri:filename"])}`
+          ? attachmentReference(attachment.attribs["ri:filename"] || "")
           : url?.attribs["ri:value"];
         replacements.push({
           start: node.startIndex!,
@@ -182,6 +206,7 @@ export function readableStorage(
     replacement(content, node) {
       const href = node.getAttribute("href");
       if (!href) return content;
+      if (href.startsWith("attachment:")) return `[${content}](${href})`;
       try {
         const url = new URL(href, sourceUrl);
         return ["http:", "https:", "mailto:"].includes(url.protocol)

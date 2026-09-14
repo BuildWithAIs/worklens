@@ -70,7 +70,6 @@ export async function editPage(
     if (a.operation === "restore_version")
       next = (await d.page(a.page, a.kind, a.version)).storage;
     const title = ("title" in a ? a.title : undefined) ?? p.title;
-    d.assertVersion((await d.page(p.id, p.type)).version, p.version);
     return dispatch(async () => ({
       ...(await d.update(
         p,

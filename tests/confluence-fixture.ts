@@ -13,6 +13,9 @@ export async function confluenceFixture() {
     commentCount: 0,
     failWrite: false,
     failUpload: false,
+    identityStatus: 200,
+    anonymous: false,
+    attachmentTitle: "../diagram.txt",
   };
   const server = createServer(async (req, res) => {
     let body = "";
@@ -41,7 +44,12 @@ export async function confluenceFixture() {
       return;
     }
     if (path === "/confluence/rest/api/user/current")
-      return json({ username: "fixture-user", displayName: "Fixture User" });
+      return json(
+        state.anonymous
+          ? { type: "anonymous" }
+          : { username: "fixture-user", displayName: "Fixture User" },
+        state.identityStatus,
+      );
     if (path === "/confluence/rest/api/space/ENG")
       return json({ key: "ENG", name: "Engineering", id: "5" });
     if (path === "/confluence/rest/api/space")
@@ -80,7 +88,7 @@ export async function confluenceFixture() {
     if (path === "/confluence/rest/api/content/8")
       return json({
         id: "8",
-        title: "../diagram.txt",
+        title: state.attachmentTitle,
         version: { number: 1 },
         container: { id: "1" },
         _links: { download: "/download/attachments/1/diagram.txt" },
@@ -110,6 +118,7 @@ export async function confluenceFixture() {
         return json({ id: "10", version: { number: 1 } });
       }
       state.createCount++;
+      state.storage = parsed.body.storage.value;
       return json({
         id: "1",
         title: parsed.title,

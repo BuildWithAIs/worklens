@@ -98,7 +98,10 @@ export async function read(ctx: Execution, a: ReadRequest): Promise<Json> {
       return d.space(a.space);
     case "read_page": {
       const p = await ctx.operations.page(ctx, a, true);
-      const readable = readableStorage(p.storage, p.url);
+      const readable =
+        a.representation === "storage"
+          ? { markdown: "", warnings: [] }
+          : readableStorage(p.storage, p.url, ctx.connection.settings.url);
       const full =
         a.representation === "storage" ? p.storage : readable.markdown;
       const end = Math.min(full.length, a.offset + a.length);

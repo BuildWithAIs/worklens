@@ -37,9 +37,16 @@ export class MutationRunner {
           "page" in a &&
           "expectedVersion" in a &&
           a.expectedVersion &&
-          !["upload_attachment", "set_property", "delete_property"].includes(
-            a.operation,
-          )
+          ![
+            "upload_attachment",
+            "set_property",
+            "delete_property",
+            "edit_page",
+            "append_page",
+            "replace_page",
+            "rename_page",
+            "restore_version",
+          ].includes(a.operation)
         ) {
           const latest = await ctx.adapter.page(
             a.page,
@@ -51,20 +58,23 @@ export class MutationRunner {
           );
           ctx.adapter.assertVersion(latest.version, a.expectedVersion);
         }
-        await atomicJson(path, {
-          status: "unknown",
-          message: "写入已开始；如未收到结果，请读取目标核实，不要重复提交。",
-        });
+        try {
+          await atomicJson(path, {
+            status: "unknown",
+            message: "写入已开始；如未收到结果，请读取目标核实，不要重复提交。",
+          });
+        } catch {
+          throw new ServiceError(
+            "storage_error",
+            "无法保存写入日志，尚未发送修改请求。请检查本地存储后重试。",
+          );
+        }
         sent = true;
         return execute();
       };
+      let result: Json;
       try {
-        const result = await write(ctx, a, dispatch);
-        await atomicJson(
-          path,
-          JSON.parse(ctx.operations.connections.redact(JSON.stringify(result))),
-        );
-        return result;
+        result = await write(ctx, a, dispatch);
       } catch (e) {
         if (sent) {
           const result = {
@@ -74,9 +84,29 @@ export class MutationRunner {
                 ? ctx.operations.connections.redact(e.message)
                 : "写入结果不确定",
           };
-          await atomicJson(path, result);
+          // Keep the pending journal if recording the failure also fails.
+          // A local storage error must not hide the remote operation's outcome.
+          await atomicJson(path, result).catch(() => {});
+          throw e instanceof ServiceError
+            ? e
+            : new ServiceError(result.status, result.message);
         }
         throw e;
+      }
+      try {
+        await atomicJson(
+          path,
+          JSON.parse(ctx.operations.connections.redact(JSON.stringify(result))),
+        );
+        return result;
+      } catch {
+        // The remote result is known. Preserve it even if the journal cannot
+        // be finalized; the pending record still prevents identical retries.
+        return {
+          ...result,
+          journalWarning:
+            "远端操作结果已收到，但本地完成日志保存失败。请保留本次结果；不要重复提交，后续操作前先读取目标核实。",
+        };
       }
     });
   }

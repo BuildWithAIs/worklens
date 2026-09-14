@@ -26,19 +26,7 @@ export class ConfluenceService {
       : [];
   }
   async test(input: Parameters<ConfluenceConnections["candidate"]>[0]) {
-    const snapshot = await this.connections.candidate(input);
-    const http = new ConfluenceHttp(
-      snapshot,
-      AbortSignal.timeout(15_000),
-      this.fetcher,
-    );
-    const user = await http.json("/rest/api/user/current");
-    if (!user.accountId && !user.username && !user.userKey)
-      throw new ServiceError(
-        "authentication",
-        "服务未返回已登录用户，请检查 token 和认证方式",
-      );
-    return `已连接：${user.displayName ?? user.username ?? user.accountId} · ${snapshot.settings.url}`;
+    return this.connections.test(input);
   }
   tools(sessionId: string, runId: () => string): ToolDefinition[] {
     return ([false, true] as const).map((write) => {

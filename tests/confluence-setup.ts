@@ -44,6 +44,20 @@ export async function setup() {
   const connections = new ConfluenceConnections(
     join(root, "connection.json"),
     encryption,
+    async (url, init) => {
+      // Synthetic Cloud settings used by adapter tests must never reach the network.
+      const target = new URL(String(url));
+      if (
+        target.hostname === "fixture.atlassian.net" ||
+        target.hostname === "api.atlassian.com"
+      )
+        return Response.json(
+          target.pathname === "/_edge/tenant_info"
+            ? { cloudId: "cloud-123" }
+            : { accountId: "fixture-user", displayName: "Fixture User" },
+        );
+      return fetch(url, init);
+    },
   );
   const input = {
     url: fixture.url,

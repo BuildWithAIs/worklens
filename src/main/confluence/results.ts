@@ -26,6 +26,7 @@ export async function result(ctx: Execution, input: Json) {
   const artifacts: LocalArtifact[] = [...(value.artifacts ?? [])];
   const recovery = {
     status,
+    journalWarning: value.journalWarning,
     id: value.id ?? value.pageId ?? value.attachmentId,
     version: value.version,
     complete: value.complete,
