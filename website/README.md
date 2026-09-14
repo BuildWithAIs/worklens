@@ -84,4 +84,3 @@ screenshot, run `npm run build` then `node website/capture-app.mjs`, which uses 
 fresh temporary `WORKLENS_TEST_ROOT` without real user sessions.
 
 Check 375px and 1280px layouts, links, keyboard focus and FAQ after UI changes.
-The `review/` screenshots are review evidence and are never uploaded.

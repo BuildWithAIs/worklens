@@ -2,7 +2,7 @@
 
 - `worklens-mark-original.svg`：界面现用深色标志，透明背景，64 × 64。
 - `worklens-mark-white.svg`：纯白标志，透明背景，适合深色背景。
-- `worklens-app-dark.svg`：现用深色软件图标的矢量源文件，1024 × 1024。
+- [`../../build/icon.svg`](../../build/icon.svg)：现用深色软件图标的矢量源文件，1024 × 1024，统一在构建资源目录维护。
 - `worklens-app-light.svg`：白底深色标志的软件图标备选，1024 × 1024。
 
 全部为可编辑 SVG 路径，不依赖字体或外部图片。软件图标保留最新的四周透明留白；导出时保留完整画布，不要裁切透明边缘，否则 Dock 中会再次显大。
