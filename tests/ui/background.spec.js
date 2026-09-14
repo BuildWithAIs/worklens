@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
-test("dark appearance owns effects, confirms saves and preserves choices", async ({
+test("dark appearance owns effects, saves quietly and preserves choices", async ({
   page,
 }, info) => {
   await mockWorklens(page);
@@ -28,7 +28,7 @@ test("dark appearance owns effects, confirms saves and preserves choices", async
   await expect(
     page.getByRole("radio", { name: "Blue violet", exact: true }),
   ).toBeChecked();
-  await page.getByRole("radio", { name: "Glacier blue", exact: true }).click();
+  await page.getByRole("radio", { name: "Silver mist", exact: true }).click();
   await page
     .getByRole("combobox", { name: "Background effect", exact: true })
     .selectOption("fluid");
@@ -40,7 +40,7 @@ test("dark appearance owns effects, confirms saves and preserves choices", async
       .locator('[data-slot="toast-title"]')
       .filter({ hasText: "Saved" })
       .first(),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.locator(".background-effect[data-fallback]")).toHaveCount(
     0,
   );
@@ -74,7 +74,7 @@ test("dark appearance owns effects, confirms saves and preserves choices", async
     page.getByRole("combobox", { name: "Background effect", exact: true }),
   ).toHaveValue("fluid");
   await expect(
-    page.getByRole("radio", { name: "Glacier blue", exact: true }),
+    page.getByRole("radio", { name: "Silver mist", exact: true }),
   ).toBeChecked();
   await page
     .getByRole("combobox", { name: "Appearance", exact: true })
@@ -168,3 +168,42 @@ test("shader opacity fades in instead of covering native glass with a hard edge"
     .toBeGreaterThan(0);
   expect(Number(await canvas.getAttribute("data-fade-alpha"))).toBeLessThan(20);
 });
+
+ test("all effects and palettes render with a visible selection ring", async ({ page }, info) => {
+ await mockWorklens(page); await page.goto("/");
+ await page.getByRole("button", {name:"Settings",exact:true}).click();
+ await page.getByRole("combobox", {name:"Appearance",exact:true}).selectOption("dark");
+ await page.emulateMedia({ reducedMotion: "no-preference" });
+ for (const effect of ["surface","aurora","fluid"]) {
+  await page.getByRole("combobox", {name:"Background effect",exact:true}).selectOption(effect);
+  for (const color of ["Blue violet","Jade","Silver mist","Dusk"]) {
+   const choice=page.getByRole("radio", {name:color,exact:true}); await choice.click();
+   await expect(choice).toBeChecked();
+   await expect(choice).toHaveCSS("outline-style","solid");
+   await expect(choice).toHaveCSS("transition-duration", "0s");
+   await expect(choice).toHaveCSS("translate", "none");
+   await expect(page.locator(".background-effect[data-fallback]")).toHaveCount(0);
+  }
+  await page.getByRole("radio", {name:"Blue violet",exact:true}).click();
+  await expect(page.getByRole("radio", {name:"Blue violet",exact:true})).toBeChecked();
+  await expect(page.getByRole("combobox", {name:"Background effect",exact:true})).toBeEnabled();
+  await page.screenshot({path:info.outputPath(effect+".png")});
+ }
+});
+
+ test("background save errors remain visible and preserve the selected effect", async ({ page }) => {
+ await mockWorklens(page);
+ await page.addInitScript(() => {
+  const invoke = window.worklens.invoke;
+  window.worklens.invoke = (name, input) => {
+   if (name === "settings" && input?.backgroundEffect) return Promise.reject(new Error("fixture save failed"));
+   return invoke(name, input);
+  };
+ });
+ await page.goto("/");
+ await page.getByRole("button", {name:"Settings",exact:true}).click();
+ await page.getByRole("combobox", {name:"Appearance",exact:true}).selectOption("dark");
+ await page.getByRole("combobox", {name:"Background effect",exact:true}).selectOption("fluid");
+ await expect(page.locator('[data-slot="toast-title"]').filter({hasText:"Could not save background appearance."})).toBeVisible();
+ await expect(page.getByRole("combobox", {name:"Background effect",exact:true})).toHaveValue("none");
+ });

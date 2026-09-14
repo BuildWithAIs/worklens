@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Check } from "lucide-react";
 import { Item, ItemTitle } from "@/components/ui/item";
 import {
   NativeSelect,
@@ -21,28 +20,27 @@ export function BackgroundPreferences({
   settings,
   save,
   onError,
-  onSuccess,
 }: {
   settings: Settings;
   save: (patch: Partial<Settings>) => Promise<unknown>;
   onError: (message: string) => void;
-  onSuccess: (message: string) => void;
 }) {
   const { t } = useLocale();
   const dark = useDarkAppearance(settings);
   const [pending, setPending] = useState(false);
   const effect = settings.backgroundEffect ?? "none";
+  // Retain stored electric/ice IDs so existing preferences remain valid.
   const tones = [
     ["violet", t("Blue violet", "蓝紫")],
-    ["electric", t("Electric blue", "电光蓝")],
-    ["ice", t("Glacier blue", "冰川蓝")],
+    ["electric", t("Jade", "青碧")],
+    ["ice", t("Silver mist", "银雾")],
+    ["sunset", t("Dusk", "暮霞")],
   ] as const;
   const tone = settings.backgroundTone ?? "violet";
   const update = async (patch: Partial<Settings>) => {
     setPending(true);
     try {
       await save(patch);
-      onSuccess(t("Saved", "已保存"));
     } catch {
       onError(t("Could not save background appearance.", "背景外观保存失败。"));
     } finally {
@@ -73,6 +71,7 @@ export function BackgroundPreferences({
           <NativeSelectOption value="surface">
             {t("Soft surface", "柔光曲面")}
           </NativeSelectOption>
+          <NativeSelectOption value="aurora">{t("Aurora", "极光")}</NativeSelectOption>
           <NativeSelectOption value="fluid">
             {t("Fluid texture", "流体纹理")}
           </NativeSelectOption>
@@ -107,9 +106,7 @@ export function BackgroundPreferences({
                     />
                   }
                 >
-                  <span data-tone={value} aria-hidden="true">
-                    {tone === value && <Check />}
-                  </span>
+                  <span data-tone={value} aria-hidden="true" />
                 </TooltipTrigger>
                 <TooltipContent>{label}</TooltipContent>
               </Tooltip>

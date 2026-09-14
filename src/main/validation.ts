@@ -52,8 +52,8 @@ export const schemas = {
   settings: z
     .object({
       theme: z.enum(["light", "dark", "system"]).optional(),
-      backgroundEffect: z.enum(["none", "surface", "fluid"]).optional(),
-      backgroundTone: z.enum(["violet", "electric", "ice"]).optional(),
+      backgroundEffect: z.enum(["none", "surface", "fluid", "aurora"]).optional(),
+      backgroundTone: z.enum(["violet", "electric", "ice", "sunset"]).optional(),
       riskAccepted: z.boolean().optional(),
       defaults: selection.optional(),
       hiddenModels: z.array(z.string().min(1).max(400)).max(2000).optional(),
