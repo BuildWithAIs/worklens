@@ -147,6 +147,37 @@ export async function mockWorklens(page, options = {}) {
       invoke: async (name, input) => {
         window.calls.push({ name, input });
         if (name === "bootstrap") return structuredClone(data);
+        if (name === "confluenceSave") {
+          const { token, ...settings } = input;
+          data.confluence = { ...settings, configured: true };
+          return structuredClone(data.confluence);
+        }
+        if (name === "confluenceRemove") { data.confluence = undefined; return; }
+        if (name === "confluenceTest") {
+          if (!input.url) throw Error("Enter a Confluence URL");
+          return `Fixture User · ${input.url}`;
+        }
+        if (name === "jiraSave") {
+          const { token, ...settings } = input;
+          data.jira = { ...settings, configured: true };
+          return structuredClone(data.jira);
+        }
+        if (name === "githubSave") {
+          if (!input.url) throw Error("Enter a GitHub URL");
+          const { token, ...settings } = input;
+          data.github = { ...settings, configured: true, login: "fixture-user" };
+          return structuredClone(data.github);
+        }
+        if (name === "githubRemove") { data.github = undefined; return; }
+        if (name === "githubTest") {
+          if (!input.url) throw Error("Enter a GitHub URL");
+          return `fixture-user · ${input.url}`;
+        }
+        if (name === "jiraRemove") { data.jira = undefined; return; }
+        if (name === "jiraTest") {
+          if (!input.url) throw Error("Enter a Jira URL");
+          return `Fixture User · ${input.url}`;
+        }
         if (name === "settings") {
           await new Promise((resolve) => setTimeout(resolve, 120));
           if (input.hiddenModels && window.failNextVisibilitySave) {

@@ -5,6 +5,7 @@
 本项目是本地优先的桌面工作助手，使用 Electron、React、TypeScript、Tailwind CSS 和 Pi。
 
 - `src/main/`：应用生命周期、服务商、认证、会话执行、存储、工具和输入校验。
+- `src/main/connectors/<service>/`：办公服务连接器；各服务维护自己的认证、API 和 Agent 工具，通过轻量注册表接入。前端配置组件位于 `src/renderer/src/components/worklens/connectors/`，接入约定见 `docs/connectors/README.md`。
 - `src/preload/`：最小化的类型化进程桥接；`src/shared/`：进程通信与界面数据契约。
 - `src/renderer/src/`：界面组件与样式。
 - `tests/`：集成测试及本地模型测试服务器；`tests/e2e/`：桌面端到端测试。

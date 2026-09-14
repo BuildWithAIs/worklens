@@ -8,6 +8,14 @@ WorkLens is a local-first work agent for employees at larger companies — espec
 
 Built with Electron, React, TypeScript, Tailwind CSS, and Pi.
 
+## Confluence
+
+Connect one Confluence site in **Settings → Connections** using your URL and token. Search/read documents, make version-aware edits, publish Markdown with attachments, and download/export files into the current conversation. Cloud supports email/API-token authentication; Data Center supports PAT authentication. See [setup, operations, safeguards and validation limits](docs/connectors/confluence.md).
+
+## GitHub
+
+Connect one GitHub site in **Settings → Connections** by entering its URL and a Personal Access Token. The address starts empty and supports your company's GitHub instance as well as GitHub.com. Explore code, manage issues and PRs, review changes, investigate CI, maintain releases, and work with Projects and Discussions. The integration uses Octokit and requires no GitHub CLI installation. See [setup, supported operations and validation limits](docs/connectors/github.md).
+
 ## Local development
 
 Requires Node.js 24 and npm.
@@ -58,6 +66,8 @@ npx playwright test tests/e2e/packaged.spec.ts
 Installers are written to `release/`. By default the build does not upload, publish, or auto-update the app. Before distributing publicly you need your own code signing, macOS notarization, and a clean-environment install verification.
 
 ## Source layout
+
+Office integrations are grouped by service under `src/main/connectors/`, with corresponding settings components and tests. See [connector organization and extension guide](docs/connectors/README.md).
 
 ```text
 src/main/        app lifecycle, models and auth, session execution, scheduling, storage, input validation

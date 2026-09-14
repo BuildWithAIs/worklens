@@ -23,6 +23,7 @@ import {
 } from "./usage";
 import { resources, toolNames } from "./resources";
 import { worklensTools } from "./tools";
+import { ConnectorRegistry } from "./connectors/registry";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import type {
@@ -45,6 +46,7 @@ interface ActiveRun {
 interface Runtime {
   manager: SessionManager;
   session?: AgentSession;
+  integrationConfiguration?: string;
   active?: ActiveRun;
   phase: Phase;
   error?: string;
@@ -111,6 +113,7 @@ export class AgentService {
     readonly paths: { runtime: string; sessions: string; userData: string },
     private emit: (event: ChatEvent) => void,
     private redact: (text: string) => string,
+    private connectors = new ConnectorRegistry(),
   ) {}
   async initialize() {
     await Promise.all([
@@ -193,10 +196,7 @@ export class AgentService {
   }
   private view(id: string, runtime: Runtime): ConversationView {
     const branch = runtime.manager.getBranch();
-    const messages = projectMessages(
-      withRunTiming(branch),
-      this.paths.runtime,
-    );
+    const messages = projectMessages(withRunTiming(branch), this.paths.runtime);
     // During streaming the public agent state may not yet include the current assistant partial.
     if (runtime.session?.agent.state.streamingMessage)
       messages.push(
@@ -364,10 +364,22 @@ export class AgentService {
       ).some((m) => m.id === model.id)
     )
       throw new Error("模型尚未配置或不可用，请在设置中完成认证");
+    const integrationConfiguration = this.connectors.configurationKey();
+    if (
+      runtime.session &&
+      runtime.integrationConfiguration !== integrationConfiguration
+    ) {
+      runtime.session.dispose();
+      runtime.session = undefined;
+    }
     if (!runtime.session) {
       const local = await resources(
         this.paths.runtime,
         join(this.paths.userData, "pi"),
+        {
+          tools: this.connectors.names(),
+          instructions: this.connectors.instructions(),
+        },
       );
       const customTools = worklensTools(
         this.paths.runtime,
@@ -383,6 +395,10 @@ export class AgentService {
           );
         },
       );
+      const integrationTools = this.connectors.tools(
+        runtime.manager.getSessionId(),
+        () => runtime.active?.id ?? "idle",
+      );
       const previous = runtime.manager.buildSessionContext();
       runtime.session = (
         await createAgentSession({
@@ -392,8 +408,7 @@ export class AgentService {
           model,
           thinkingLevel: selection.thinking,
           sessionManager: runtime.manager,
-          tools: toolNames,
-          customTools,
+          customTools: [...customTools, ...integrationTools],
           ...local,
         })
       ).session;
@@ -408,6 +423,7 @@ export class AgentService {
         previous.thinkingLevel !== selection.thinking
       )
         runtime.session.setThinkingLevel(selection.thinking);
+      runtime.integrationConfiguration = integrationConfiguration;
       runtime.session.subscribe((event) => this.onPiEvent(runtime, event));
     } else {
       if (
@@ -417,6 +433,10 @@ export class AgentService {
         await runtime.session.setModel(model);
       runtime.session.setThinkingLevel(selection.thinking);
     }
+    runtime.session.setActiveToolsByName([
+      ...toolNames,
+      ...this.connectors.names(),
+    ]);
   }
   private onPiEvent(runtime: Runtime, event: AgentSessionEvent) {
     const active = runtime.active;

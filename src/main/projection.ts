@@ -87,6 +87,7 @@ export function projectMessages(
         textContent(message.content) +
           (message.details?.diff ? "\n" + message.details.diff : ""),
       );
+      if (Array.isArray(message.details?.artifacts)) tool.artifacts = message.details.artifacts;
       tool.status = message.isError
         ? /\babort(?:ed)?\b|\bcancell?ed\b|已取消/i.test(tool.text)
           ? "cancelled"

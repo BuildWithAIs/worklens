@@ -106,6 +106,7 @@ export interface Settings {
   [key: string]: unknown;
 }
 export interface MessageView {
+  artifacts?: LocalArtifact[];
   createdAt?: string;
   runStartedAt?: string;
   runElapsedMs?: number;
@@ -173,6 +174,9 @@ export interface Recovery {
   startedAt: string;
 }
 export interface Bootstrap {
+  confluence?: ConfluenceConnection;
+  jira?: JiraConnection;
+  github?: GitHubConnection;
   globalUsage?: GlobalUsage;
   settings: Settings;
   providers: ProviderInfo[];
@@ -184,8 +188,32 @@ export interface Bootstrap {
   recoveries: Recovery[];
 }
 export interface Requests {
-  htmlFileAction: { input: { id: string; path?: string; code?: string; action: "chrome" | "reveal" }; output: void };
+  jiraSave: { input: JiraSettingsInput; output: JiraConnection };
+  jiraTest: { input: JiraSettingsInput; output: string };
+  jiraRemove: { input: undefined; output: void };
+  githubSave: { input: GitHubSettingsInput; output: GitHubConnection };
+  githubTest: { input: GitHubSettingsInput; output: string };
+  githubRemove: { input: undefined; output: void };
+  htmlFileAction: {
+    input: {
+      id: string;
+      path?: string;
+      code?: string;
+      action: "chrome" | "reveal";
+    };
+    output: void;
+  };
   previewHtml: { input: { id: string; path: string }; output: string };
+  confluenceSave: {
+    input: ConfluenceSettingsInput;
+    output: ConfluenceConnection;
+  };
+  confluenceTest: { input: ConfluenceSettingsInput; output: string };
+  confluenceRemove: { input: undefined; output: void };
+  artifact: {
+    input: { id: string; action: "show" | "open" | "saveAs" };
+    output: void;
+  };
   bootstrap: { input: undefined; output: Bootstrap };
   settings: { input: Partial<Settings>; output: Settings };
   providers: { input: undefined; output: ProviderInfo[] };
@@ -235,6 +263,27 @@ export interface Requests {
     output: void;
   };
 }
+export interface ConfluenceSettingsInput {
+  url: string;
+  deployment: "data-center" | "cloud";
+  email?: string;
+  token?: string;
+  cloudId?: string;
+  tokenType: "classic" | "scoped";
+}
+export interface ConfluenceConnection extends Omit<
+  ConfluenceSettingsInput,
+  "token"
+> {
+  configured: boolean;
+  error?: string;
+}
+export interface LocalArtifact {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+}
 export interface WorkLensAPI {
   invoke<K extends keyof Requests>(
     method: K,
@@ -247,4 +296,27 @@ declare global {
   interface Window {
     worklens: WorkLensAPI;
   }
+}
+
+export interface JiraSettingsInput {
+  url: string;
+  deployment: "data-center" | "cloud";
+  email?: string;
+  token?: string;
+  cloudId?: string;
+  tokenType: "classic" | "scoped";
+}
+export interface GitHubSettingsInput {
+  url: string;
+  token?: string;
+}
+export interface GitHubConnection extends Omit<GitHubSettingsInput, "token"> {
+  configured: boolean;
+  login?: string;
+  serverVersion?: string;
+  error?: string;
+}
+export interface JiraConnection extends Omit<JiraSettingsInput, "token"> {
+  configured: boolean;
+  error?: string;
 }
