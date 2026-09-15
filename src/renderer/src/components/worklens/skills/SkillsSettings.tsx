@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Info, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Hint } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import {
@@ -143,15 +145,27 @@ export function SkillsSettings({
       </div>
       {groups.map((group) => (
         <section className="settings-section" key={group.id}>
-          <h2 data-slot="settings-section-title" className="settings-group-bar">
+          <h2
+            data-slot="settings-section-title"
+            className="settings-section-heading settings-group-bar"
+          >
             {group.label}
             <span className="settings-group-count" aria-hidden="true">
               {group.items.length}
             </span>
+            <Hint content={group.description}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="size-5"
+                aria-label={t("skills.about", { group: group.label })}
+              >
+                <Info aria-hidden="true" />
+              </Button>
+            </Hint>
           </h2>
-          <p className="settings-entry-description">{group.description}</p>
           {group.items.length ? (
-            <ItemGroup className="settings-list">
+            <ItemGroup className="settings-list settings-skill-list">
               {group.items.map((skill) => (
                 <Item
                   size="sm"
@@ -163,9 +177,14 @@ export function SkillsSettings({
                     <ItemTitle className="settings-entry-title">
                       {skill.name}
                     </ItemTitle>
-                    <ItemDescription className="settings-entry-description">
-                      {skill.description}
-                    </ItemDescription>
+                    <Hint content={skill.description}>
+                      <ItemDescription
+                        className="settings-entry-description truncate"
+                        tabIndex={0}
+                      >
+                        {skill.description}
+                      </ItemDescription>
+                    </Hint>
                   </ItemContent>
                   <ItemActions className="settings-entry-actions">
                     <Switch
@@ -182,7 +201,9 @@ export function SkillsSettings({
               ))}
             </ItemGroup>
           ) : (
-            <p className="settings-empty">{group.emptyLabel}</p>
+            <div className="settings-list">
+              <p className="settings-empty">{group.emptyLabel}</p>
+            </div>
           )}
         </section>
       ))}

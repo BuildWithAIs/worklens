@@ -269,6 +269,7 @@ const en = {
     filterSkills: "Filter skills",
     allSkills: "All skills",
     noSkillsMatchYourFilters: "No skills match your filters.",
+    about: "About {{group}}",
   },
   htmlArtifact: {
     webPreview: "Web preview",

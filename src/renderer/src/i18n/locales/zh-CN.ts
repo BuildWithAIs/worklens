@@ -255,6 +255,7 @@ const zhCN = {
     filterSkills: "筛选技能",
     allSkills: "全部技能",
     noSkillsMatchYourFilters: "没有匹配的技能。",
+    about: "关于{{group}}",
   },
   htmlArtifact: {
     webPreview: "网页预览",
