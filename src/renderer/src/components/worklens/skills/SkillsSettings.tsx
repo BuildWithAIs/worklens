@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Info, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
@@ -37,6 +37,9 @@ export function SkillsSettings({
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
+  // Same shape as the Models tab: the ref is the guard (synchronous, immune
+  // to stale closures), the state only drives the disabled rendering.
+  const pendingRef = useRef(new Set<string>());
   const [pending, setPending] = useState<Set<string>>(new Set());
   const load = useCallback(async () => {
     try {
@@ -62,20 +65,23 @@ export function SkillsSettings({
     }
   }
   async function toggle(skill: SkillInfo, enabled: boolean) {
-    if (pending.has(skill.name)) return;
-    setPending((prev) => new Set(prev).add(skill.name));
+    if (pendingRef.current.has(skill.name)) return;
+    pendingRef.current.add(skill.name);
+    setPending(new Set(pendingRef.current));
     try {
       setSnapshot(
         await api.invoke("skillsToggle", { name: skill.name, enabled }),
       );
+      onSuccess(
+        t(enabled ? "skills.enabled" : "skills.disabled", {
+          skill: skill.name,
+        }),
+      );
     } catch (e) {
       toast.add(settingsFailure(t("skills.toggleFailed"), String(e), language));
     } finally {
-      setPending((prev) => {
-        const next = new Set(prev);
-        next.delete(skill.name);
-        return next;
-      });
+      pendingRef.current.delete(skill.name);
+      setPending(new Set(pendingRef.current));
     }
   }
   const search = query.trim().toLocaleLowerCase();

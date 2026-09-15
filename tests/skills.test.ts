@@ -2,10 +2,14 @@ import { test, expect } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { AgentService } from "../src/main/agent-service";
 import { SkillsService } from "../src/main/skills";
 import { resources } from "../src/main/resources";
 import { StateStore } from "../src/main/storage";
 import { schemas } from "../src/main/validation";
+import { mockServer, fixtureModel } from "./mock-server";
+import type { ChatEvent } from "../src/shared/contracts";
 
 async function skillMd(dir: string, name: string, description: string) {
   await mkdir(dir, { recursive: true });
@@ -143,6 +147,94 @@ test("resources() feeds SkillsService's paths into the real Pi resource loader a
     });
     expect(disabled.resourceLoader.getSkills().skills).toEqual([]);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("toggling a universal skill changes what the model is offered on the next turn of the same conversation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-skills-session-"));
+  const server = await mockServer();
+  const paths = {
+    runtime: join(root, "runtime"),
+    sessions: join(root, "sessions"),
+    userData: join(root, "app"),
+  };
+  const universal = join(root, "agents-skills");
+  await skillMd(join(universal, "brave-search"), "brave-search", "Web search.");
+  const runtime = await ModelRuntime.create({ modelsPath: null });
+  runtime.registerProvider("worklens-test", {
+    name: "本地测试",
+    api: "openai-completions",
+    baseUrl: server.url,
+    apiKey: "test-placeholder",
+    models: [fixtureModel],
+  });
+  await runtime.refresh({ allowNetwork: false });
+  const state = new StateStore(join(root, "settings.json"));
+  await state.load();
+  const skills = new SkillsService(
+    join(root, "builtin"),
+    universal,
+    join(root, "missing-bundled"),
+    state,
+  );
+  await skills.initialize();
+  const events: ChatEvent[] = [];
+  const service = new AgentService(
+    runtime,
+    paths,
+    (event) => events.push(event),
+    (value) => value,
+    undefined,
+    skills,
+  );
+  await service.initialize();
+  const selection = {
+    provider: "worklens-test",
+    model: "worklens-test",
+    thinking: "off" as const,
+  };
+  const systemPrompt = () =>
+    server.requests.at(-1).messages.find((m: any) => m.role === "system")
+      .content as string;
+  try {
+    const first = await service.send({ requestId: "a", text: "hi", selection });
+    await expect
+      .poll(
+        () =>
+          events.findLast(
+            (e) => e.conversationId === first.id && e.type === "run_end",
+          ),
+        { timeout: 25000 },
+      )
+      .toBeTruthy();
+    expect(systemPrompt()).toContain("<available_skills>");
+    expect(systemPrompt()).toContain("<name>brave-search</name>");
+
+    await skills.setEnabled("brave-search", false);
+    await service.send({
+      conversationId: first.id,
+      requestId: "b",
+      text: "again",
+      selection,
+    });
+    await expect
+      .poll(
+        () =>
+          events.findLast(
+            (e) =>
+              e.conversationId === first.id &&
+              e.runId !== first.runId &&
+              e.type === "run_end",
+          ),
+        { timeout: 25000 },
+      )
+      .toBeTruthy();
+    expect(systemPrompt()).not.toContain("brave-search");
+    expect(systemPrompt()).not.toContain("<available_skills>");
+  } finally {
+    await service.shutdown();
+    await server.close();
     await rm(root, { recursive: true, force: true });
   }
 });

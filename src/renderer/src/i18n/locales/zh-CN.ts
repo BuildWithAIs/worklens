@@ -256,6 +256,8 @@ const zhCN = {
     allSkills: "全部技能",
     noSkillsMatchYourFilters: "没有匹配的技能。",
     about: "关于{{group}}",
+    enabled: "已启用 {{skill}}",
+    disabled: "已禁用 {{skill}}",
   },
   htmlArtifact: {
     webPreview: "网页预览",

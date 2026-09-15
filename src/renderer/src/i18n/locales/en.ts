@@ -270,6 +270,8 @@ const en = {
     allSkills: "All skills",
     noSkillsMatchYourFilters: "No skills match your filters.",
     about: "About {{group}}",
+    enabled: "{{skill}} enabled",
+    disabled: "{{skill}} disabled",
   },
   htmlArtifact: {
     webPreview: "Web preview",
