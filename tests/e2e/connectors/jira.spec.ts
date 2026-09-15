@@ -33,9 +33,7 @@ test("Jira settings, encrypted restart, Pi download and file card", async () => 
   try {
     let page = await launch();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Connectors", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Connectors", exact: true }).click();
     await page
       .getByRole("button", { name: "Connect Jira", exact: true })
       .click();
@@ -45,7 +43,7 @@ test("Jira settings, encrypted restart, Pi download and file card", async () => 
     // Save must validate even when the optional test button has never been used.
     fixture.state.identityStatus = 401;
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText(/Jira 返回 401/).first()).toBeVisible();
+    await expect(page.getByText("Check your token and account.", { exact: true }).first()).toBeVisible();
     const invalid = await page.evaluate(() =>
       window.worklens.invoke("bootstrap", undefined),
     );
@@ -189,13 +187,15 @@ test("Jira settings, encrypted restart, Pi download and file card", async () => 
     ).toBe("success");
     expect(fixture.state.commentCount).toBe(1);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Connectors", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Connectors", exact: true }).click();
     await page
       .getByRole("button", { name: "Manage Jira", exact: true })
       .click();
     await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Disconnect Jira?", exact: true })
+      .getByRole("button", { name: "Disconnect", exact: true })
+      .click();
     await expect
       .poll(
         async () =>

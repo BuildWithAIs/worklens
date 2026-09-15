@@ -33,9 +33,7 @@ test("GitHub settings, encrypted restart, Pi download and file card", async () =
   try {
     let page = await launch();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Connectors", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Connectors", exact: true }).click();
     await page
       .getByRole("button", { name: "Connect GitHub", exact: true })
       .click();
@@ -46,7 +44,7 @@ test("GitHub settings, encrypted restart, Pi download and file card", async () =
     // Save must validate even when the optional test button has never been used.
     fixture.state.identityStatus = 401;
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText(/GitHub 返回 401/).first()).toBeVisible();
+    await expect(page.getByText("Check your token and account.", { exact: true }).first()).toBeVisible();
     const invalid = await page.evaluate(() =>
       window.worklens.invoke("bootstrap", undefined),
     );
@@ -65,7 +63,7 @@ test("GitHub settings, encrypted restart, Pi download and file card", async () =
     await page
       .getByRole("button", { name: "Test connection", exact: true })
       .click();
-    await expect(page.getByText(/fixture-user/)).toBeVisible();
+    await expect(page.locator('[data-slot="toast-description"]').filter({ hasText: "fixture-user" })).toBeVisible();
     await page.screenshot({
       path: "test-results/github-dialog.png",
       fullPage: true,
@@ -188,13 +186,15 @@ test("GitHub settings, encrypted restart, Pi download and file card", async () =
     ).toBe("success");
     expect(fixture.state.comments).toBe(1);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Connectors", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Connectors", exact: true }).click();
     await page
       .getByRole("button", { name: "Manage GitHub", exact: true })
       .click();
     await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Disconnect GitHub?", exact: true })
+      .getByRole("button", { name: "Disconnect", exact: true })
+      .click();
     await expect
       .poll(
         async () =>

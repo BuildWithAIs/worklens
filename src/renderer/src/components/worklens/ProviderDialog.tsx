@@ -1,3 +1,4 @@
+import { savedCredentialPlaceholder } from "./credential-placeholder";
 import { ProviderIcon } from "./ProviderIcon";
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
@@ -51,11 +52,15 @@ export function ProviderDialog({
   onClose,
   onSaved,
   onError,
+  onDisconnect,
+  disconnecting = false,
 }: {
+  onDisconnect?: () => void;
+  disconnecting?: boolean;
   provider: ProviderInfo;
   onClose: () => void;
   onSaved: () => Promise<void>;
-  onError: (message: string) => void;
+  onError: (message: string, action: "login" | "save" | "browser") => void;
 }) {
   const { t, language } = useAppTranslation();
   const initialMethod =
@@ -69,9 +74,14 @@ export function ProviderDialog({
   const [answer, setAnswer] = useState("");
   const [active, setActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{
+    message: string;
+    action: "login" | "save" | "browser";
+  }>();
+  const fail = (error: unknown, action: "login" | "save" | "browser") =>
+    setError({ message: String(error), action });
   useEffect(() => {
-    if (error) onError(error);
+    if (error) onError(error.message, error.action);
   }, [error, onError]);
   const loginRef = useRef<string | undefined>(undefined);
   const [credentialSaved, setCredentialSaved] = useState(false);
@@ -112,7 +122,7 @@ export function ProviderDialog({
     const loginId = crypto.randomUUID();
     loginRef.current = loginId;
     setActive(true);
-    setError("");
+    setError(undefined);
     setAnswer("");
     setSteps([]);
     setPrompt(undefined);
@@ -126,7 +136,7 @@ export function ProviderDialog({
       await finish();
     } catch (e) {
       if (loginRef.current === loginId)
-        setError(systemText(String(e).replace(/^Error: /, ""), language));
+        fail(e, finishingRef.current ? "save" : "login");
     } finally {
       if (loginRef.current === loginId) {
         loginRef.current = undefined;
@@ -161,7 +171,7 @@ export function ProviderDialog({
   function changeMethod(next: Method) {
     cancel();
     setMethod(next);
-    setError("");
+    setError(undefined);
     setEditEndpoint(false);
     if (next === "api_key") void begin(next);
   }
@@ -176,11 +186,11 @@ export function ProviderDialog({
       cancel();
       setSubmitting(true);
       finishingRef.current = true;
-      setError("");
+      setError(undefined);
       try {
         await finish();
       } catch (e) {
-        setError(systemText(String(e), language));
+        fail(e, "save");
       } finally {
         finishingRef.current = false;
         setSubmitting(false);
@@ -195,14 +205,13 @@ export function ProviderDialog({
     const loginId = loginRef.current;
     const promptId = prompt.promptId;
     setSubmitting(true);
-    setError("");
+    setError(undefined);
     try {
       await api.invoke("authReply", { loginId, promptId, value: answer });
       if (loginRef.current !== loginId) return;
       setPrompt((prev) => (prev?.promptId === promptId ? undefined : prev));
     } catch (e) {
-      if (loginRef.current === loginId)
-        setError(systemText(String(e), language));
+      if (loginRef.current === loginId) fail(e, "login");
     } finally {
       if (loginRef.current === loginId && !finishingRef.current)
         setSubmitting(false);
@@ -216,7 +225,7 @@ export function ProviderDialog({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !submitting) {
+        if (!open && !submitting && !disconnecting) {
           cancel();
           onClose();
         }
@@ -289,9 +298,7 @@ export function ProviderDialog({
                       onClick={() =>
                         void api
                           .invoke("external", { url: step.url! })
-                          .catch((e) =>
-                            setError(systemText(String(e), language)),
-                          )
+                          .catch((e) => fail(e, "browser"))
                       }
                     >
                       {t("provider.openBrowser")}
@@ -339,7 +346,11 @@ export function ProviderDialog({
                     onChange={(e) => setAnswer(e.target.value)}
                     placeholder={
                       prompt.type === "secret"
-                        ? (provider.credentialHint ?? "••••••••")
+                        ? provider.credentialHint
+                          ? savedCredentialPlaceholder
+                          : method === "api_key"
+                            ? t("provider.enterApiKey")
+                            : prompt.placeholder
                         : prompt.placeholder
                     }
                   />
@@ -397,12 +408,19 @@ export function ProviderDialog({
               </>
             )}
           </FieldGroup>
-          {error && (
-            <p role="alert" className="model-test-result failed">
-              {error}
-            </p>
-          )}
+
           <DialogFooter>
+            {onDisconnect && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="sm:mr-auto"
+                disabled={submitting || disconnecting}
+                onClick={onDisconnect}
+              >
+                {t("common.disconnect")}
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"

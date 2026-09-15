@@ -1233,7 +1233,8 @@ kbd {
 :root[data-native-vibrancy="true"] .sidebar::before {
   content: "";
   position: absolute;
-  inset: 0 0 auto 144px;
+  /* Leave the right-aligned toggle and an 8px gutter outside native dragging. */
+  inset: 0 56px auto 144px;
   height: 48px;
   -webkit-app-region: drag;
 }
@@ -1287,25 +1288,24 @@ kbd {
 .sidebar-toggle {
   position: absolute;
   top: 28px;
-  left: 232px;
+  left: calc(var(--sidebar-width) - 48px);
   z-index: 20;
   width: 28px;
   height: 28px;
-  padding: 6px;
+  padding: 5px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
   color: var(--faint);
   -webkit-app-region: no-drag;
 }
 .app-shell[data-sidebar-collapsed="true"] .sidebar-toggle { left: 16px; top: 16px; }
 .app-shell[data-sidebar-collapsed="true"] .chat-header { padding-left: 64px; }
-@media (max-width: 1050px) {
-  .sidebar-toggle { left: 200px; }
-}
 :root[data-native-vibrancy="true"] .sidebar-toggle,
 :root[data-native-vibrancy="true"] .app-shell[data-sidebar-collapsed="true"] .sidebar-toggle {
   top: 13px;
+}
+:root[data-native-vibrancy="true"] .app-shell[data-sidebar-collapsed="true"] .sidebar-toggle {
   left: 96px;
 }
 :root[data-native-vibrancy="true"] .app-shell[data-sidebar-collapsed="true"] .chat-header {
@@ -1313,7 +1313,6 @@ kbd {
 }
 
 .sidebar-toggle svg { width: 18px; height: 18px; }
-.sidebar-toggle { padding: 5px; border-radius: 9px; }
 .sidebar-toggle:hover { background: var(--selection-fill); }
 /* Keep the native drag rectangle clear of the overlaid sidebar toggle. */
 :root[data-native-vibrancy="true"] .chat-header {
@@ -1470,4 +1469,17 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .artifact-view-switch::before,
   .usage-tab-indicator { transition: none; }
+}
+
+/* Completed activity fades only at edges with more content, on any surface. */
+.worklens-activity-section[data-running="false"] [data-slot="reasoning-text"] {
+  --activity-fade-top: 0px;
+  --activity-fade-bottom: 0px;
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--activity-fade-top), #000 calc(100% - var(--activity-fade-bottom)), transparent);
+}
+.worklens-activity-section[data-running="false"] [data-slot="reasoning-text"][data-scroll-above="true"] {
+  --activity-fade-top: 20px;
+}
+.worklens-activity-section[data-running="false"] [data-slot="reasoning-text"][data-scroll-below="true"] {
+  --activity-fade-bottom: 24px;
 }

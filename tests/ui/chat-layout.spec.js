@@ -134,7 +134,9 @@ test("compact tool activity, history actions and fluid message width", async ({
     ["dark", "rgb(75, 48, 128)", "rgb(255, 255, 255)"],
     ["light", "rgb(238, 230, 255)", "rgb(53, 36, 85)"],
   ]) {
-    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption(theme);
+    await page.getByRole("button", { name: "Back to app", exact: true }).click();
     for (const bubble of await page.locator(".aui-user-message-content").all()) {
       await expect(bubble).toHaveCSS("background-color", background);
       await expect(bubble).toHaveCSS("color", foreground);

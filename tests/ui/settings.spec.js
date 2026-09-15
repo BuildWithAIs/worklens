@@ -1,30 +1,42 @@
 import { mockWorklens } from "./fixture.js";
 import { test, expect } from "@playwright/test";
 
-test("local paths stay compact and expose their full value on keyboard focus", async ({ page }, info) => {
+test("local paths stay compact and expose their full value on keyboard focus", async ({
+  page,
+}, info) => {
   await mockWorklens(page);
   await page.addInitScript(() => {
     const invoke = window.worklens.invoke;
     window.worklens.invoke = async (method, input) => {
       const result = await invoke(method, input);
-      if (method === "bootstrap") result.paths.runtime = "/Users/example/Library/Application Support/WorkLens/long-directory-name/runtime";
+      if (method === "bootstrap")
+        result.paths.runtime =
+          "/Users/example/Library/Application Support/WorkLens/long-directory-name/runtime";
       return result;
     };
   });
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const row = page.getByRole("listitem").filter({ hasText: "Runtime directory" });
+  const row = page
+    .getByRole("listitem")
+    .filter({ hasText: "Runtime directory" });
   const path = row.locator(".settings-path");
   const full = await path.textContent();
   await expect(path).toHaveCSS("white-space", "nowrap");
-  expect(await path.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+  expect(await path.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
+    true,
+  );
   await page.keyboard.press("Tab");
   await page.mouse.move(0, 0);
   await path.focus();
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(full);
   await row.getByRole("button", { name: "Open Runtime directory" }).focus();
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]').filter({ hasText: full })).toHaveCount(0);
+  await expect(
+    page
+      .locator('[data-slot="tooltip-content"][data-open]')
+      .filter({ hasText: full }),
+  ).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("local-data-compact.png") });
 });
 
@@ -47,8 +59,15 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     .locator(".settings-navigation")
     .getByRole("button", { name: "Back to app" });
   await expect(page.locator(".sidebar")).toBeHidden();
-  const settingsBounds = await page.locator(".settings-shell-dialog").boundingBox();
-  expect(settingsBounds).toMatchObject({ x: 0, y: 0, width: 1280, height: 900 });
+  const settingsBounds = await page
+    .locator(".settings-shell-dialog")
+    .boundingBox();
+  expect(settingsBounds).toMatchObject({
+    x: 0,
+    y: 0,
+    width: 1280,
+    height: 900,
+  });
   await page.setViewportSize({ width: 1280, height: 600 });
   const headerBefore = await backButton.boundingBox();
   await page.locator(".settings-scroll").evaluate((el) => {
@@ -91,15 +110,29 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     name: "Search providers",
     exact: true,
   });
-  const providerFilter = page.getByRole("combobox", { name: "Filter providers", exact: true });
+  const providerFilter = page.getByRole("combobox", {
+    name: "Filter providers",
+    exact: true,
+  });
   await providerFilter.selectOption("connected");
-  await expect(page.getByRole("heading", { name: "Available", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Connected", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Available", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Connected", exact: true }),
+  ).toBeVisible();
   await providerFilter.selectOption("available");
-  await expect(page.getByRole("heading", { name: "Connected", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Available", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Connected", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Available", exact: true }),
+  ).toBeVisible();
   await search.fill("deep");
-  const clearButton = page.getByRole("button", { name: "Clear search", exact: true });
+  const clearButton = page.getByRole("button", {
+    name: "Clear search",
+    exact: true,
+  });
   const searchBounds = await search.boundingBox();
   const clearBounds = await clearButton.boundingBox();
   await clearButton.hover();
@@ -107,12 +140,16 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   const pressedBounds = await clearButton.boundingBox();
   expect(Math.abs(pressedBounds.y - clearBounds.y)).toBeLessThanOrEqual(1.5);
   expect(pressedBounds.y).toBeGreaterThanOrEqual(searchBounds.y);
-  expect(pressedBounds.y + pressedBounds.height).toBeLessThanOrEqual(searchBounds.y + searchBounds.height);
+  expect(pressedBounds.y + pressedBounds.height).toBeLessThanOrEqual(
+    searchBounds.y + searchBounds.height,
+  );
   await page.mouse.up();
   await expect(search).toHaveValue("");
   await expect(search).toBeFocused();
   await search.fill("deep");
-  await expect(page.getByText("No providers match your filters.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("No providers match your filters.", { exact: true }),
+  ).toBeVisible();
   await providerFilter.selectOption("all");
   await search.clear();
   await search.fill("deep");
@@ -128,13 +165,9 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   await expect(page.getByText("STALE CONNECTION RESULT")).toHaveCount(0);
   await page.getByRole("button", { name: "Manage", exact: true }).click();
   await expect(
-    page
-      .getByRole("dialog")
-      .filter({
-        hasNot: page.locator(
-          '[data-slot="toast-content"], .settings-workspace',
-        ),
-      }),
+    page.getByRole("dialog").filter({
+      hasNot: page.locator('[data-slot="toast-content"], .settings-workspace'),
+    }),
   ).toHaveAccessibleName("DeepSeek");
   await expect(page.locator("input[type=password]")).toBeVisible();
   await expect(
@@ -162,13 +195,9 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   });
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
-    page
-      .getByRole("dialog")
-      .filter({
-        hasNot: page.locator(
-          '[data-slot="toast-content"], .settings-workspace',
-        ),
-      }),
+    page.getByRole("dialog").filter({
+      hasNot: page.locator('[data-slot="toast-content"], .settings-workspace'),
+    }),
   ).toHaveCount(0);
   expect(
     (await page.evaluate(() => window.calls)).filter(
@@ -198,7 +227,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
         ),
       })
       .getByRole("button", { name: "Disconnect", exact: true }),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
   await expect(page.getByRole("radio")).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath("worklens-current-connection.png"),
@@ -235,13 +264,9 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   await page.locator("input[type=password]").fill("dummy-test-key");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
-    page
-      .getByRole("dialog")
-      .filter({
-        hasNot: page.locator(
-          '[data-slot="toast-content"], .settings-workspace',
-        ),
-      }),
+    page.getByRole("dialog").filter({
+      hasNot: page.locator('[data-slot="toast-content"], .settings-workspace'),
+    }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Models", exact: true }).click();
   await expect(
@@ -249,9 +274,13 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   ).toHaveAttribute("aria-current", "page");
   const modelFilter = page.getByRole("combobox", { name: "Model filter" });
   await expect(modelFilter).toHaveValue("connected");
-  const connectedGroupCount = await page.locator('[data-slot="accordion-item"]').count();
+  const connectedGroupCount = await page
+    .locator('[data-slot="accordion-item"]')
+    .count();
   await modelFilter.selectOption("all");
-  expect(await page.locator('[data-slot="accordion-item"]').count()).toBeGreaterThan(connectedGroupCount);
+  expect(
+    await page.locator('[data-slot="accordion-item"]').count(),
+  ).toBeGreaterThan(connectedGroupCount);
   await modelFilter.selectOption("connected");
   await page.waitForTimeout(250);
   await page.screenshot({
@@ -278,9 +307,11 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
       exact: true,
     })
     .click();
-  await expect(page.locator('[data-slot="toast"]:not([data-ending-style]) [data-slot="toast-title"]')).toHaveText(
-    "Connection successful",
-  );
+  await expect(
+    page.locator(
+      '[data-slot="toast"]:not([data-ending-style]) [data-slot="toast-title"]',
+    ),
+  ).toHaveText("DeepSeek V4 Flash connection successful");
   await expect(page.locator(".model-test-result")).toHaveCount(0);
   await page
     .getByRole("switch", { name: "Show in chat: DeepSeek V4 Pro", exact: true })
@@ -324,9 +355,9 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   await expect(gemini).toBeChecked();
   await expect(gpt).toBeChecked();
   await page
-    .locator(
-      '[data-slot="toast"]:not([data-ending-style]) [data-slot="toast-close"]',
-    )
+    .locator('[data-slot="toast"]:not([data-ending-style])')
+    .filter({ hasText: "Couldn’t save model visibility" })
+    .locator('[data-slot="toast-close"]')
     .click();
   await gemini.uncheck();
   await expect(gemini).toBeEnabled();
@@ -342,9 +373,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "Models", exact: true }).click();
   await expect(sonnet).not.toBeChecked();
   await expect(gpt).toBeChecked();
-  await page
-    .getByRole("button", { name: "Back to app", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Back to app", exact: true }).click();
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
   expect(
     await page
@@ -414,7 +443,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
         ),
       })
       .getByRole("button", { name: "Disconnect", exact: true }),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
   await expect(page.getByRole("radio")).toHaveCount(0);
 
   await page
@@ -426,13 +455,9 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     .selectOption("public");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
-    page
-      .getByRole("dialog")
-      .filter({
-        hasNot: page.locator(
-          '[data-slot="toast-content"], .settings-workspace',
-        ),
-      }),
+    page.getByRole("dialog").filter({
+      hasNot: page.locator('[data-slot="toast-content"], .settings-workspace'),
+    }),
   ).toHaveCount(0);
   await expect(page.locator(".settings-entry [data-slot=badge]")).toHaveText(
     "Sign in with GitHub",
@@ -453,42 +478,44 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     path: testInfo.outputPath("provider-copilot-form.png"),
     animations: "disabled",
   });
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.getByRole("button", { name: "Disconnect", exact: true }).click();
-  await expect(
-    page
-      .getByRole("dialog")
-      .filter({
-        hasNot: page.locator(
-          '[data-slot="toast-content"], .settings-workspace',
-        ),
-      }),
-  ).toContainText("Sign in with GitHub");
   await page
-    .getByRole("dialog")
-    .filter({
-      hasNot: page.locator('[data-slot="toast-content"], .settings-workspace'),
-    })
+    .getByRole("dialog", { name: "GitHub Copilot", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
+    .click();
+  const confirmation = page.getByRole("dialog", {
+    name: "Disconnect GitHub Copilot?",
+    exact: true,
+  });
+  await expect(confirmation).toContainText("Sign in with GitHub");
+  await confirmation
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "GitHub Copilot", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
+    .click();
+  await confirmation
     .getByRole("button", { name: "Disconnect", exact: true })
     .click();
   await expect(
-    page
-      .getByRole("dialog")
-      .filter({
-        hasNot: page.locator(
-          '[data-slot="toast-content"], .settings-workspace',
-        ),
-      }),
+    page.getByRole("dialog").filter({
+      hasNot: page.locator('[data-slot="toast-content"], .settings-workspace'),
+    }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Connect", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "General", exact: true }).click();
-  const localDataInfo = page.getByRole("button", { name: "About local data", exact: true });
+  const localDataInfo = page.getByRole("button", {
+    name: "About local data",
+    exact: true,
+  });
   await page.keyboard.press("Tab");
   await localDataInfo.focus();
   await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
-  await expect(page.locator('[data-slot="tooltip-content"]')).toContainText("Conversation history and encrypted credentials are stored on this device.");
+  await expect(page.locator('[data-slot="tooltip-content"]')).toContainText(
+    "Conversation history and encrypted credentials are stored on this device.",
+  );
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings-hint")).toHaveCount(0);
   await page

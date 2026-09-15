@@ -1,9 +1,12 @@
+import { settingsFailure } from "./settings-notification";
+import { DisconnectConfirmation } from "./DisconnectConfirmation";
+import { toast } from "@/components/ui/toast";
 import { BackgroundEffect } from "./BackgroundEffect";
 import { BackgroundPreferences } from "./BackgroundPreferences";
 import { ConnectionsSettings } from "./connectors/ConnectionsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Plug,
@@ -13,10 +16,8 @@ import {
   Globe,
   LoaderCircle,
   Plus,
-  Pencil,
   RefreshCw,
   Settings2,
-  Unplug,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,14 +50,7 @@ import {
 } from "@/components/ui/accordion";
 import { Switch } from "@/components/ui/switch";
 import { ProviderDialog } from "./ProviderDialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+
 import { systemText } from "@/lib/system-text";
 import { languageTag, useAppTranslation } from "@/i18n";
 import type {
@@ -103,9 +97,6 @@ export function SettingsPage({
   const [removing, setRemoving] = useState(false);
   const [refreshing, setRefreshing] = useState<string>();
   const [testing, setTesting] = useState<Set<string>>(new Set());
-  const [results, setResults] = useState<
-    Record<string, { ok: boolean; text: string }>
-  >({});
   const [hiddenModels, setHiddenModels] = useState(
     () => new Set(data.settings.hiddenModels ?? []),
   );
@@ -121,6 +112,20 @@ export function SettingsPage({
     hiddenRef.current = next;
     setHiddenModels(next);
   }, [data.settings.hiddenModels]);
+  const providerFailure = useCallback(
+    (message: string, action: "login" | "save" | "browser") => {
+      toast.add(
+        settingsFailure(
+          t(`settingsFeedback.${action}Failed`, {
+            service: connect?.name ?? "",
+          }),
+          message,
+          language,
+        ),
+      );
+    },
+    [connect?.name, t, language],
+  );
   function openConnect(provider: ProviderInfo) {
     setConnect(provider);
   }
@@ -139,7 +144,15 @@ export function SettingsPage({
         id ? t("settings.modelsRefreshed") : t("settings.providersRefreshed"),
       );
     } catch (e) {
-      onError(systemText(String(e), language));
+      toast.add(
+        settingsFailure(
+          t("settingsFeedback.refreshFailed", {
+            service: t(id ? "settings.models" : "settings.providers"),
+          }),
+          String(e),
+          language,
+        ),
+      );
     } finally {
       setRefreshing(undefined);
     }
@@ -160,7 +173,7 @@ export function SettingsPage({
       try {
         await save({ hiddenModels: [...next] });
         confirmedHidden.current = next;
-        onSuccess(t("common.saved"));
+        onSuccess(t("settingsFeedback.visibilitySaved"));
       } catch (e) {
         const rollback = new Set(hiddenRef.current);
         confirmedHidden.current.has(key)
@@ -168,7 +181,13 @@ export function SettingsPage({
           : rollback.delete(key);
         hiddenRef.current = rollback;
         setHiddenModels(rollback);
-        onError(systemText(String(e), language));
+        toast.add(
+          settingsFailure(
+            t("settingsFeedback.visibilityFailed"),
+            String(e),
+            language,
+          ),
+        );
       } finally {
         pendingRef.current.delete(key);
         setPendingVisibility(new Set(pendingRef.current));
@@ -181,28 +200,21 @@ export function SettingsPage({
   ) {
     const key = provider.id + "/" + model.id;
     setTesting((prev) => new Set(prev).add(key));
-    setResults((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
     try {
       await api.invoke("test", {
         provider: provider.id,
         model: model.id,
         thinking: model.levels.includes("medium") ? "medium" : model.levels[0],
       });
-      onSuccess(t("settings.connectionSuccessful"));
-      setResults((prev) => ({
-        ...prev,
-        [key]: { ok: true, text: t("settings.connectionSuccessful") },
-      }));
+      onSuccess(t("settingsFeedback.modelConnected", { service: model.name }));
     } catch (e) {
-      onError(systemText(String(e), language));
-      setResults((prev) => ({
-        ...prev,
-        [key]: { ok: false, text: String(e).replace(/^Error: /, "") },
-      }));
+      toast.add(
+        settingsFailure(
+          t("connectors.notice.testFailed", { service: model.name }),
+          String(e),
+          language,
+        ),
+      );
     } finally {
       setTesting((prev) => {
         const next = new Set(prev);
@@ -274,21 +286,17 @@ export function SettingsPage({
             <ItemActions className="settings-entry-actions">
               {isConnected ? (
                 <>
-                  {p.methods.some((m) => m.interactive) && (
-                    <TooltipIconButton
-                      tooltip={t("common.manage")}
+                  {(p.methods.some((m) => m.interactive) ||
+                    p.credentialType ||
+                    p.credentialError) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => openConnect(p)}
                     >
-                      <Pencil />
-                    </TooltipIconButton>
-                  )}
-                  {(p.credentialType || p.credentialError) && (
-                    <TooltipIconButton
-                      tooltip={t("common.disconnect")}
-                      onClick={() => setRemove(p)}
-                    >
-                      <Unplug />
-                    </TooltipIconButton>
+                      <Settings2 data-icon="inline-start" aria-hidden="true" />
+                      {t("common.manage")}
+                    </Button>
                   )}
                 </>
               ) : (
@@ -536,14 +544,6 @@ export function SettingsPage({
                                         : ""}
                                     </div>
                                   </Hint>
-                                  {results[key] && !results[key].ok && (
-                                    <p
-                                      className="model-test-result failed"
-                                      role="status"
-                                    >
-                                      {systemText(results[key].text, language)}
-                                    </p>
-                                  )}
                                 </div>
                                 <div className="settings-entry-actions">
                                   {m.available ? (
@@ -823,7 +823,13 @@ export function SettingsPage({
         <ProviderDialog
           key={connect.id}
           provider={connect}
-          onError={onError}
+          onDisconnect={
+            connect.credentialType || connect.credentialError
+              ? () => setRemove(connect)
+              : undefined
+          }
+          disconnecting={removing}
+          onError={providerFailure}
           onClose={() => setConnect(undefined)}
           onSaved={async () => {
             const next = await refresh();
@@ -840,61 +846,47 @@ export function SettingsPage({
                     : model.levels[0],
                 },
               });
-            onSuccess(t("settings.connectionSaved"));
+            onSuccess(t("settingsFeedback.saved", { service: connect.name }));
             setConnect(undefined);
           }}
         />
       )}
-      <Dialog
+      <DisconnectConfirmation
         open={!!remove}
-        onOpenChange={(open) => {
-          if (!open && !removing) setRemove(undefined);
+        busy={removing}
+        title={t("settings.disconnectProvider", {
+          provider: remove?.name ?? "",
+        })}
+        description={t("settings.removeCredentialDescription", {
+          method: remove ? methodName(remove) : "",
+        })}
+        onCancel={() => setRemove(undefined)}
+        onConfirm={async () => {
+          if (!remove) return;
+          setRemoving(true);
+          try {
+            await api.invoke("logout", { provider: remove.id });
+            await refresh();
+            setRemove(undefined);
+            setConnect(undefined);
+            onSuccess(
+              t("settingsFeedback.disconnected", { service: remove.name }),
+            );
+          } catch (e) {
+            toast.add(
+              settingsFailure(
+                t("connectors.notice.removeFailed", {
+                  service: remove.name,
+                }),
+                String(e),
+                language,
+              ),
+            );
+          } finally {
+            setRemoving(false);
+          }
         }}
-      >
-        <DialogContent className="settings-dialog">
-          <DialogHeader>
-            <DialogTitle>
-              {t("settings.disconnectProvider", {
-                provider: remove?.name ?? "",
-              })}
-            </DialogTitle>
-            <DialogDescription>
-              {t("settings.removeCredentialDescription", {
-                method: remove ? methodName(remove) : "",
-              })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={removing}
-              onClick={() => setRemove(undefined)}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={removing}
-              onClick={async () => {
-                if (!remove) return;
-                setRemoving(true);
-                try {
-                  await api.invoke("logout", { provider: remove.id });
-                  await refresh();
-                  setRemove(undefined);
-                  onSuccess(t("settings.providerDisconnected"));
-                } catch (e) {
-                  onError(systemText(String(e), language));
-                } finally {
-                  setRemoving(false);
-                }
-              }}
-            >
-              {t("common.disconnect")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
     </div>
   );
 }

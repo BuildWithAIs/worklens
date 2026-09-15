@@ -4,6 +4,87 @@ import i18n, { type AppLanguage } from "../i18n";
 // known application-owned text and leave conversation/tool content untouched.
 const messages = [
   [
+    "Cloud 需要 HTTPS 地址",
+    "Cloud requires an HTTPS address.",
+    "connectors.runtime.cloudHttps",
+  ],
+  [
+    "GitHub Cloud 需要标准 HTTPS 站点地址",
+    "GitHub Cloud requires a standard HTTPS site address.",
+    "connectors.runtime.githubHttps",
+  ],
+  [
+    "Cloud 需要 Atlassian 账户邮箱",
+    "Enter your Atlassian account email for Cloud.",
+    "connectors.runtime.cloudEmail",
+  ],
+  [
+    "Scoped token 需要站点 Cloud ID",
+    "Enter the site Cloud ID for a scoped token.",
+    "connectors.runtime.cloudIdRequired",
+  ],
+  [
+    "无法自动获取 Cloud ID，请手工填写",
+    "Could not discover the Cloud ID. Enter it manually.",
+    "connectors.runtime.cloudIdDiscover",
+  ],
+  [
+    "无法验证站点 URL 对应的 Cloud ID",
+    "Could not verify the Cloud ID for this site address.",
+    "connectors.runtime.cloudIdVerify",
+  ],
+  [
+    "Cloud ID 与站点 URL 不匹配",
+    "The Cloud ID does not match the site address.",
+    "connectors.runtime.cloudIdMismatch",
+  ],
+  [
+    "请填写 token；更换站点或账户后需要重新填写",
+    "Enter a token. A new token is required after changing the site or account.",
+    "connectors.runtime.tokenRequired",
+  ],
+  [
+    "请填写 token；更换站点后需要重新填写",
+    "Enter a token. A new token is required after changing the site.",
+    "connectors.runtime.githubTokenRequired",
+  ],
+  [
+    "服务未返回已登录用户，请检查 token 和认证方式",
+    "The service did not return a signed-in user. Check the token and authentication method.",
+    "connectors.runtime.userMissing",
+  ],
+  [
+    "GitHub 未返回有效的认证账号",
+    "GitHub did not return a valid authenticated account.",
+    "connectors.runtime.githubUserMissing",
+  ],
+  [
+    "检测到重定向，请检查站点地址及 API 认证，不能使用网页登录地址。",
+    "A redirect was detected. Check the site address and API authentication; do not use a sign-in page URL.",
+    "connectors.runtime.redirect",
+  ],
+  [
+    "请检查目标、部署类型、token 和权限。",
+    "Check the target, deployment type, token and permissions.",
+    "connectors.runtime.checkAccess",
+  ],
+  [
+    "服务未返回可用的 JSON（可能是 SSO 登录页面或响应过大）",
+    "The service returned an unreadable response. Check whether the address redirects to an SSO sign-in page or the response is too large.",
+    "connectors.runtime.invalidJson",
+  ],
+  [
+    "GitHub 要求稍后重试",
+    "GitHub is rate limiting requests. Try again later.",
+    "connectors.runtime.rateLimit",
+  ],
+  [
+    "GitHub API 返回重定向，请检查站点地址和目标；未转发凭据",
+    "GitHub redirected the API request. Check the site address and target. Credentials were not forwarded.",
+    "connectors.runtime.githubRedirect",
+  ],
+  ["已连接：", "Connected: ", "connectors.runtime.connectedPrefix"],
+  [
     "运行期间不能切换模型",
     "Can’t switch models while responding.",
     "system.cantSwitchModels",
@@ -176,6 +257,33 @@ export function systemText(text: string, language: AppLanguage) {
   let result = text
     .replaceAll("[redacted]", t("system.redacted"))
     .replaceAll("[已隐藏]", t("system.redacted"));
+
+  // Connector-owned runtime messages carry service names and status codes.
+  // Translate their known wording while retaining server-provided details.
+  result = result
+    .replace(/(Jira|Confluence|GitHub) 网络请求失败或超时/g, (_, service) =>
+      t("connectors.runtime.network", { service }),
+    )
+    .replace(/(Jira|Confluence|GitHub) 返回 (\d{3})。/g, (_, service, status) =>
+      t("connectors.runtime.httpStatus", { service, status }),
+    )
+    .replace(
+      /无法读取或解密 (Jira|Confluence|GitHub) 配置，原文件已保留。请重新填写 token 或断开连接。/g,
+      (_, service) =>
+        t("connectors.runtime.credentialsUnreadable", { service }),
+    )
+    .replace(
+      /请先在设置 → 连接中保存并验证 (Jira|Confluence|GitHub) 连接/g,
+      (_, service) => t("connectors.runtime.connectFirst", { service }),
+    )
+    .replace(
+      /(Jira|Confluence|GitHub) 连接已变更，请重新读取目标/g,
+      (_, service) => t("connectors.runtime.changed", { service }),
+    )
+    .replace(
+      /请输入不含凭据、查询参数或片段的 (Jira|Confluence) 站点地址/g,
+      (_, service) => t("connectors.runtime.siteInvalid", { service }),
+    );
 
   for (const [chinese, english, key] of messages) {
     result = result.replaceAll(chinese, t(key)).replaceAll(english, t(key));

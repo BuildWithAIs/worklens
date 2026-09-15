@@ -1,18 +1,21 @@
+import { savedCredentialPlaceholder } from "../../credential-placeholder";
+import { completeSiteUrl } from "../site-url";
 import { useState } from "react";
 import type {
   ConfluenceConnection,
   ConfluenceSettingsInput,
 } from "../../../../../../shared/contracts";
-import { Button } from "@/components/ui/button";
+import { useConnectorForm } from "../connector-form";
+import { ConnectorActions } from "../ConnectorActions";
+import { useConnectorAction } from "../use-connector-action";
 import { Input } from "@/components/ui/input";
-import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
+import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { BrandIcon } from "../../ProviderIcon";
 import confluenceIcon from "@/assets/brands/confluence.svg?url";
@@ -41,52 +44,40 @@ export function ConfluenceSettings({
     token: "",
     tokenType: connection?.tokenType ?? "classic",
   });
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState("");
-  const [error, setError] = useState("");
+  const validation = useConnectorForm("confluence", form, connection);
   const update = (patch: Partial<ConfluenceSettingsInput>) => {
     setForm((current) => ({ ...current, ...patch }));
-    setResult("");
-    setError("");
+    validation.reset();
   };
-  async function act(action: "save" | "test" | "remove") {
-    setBusy(true);
-    setResult("");
-    setError("");
-    try {
-      const input = {
+  const { action, busy, act } = useConnectorAction({
+    validation,
+    test: () =>
+      window.worklens.invoke("confluenceTest", {
         ...form,
         email: form.email || undefined,
         cloudId: form.cloudId || undefined,
-      };
-      if (action === "test")
-        setResult(await window.worklens.invoke("confluenceTest", input));
-      else if (action === "save") {
-        await window.worklens.invoke("confluenceSave", input);
-        setForm((current) => ({ ...current, token: "" }));
-        await refresh();
-        onSuccess(t("connectors.confluence.confluenceSettingsSaved"));
-        onClose();
-      } else {
-        await window.worklens.invoke("confluenceRemove", undefined);
-        setForm({
-          url: "",
-          deployment: "data-center",
-          tokenType: "classic",
-          token: "",
-        });
-        await refresh();
-        onSuccess(t("connectors.confluence.confluenceDisconnected"));
-        onClose();
-      }
-    } catch (error) {
-      if (action === "save") await refresh().catch(() => {});
-      const message = String(error).replace(/^Error: /, "");
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
-  }
+      }),
+    save: () =>
+      window.worklens.invoke("confluenceSave", {
+        ...form,
+        email: form.email || undefined,
+        cloudId: form.cloudId || undefined,
+      }),
+    remove: () => window.worklens.invoke("confluenceRemove", undefined),
+    afterSave: () => setForm((current) => ({ ...current, token: "" })),
+    afterRemove: () =>
+      setForm({
+        url: "",
+        deployment: "data-center",
+        tokenType: "classic",
+        token: "",
+      }),
+    refresh,
+    onSuccess,
+    onClose,
+    savedMessage: t("connectors.confluence.confluenceSettingsSaved"),
+    removedMessage: t("connectors.confluence.confluenceDisconnected"),
+  });
   return (
     <Dialog
       open
@@ -94,23 +85,23 @@ export function ConfluenceSettings({
         if (!open && !busy) onClose();
       }}
     >
-      <DialogContent className="settings-dialog" aria-busy={busy}>
+      <DialogContent
+        className="settings-dialog settings-connector-dialog"
+        aria-busy={busy}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BrandIcon source={confluenceIcon} />
             Confluence
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             {t("connectors.confluence.description")}
           </DialogDescription>
         </DialogHeader>
-        {connection?.error && (
-          <p role="alert" className="settings-entry-description">
-            {connection.error}
-          </p>
-        )}
+
         <form
           id="confluence-settings-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             void act("save");
@@ -138,33 +129,48 @@ export function ConfluenceSettings({
                 <NativeSelectOption value="cloud">Cloud</NativeSelectOption>
               </NativeSelect>
             </Field>
-            <Field>
+            <Field data-invalid={!!validation.fieldError("url")}>
               <FieldLabel htmlFor="confluence-url">
                 {t("connectors.confluence.confluenceURL")}
+                {validation.props("url")["aria-required"] && (
+                  <span aria-hidden="true">*</span>
+                )}
               </FieldLabel>
               <Input
                 id="confluence-url"
+                {...validation.props("url")}
                 value={form.url}
+                onBlur={() => {
+                  const url = completeSiteUrl(form.url);
+                  if (url !== form.url) update({ url });
+                }}
                 onChange={(e) => update({ url: e.target.value })}
                 placeholder="https://wiki.example.com/confluence"
                 autoComplete="off"
               />
-              <FieldDescription>
-                {t("connectors.confluence.urlHelp")}
-              </FieldDescription>
+              <FieldError id="confluence-url-error">
+                {validation.fieldError("url")}
+              </FieldError>
             </Field>
             {form.deployment === "cloud" && (
               <>
-                <Field>
+                <Field data-invalid={!!validation.fieldError("email")}>
                   <FieldLabel htmlFor="confluence-email">
                     {t("connectors.confluence.atlassianAccountEmail")}
+                    {validation.props("email")["aria-required"] && (
+                      <span aria-hidden="true">*</span>
+                    )}
                   </FieldLabel>
                   <Input
                     id="confluence-email"
+                    {...validation.props("email")}
                     type="email"
                     value={form.email ?? ""}
                     onChange={(e) => update({ email: e.target.value })}
                   />
+                  <FieldError id="confluence-email-error">
+                    {validation.fieldError("email")}
+                  </FieldError>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="confluence-token-type">
@@ -189,70 +195,59 @@ export function ConfluenceSettings({
                   </NativeSelect>
                 </Field>
                 {form.tokenType === "scoped" && (
-                  <Field>
+                  <Field data-invalid={!!validation.fieldError("cloudId")}>
                     <FieldLabel htmlFor="confluence-cloud-id">
                       Cloud ID
+                      {validation.props("cloudId")["aria-required"] && (
+                        <span aria-hidden="true">*</span>
+                      )}
                     </FieldLabel>
                     <Input
                       id="confluence-cloud-id"
+                      {...validation.props("cloudId")}
                       value={form.cloudId ?? ""}
                       onChange={(e) => update({ cloudId: e.target.value })}
                     />
-                    <FieldDescription>
-                      {t("connectors.confluence.cloudIdHelp")}
-                    </FieldDescription>
+                    <FieldError id="confluence-cloud-id-error">
+                      {validation.fieldError("cloudId")}
+                    </FieldError>
                   </Field>
                 )}
               </>
             )}
-            <Field>
-              <FieldLabel htmlFor="confluence-token">Token</FieldLabel>
+            <Field data-invalid={!!validation.fieldError("token")}>
+              <FieldLabel htmlFor="confluence-token">
+                Token
+                {validation.props("token")["aria-required"] && (
+                  <span aria-hidden="true">*</span>
+                )}
+              </FieldLabel>
               <Input
                 id="confluence-token"
+                {...validation.props("token")}
                 type="password"
                 autoComplete="new-password"
                 value={form.token ?? ""}
                 onChange={(e) => update({ token: e.target.value })}
                 placeholder={
-                  connection?.configured
-                    ? t("connectors.confluence.leaveBlankToKeepTheSavedToken")
+                  validation.canReuseToken
+                    ? savedCredentialPlaceholder
                     : t("connectors.confluence.enterYourToken")
                 }
               />
+              <FieldError id="confluence-token-error">
+                {validation.fieldError("token")}
+              </FieldError>
             </Field>
           </fieldset>
         </form>
-        {error && (
-          <p role="alert" className="settings-entry-description">
-            {error}
-          </p>
-        )}
-        {result && (
-          <p role="status" className="text-sm">
-            {result}
-          </p>
-        )}
-        <DialogFooter>
-          {connection?.url && (
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => void act("remove")}
-            >
-              {t("common.disconnect")}
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => void act("test")}
-          >
-            {t("connectors.confluence.testConnection")}
-          </Button>
-          <Button type="submit" form="confluence-settings-form" disabled={busy}>
-            {busy ? t("common.workingPlaceholder") : t("common.save")}
-          </Button>
-        </DialogFooter>
+        <ConnectorActions
+          service="confluence"
+          action={action}
+          missing={validation.missing}
+          removable={!!connection?.url}
+          onAction={(next) => void act(next)}
+        />
       </DialogContent>
     </Dialog>
   );

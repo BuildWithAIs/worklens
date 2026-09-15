@@ -53,3 +53,34 @@ describe("internationalization resources", () => {
     expect(systemText("用户原始内容", "en")).toBe("用户原始内容");
   });
 });
+
+for (const service of ["Jira", "Confluence", "GitHub"]) {
+  test(`${service} runtime failures follow the selected language`, () => {
+    expect(systemText(`${service} 网络请求失败或超时`, "en")).toBe(
+      `Could not reach ${service} or the request timed out. Check your network and site address, then try again.`,
+    );
+    expect(systemText(`${service} 网络请求失败或超时`, "zh")).toContain(
+      `无法连接 ${service}`,
+    );
+    expect(
+      systemText(
+        `${service} 返回 401。请检查目标、部署类型、token 和权限。`,
+        "en",
+      ),
+    ).toBe(
+      `${service} returned HTTP 401. Check the target, deployment type, token and permissions.`,
+    );
+  });
+}
+
+test("connector result translation preserves account names, URLs and unknown details", () => {
+  expect(
+    systemText("已连接：张三 · https://wiki.example.test/wiki", "en"),
+  ).toBe("Connected: 张三 · https://wiki.example.test/wiki");
+  expect(systemText("Cloud ID 与站点 URL 不匹配", "en")).toBe(
+    "The Cloud ID does not match the site address.",
+  );
+  expect(systemText("upstream detail: 仓库暂时不可用", "en")).toBe(
+    "upstream detail: 仓库暂时不可用",
+  );
+});

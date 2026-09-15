@@ -20,7 +20,7 @@ interface CatalogEntry {
   keywords?: string;
   connection?: (
     data: Bootstrap,
-  ) => { configured: boolean; url?: string } | undefined;
+  ) => { configured: boolean; url?: string; error?: string } | undefined;
   Settings?: ComponentType<ConnectorSettingsProps>;
 }
 function ConfluenceConfiguration({ data, ...props }: ConnectorSettingsProps) {
