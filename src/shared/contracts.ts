@@ -103,7 +103,19 @@ export interface Settings {
   hiddenModels?: string[];
   lastConversation?: string;
   pinnedConversationIds?: string[];
+  disabledSkills?: string[];
   [key: string]: unknown;
+}
+export interface SkillInfo {
+  name: string;
+  description: string;
+  path: string;
+  source: "builtin" | "agents";
+  enabled: boolean;
+}
+export interface SkillsSnapshot {
+  builtin: SkillInfo[];
+  universal: SkillInfo[];
 }
 export interface MessageView {
   artifacts?: LocalArtifact[];
@@ -181,7 +193,13 @@ export interface Bootstrap {
   settings: Settings;
   providers: ProviderInfo[];
   conversations: Conversation[];
-  paths: { root: string; runtime: string; sessions: string; userData: string };
+  paths: {
+    root: string;
+    runtime: string;
+    sessions: string;
+    userData: string;
+    skills: string;
+  };
   version: string;
   tools: string[];
   diagnostics: string[];
@@ -259,8 +277,14 @@ export interface Requests {
   dismissRecovery: { input: { runId: string }; output: void };
   refreshModels: { input: { provider: string }; output: string };
   showPath: {
-    input: { which: "root" | "runtime" | "sessions" | "userData" };
+    input: { which: "root" | "runtime" | "sessions" | "userData" | "skills" };
     output: void;
+  };
+  skillsList: { input: undefined; output: SkillsSnapshot };
+  skillsRefresh: { input: undefined; output: SkillsSnapshot };
+  skillsToggle: {
+    input: { name: string; enabled: boolean };
+    output: SkillsSnapshot;
   };
 }
 export interface ConfluenceSettingsInput {

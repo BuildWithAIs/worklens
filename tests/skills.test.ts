@@ -1,0 +1,162 @@
+import { test, expect } from "vitest";
+import { mkdtemp, mkdir, writeFile, rm, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SkillsService } from "../src/main/skills";
+import { resources } from "../src/main/resources";
+import { StateStore } from "../src/main/storage";
+import { schemas } from "../src/main/validation";
+
+async function skillMd(dir: string, name: string, description: string) {
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "SKILL.md"),
+    `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.\n`,
+  );
+}
+
+test("built-in skills are synced from the bundled resource and scanned separately from the universal directory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-skills-"));
+  try {
+    const bundled = join(root, "bundled");
+    const universal = join(root, "agents-skills");
+    await skillMd(
+      join(bundled, "pdf-tools"),
+      "pdf-tools",
+      "Extracts text from PDFs.",
+    );
+    await skillMd(
+      join(universal, "brave-search"),
+      "brave-search",
+      "Web search.",
+    );
+    const state = new StateStore(join(root, "settings.json"));
+    await state.load();
+    const skills = new SkillsService(
+      join(root, "builtin"),
+      universal,
+      bundled,
+      state,
+    );
+    await skills.initialize();
+    const snapshot = skills.list();
+    expect(snapshot.builtin).toEqual([
+      {
+        name: "pdf-tools",
+        description: "Extracts text from PDFs.",
+        path: join(root, "builtin", "pdf-tools", "SKILL.md"),
+        source: "builtin",
+        enabled: true,
+      },
+    ]);
+    expect(snapshot.universal).toEqual([
+      {
+        name: "brave-search",
+        description: "Web search.",
+        path: join(universal, "brave-search", "SKILL.md"),
+        source: "agents",
+        enabled: true,
+      },
+    ]);
+    // The universal directory is read-only from WorkLens's perspective.
+    expect(await readdir(universal)).toEqual(["brave-search"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a newer app version drops built-in skills removed from the bundled resource", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-skills-sync-"));
+  try {
+    const bundled = join(root, "bundled");
+    const builtin = join(root, "builtin");
+    await skillMd(join(bundled, "old-skill"), "old-skill", "Retired.");
+    const state = new StateStore(join(root, "settings.json"));
+    await state.load();
+    await new SkillsService(
+      builtin,
+      join(root, "agents-skills"),
+      bundled,
+      state,
+    ).initialize();
+    expect(await readdir(builtin)).toContain("old-skill");
+    await rm(join(bundled, "old-skill"), { recursive: true, force: true });
+    await skillMd(join(bundled, "new-skill"), "new-skill", "Replacement.");
+    const second = new SkillsService(
+      builtin,
+      join(root, "agents-skills"),
+      bundled,
+      state,
+    );
+    await second.initialize();
+    expect(await readdir(builtin)).toEqual(["new-skill"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("toggling a skill persists across reloads without touching the skill file, and gates the session configuration key", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-skills-toggle-"));
+  try {
+    const bundled = join(root, "bundled");
+    await skillMd(join(bundled, "demo"), "demo", "Demo skill.");
+    const state = new StateStore(join(root, "settings.json"));
+    await state.load();
+    const skills = new SkillsService(
+      join(root, "builtin"),
+      join(root, "agents-skills"),
+      bundled,
+      state,
+    );
+    await skills.initialize();
+    const before = skills.configurationKey();
+    expect(skills.list().builtin[0].enabled).toBe(true);
+    await skills.setEnabled("demo", false);
+    expect(skills.list().builtin[0].enabled).toBe(false);
+    expect(skills.configurationKey()).not.toBe(before);
+    const restored = new StateStore(join(root, "settings.json"));
+    await restored.load();
+    expect(restored.value.disabledSkills).toEqual(["demo"]);
+    await skills.setEnabled("demo", true);
+    expect(skills.list().builtin[0].enabled).toBe(true);
+    expect(skills.configurationKey()).toBe(before);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("resources() feeds SkillsService's paths into the real Pi resource loader and skillsOverride hides disabled skills", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-resources-skills-"));
+  try {
+    const skillsDir = join(root, "skills");
+    await skillMd(join(skillsDir, "demo"), "demo", "Demo skill for testing.");
+    const enabled = await resources(root, root, undefined, {
+      paths: [skillsDir],
+      disabledNames: [],
+    });
+    expect(
+      enabled.resourceLoader.getSkills().skills.map((s) => s.name),
+    ).toEqual(["demo"]);
+    const disabled = await resources(root, root, undefined, {
+      paths: [skillsDir],
+      disabledNames: ["demo"],
+    });
+    expect(disabled.resourceLoader.getSkills().skills).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("skillsToggle input validates the skill name and keeps the request contract strict", () => {
+  expect(schemas.skillsToggle.parse({ name: "demo", enabled: false })).toEqual({
+    name: "demo",
+    enabled: false,
+  });
+  for (const value of [
+    { name: "", enabled: true },
+    { enabled: true },
+    { name: "demo" },
+  ]) {
+    expect(schemas.skillsToggle.safeParse(value).success).toBe(false);
+  }
+});

@@ -24,6 +24,7 @@ import {
 import { resources, toolNames } from "./resources";
 import { worklensTools } from "./tools";
 import { ConnectorRegistry } from "./connectors/registry";
+import type { SkillsService } from "./skills";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import type {
@@ -114,6 +115,7 @@ export class AgentService {
     private emit: (event: ChatEvent) => void,
     private redact: (text: string) => string,
     private connectors = new ConnectorRegistry(),
+    private skills?: SkillsService,
   ) {}
   async initialize() {
     await Promise.all([
@@ -364,7 +366,10 @@ export class AgentService {
       ).some((m) => m.id === model.id)
     )
       throw new Error("模型尚未配置或不可用，请在设置中完成认证");
-    const integrationConfiguration = this.connectors.configurationKey();
+    const integrationConfiguration =
+      this.connectors.configurationKey() +
+      "|" +
+      (this.skills?.configurationKey() ?? "");
     if (
       runtime.session &&
       runtime.integrationConfiguration !== integrationConfiguration
@@ -379,6 +384,10 @@ export class AgentService {
         {
           tools: this.connectors.names(),
           instructions: this.connectors.instructions(),
+        },
+        this.skills && {
+          paths: this.skills.skillPaths(),
+          disabledNames: this.skills.disabledSkillNames(),
         },
       );
       const customTools = worklensTools(

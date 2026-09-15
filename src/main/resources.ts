@@ -18,6 +18,10 @@ export async function resources(
     tools: [],
     instructions: "",
   },
+  skills: { paths: string[]; disabledNames: string[] } = {
+    paths: [],
+    disabledNames: [],
+  },
 ) {
   const settingsManager = SettingsManager.inMemory({
     compaction: { enabled: true },
@@ -40,7 +44,17 @@ export async function resources(
         });
       },
     ],
+    // Discovery stays off; only the two directories we pass explicitly are
+    // scanned. This keeps sessions and tests independent of whatever else a
+    // machine's ~/.pi or project trust state happens to hold.
     noSkills: true,
+    additionalSkillPaths: skills.paths,
+    skillsOverride: (base) => ({
+      ...base,
+      skills: base.skills.filter(
+        (skill) => !skills.disabledNames.includes(skill.name),
+      ),
+    }),
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
