@@ -19,11 +19,17 @@ test("sidebar collapses, preserves its preference and keeps the toggle reachable
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(toggle.locator("svg rect")).toHaveAttribute("rx", "5");
   const expandedBox = await toggle.boundingBox();
-  expect(expandedBox.x).toBe(96);
+  const sidebarBox = await sidebar.boundingBox();
+  expect(sidebarBox.x + sidebarBox.width - expandedBox.x - expandedBox.width).toBe(20);
   expect(expandedBox.y).toBe(13);
+  const dragRight = await sidebar.evaluate((element) => {
+    const style = getComputedStyle(element, "::before");
+    return element.getBoundingClientRect().right - parseFloat(style.right);
+  });
+  expect(dragRight).toBeLessThanOrEqual(expandedBox.x - 8);
   await toggle.click();
   await expect(toggle.locator("svg rect")).toHaveAttribute("rx", "5");
-  expect(await toggle.boundingBox()).toEqual(expandedBox);
+  expect(await toggle.boundingBox()).toEqual({ ...expandedBox, x: 96 });
   await expect(sidebar).toHaveAttribute("inert", "");
   await expect(sidebar).toBeHidden();
   await expect(page.locator(".chat-header")).toHaveCSS("-webkit-app-region", "no-drag");

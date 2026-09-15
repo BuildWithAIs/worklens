@@ -12,7 +12,13 @@ import {
   isHtmlArtifact,
 } from "@/components/worklens/HtmlArtifact";
 import remarkGfm from "remark-gfm";
-import { type FC, memo, useMemo, useRef } from "react";
+import {
+  type ComponentPropsWithoutRef,
+  type FC,
+  memo,
+  useMemo,
+  useRef,
+} from "react";
 import { useAuiState, type TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
@@ -20,6 +26,7 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import { useAppTranslation } from "@/i18n";
+import { toast } from "@/components/ui/toast";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   compact?: boolean;
@@ -99,6 +106,40 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   );
 };
 
+function ChatLink({
+  className,
+  href,
+  onClick,
+  ...props
+}: ComponentPropsWithoutRef<"a">) {
+  const { t } = useAppTranslation();
+  return (
+    <a
+      {...props}
+      href={href}
+      className={cn(
+        "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+        className,
+      )}
+      onClick={(event) => {
+        if (!href || !/^https?:\/\//i.test(href)) {
+          onClick?.(event);
+          return;
+        }
+        event.preventDefault();
+        void window.worklens.invoke("external", { url: href }).catch(() => {
+          toast.add({
+            type: "error",
+            title: t("chatLinks.openFailed"),
+            timeout: 0,
+            priority: "high",
+          });
+        });
+      }}
+    />
+  );
+}
+
 const defaultComponents = memoizeMarkdownComponents({
   h1: ({ className, ...props }) => (
     <h1
@@ -163,15 +204,7 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  a: ChatLink,
   blockquote: ({ className, ...props }) => (
     <blockquote
       className={cn(

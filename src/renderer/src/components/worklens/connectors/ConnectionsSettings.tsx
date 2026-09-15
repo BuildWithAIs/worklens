@@ -97,6 +97,11 @@ export function ConnectionsSettings({
                     <BrandIcon source={icon} />
                     {name}
                   </ItemTitle>
+                  {connection?.(data)?.error && (
+                    <ItemDescription>
+                      {t("settingsFeedback.connectionNeedsAttention")}
+                    </ItemDescription>
+                  )}
                   {group.connected && (
                     <ItemDescription className="settings-entry-description">
                       {connection?.(data)?.url}

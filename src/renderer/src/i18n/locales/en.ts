@@ -1,4 +1,40 @@
 const en = {
+  chatLinks: { openFailed: "Couldn’t open the link" },
+  settingsFeedback: {
+    connectionNeedsAttention: "Connection needs attention",
+    loginFailed: "Couldn’t sign in to {{service}}",
+    saveFailed: "Couldn’t save {{service}} settings",
+    browserFailed: "Couldn’t open the browser",
+    refreshFailed: "Couldn’t refresh {{service}}",
+    visibilityFailed: "Couldn’t save model visibility",
+    saved: "{{service}} settings saved",
+    disconnected: "{{service}} disconnected",
+    modelConnected: "{{service}} connection successful",
+    visibilitySaved: "Model visibility saved",
+    network: "Check your network and site URL.",
+    credentials: "Check your credentials.",
+    token: "Check your token and account.",
+    permissions: "Check your account or token permissions.",
+    rateLimit: "Too many requests. Try again later.",
+    cloudId: "Cloud ID doesn’t match this site.",
+    cloudIdDiscover: "Enter the Cloud ID manually.",
+    cloudIdVerify: "Check the Cloud ID and site URL.",
+    redirect: "Check the site URL and sign-in settings.",
+    response: "Unexpected response. Check the site URL.",
+    unreadable: "Re-enter your credentials.",
+    secureStorage: "Secure storage is unavailable. Try again later.",
+    model: "Check the model or deployment settings.",
+    endpoint: "Check the service URL.",
+    expired: "Sign-in expired. Try again.",
+    refresh: "Try refreshing again.",
+    unknown: "Try again. If the problem continues, check your settings.",
+    url: "Enter a valid site URL.",
+    githubUrl: "Enter your GitHub site URL, e.g. https://github.com.",
+    https: "Use an HTTPS URL.",
+    email: "Enter a valid email address.",
+    cloudIdInvalid: "Enter a valid Cloud ID.",
+    tokenInvalid: "Enter a valid token.",
+  },
   app: {
     connectAProviderToStartChatting: "Connect a provider to start chatting.",
     openSettings: "Open settings",
@@ -98,6 +134,72 @@ const en = {
     colorPalette: "Color palette",
   },
   connectors: {
+    notice: {
+      connected: "Connected to {{service}}",
+      testFailed: "Couldn’t connect to {{service}}",
+      saveFailed: "Couldn’t complete {{service}} setup",
+      removeFailed: "Couldn’t disconnect {{service}}",
+      checkNetwork: "Check your network and site address.",
+      checkToken: "Check your token and account.",
+      checkPermissions:
+        "Your account or token may lack access. Check permissions.",
+      checkCloudId: "Use the Cloud ID that belongs to this site.",
+      enterCloudId: "Cloud ID discovery failed. Enter it manually.",
+    },
+    runtime: {
+      cloudHttps: "Cloud requires an HTTPS address.",
+      githubHttps: "GitHub Cloud requires a standard HTTPS site address.",
+      cloudEmail: "Enter your Atlassian account email for Cloud.",
+      cloudIdRequired: "Enter the site Cloud ID for a scoped token.",
+      cloudIdDiscover: "Could not discover the Cloud ID. Enter it manually.",
+      cloudIdVerify: "Could not verify the Cloud ID for this site address.",
+      cloudIdMismatch: "The Cloud ID does not match the site address.",
+      tokenRequired:
+        "Enter a token. A new token is required after changing the site or account.",
+      githubTokenRequired:
+        "Enter a token. A new token is required after changing the site.",
+      userMissing:
+        "The service did not return a signed-in user. Check the token and authentication method.",
+      githubUserMissing: "GitHub did not return a valid authenticated account.",
+      redirect:
+        "A redirect was detected. Check the site address and API authentication; do not use a sign-in page URL.",
+      checkAccess: "Check the target, deployment type, token and permissions.",
+      invalidJson:
+        "The service returned an unreadable response. Check whether the address redirects to an SSO sign-in page or the response is too large.",
+      rateLimit: "GitHub is rate limiting requests. Try again later.",
+      githubRedirect:
+        "GitHub redirected the API request. Check the site address and target. Credentials were not forwarded.",
+      connectedPrefix: "Connected: ",
+      network:
+        "Could not reach {{service}} or the request timed out. Check your network and site address, then try again.",
+      httpStatus: "{{service}} returned HTTP {{status}}. ",
+      credentialsUnreadable:
+        "Could not read or decrypt the {{service}} settings. The original file is preserved. Enter the token again or disconnect.",
+      connectFirst:
+        "Save and verify the {{service}} connection in Settings → Connectors first.",
+      changed: "The {{service}} connection changed. Read the target again.",
+      siteInvalid:
+        "Enter the {{service}} site address without credentials, query parameters or a fragment.",
+    },
+    form: {
+      disconnectDescription:
+        "This removes the saved {{service}} connection and token from WorkLens. You can connect again later.",
+      fields: {
+        url: "Site address",
+        token: "Token",
+        email: "Account email",
+        cloudId: "Cloud ID",
+      },
+      required: "{{field}} is required.",
+      invalid: "Check {{field}} and try again.",
+      checkFields: "Check the connection fields and try again.",
+      failed:
+        "The connection request failed. Check your settings and try again.",
+      testing: "Testing…",
+      saving: "Saving…",
+      disconnecting: "Disconnecting…",
+      testConnection: "Test connection",
+    },
     confluence: {
       confluenceSettingsSaved: "Confluence settings saved",
       confluenceDisconnected: "Confluence disconnected",
@@ -105,15 +207,12 @@ const en = {
         "Connect your team's knowledge base to search and maintain documents.",
       deployment: "Deployment",
       confluenceURL: "Confluence URL",
-      urlHelp:
-        "Use the site address, including /wiki or /confluence when present.",
       atlassianAccountEmail: "Atlassian account email",
       tokenType: "Token type",
       classicAPIToken: "Classic API token",
       apiTokenWithScopes: "API token with scopes",
-      cloudIdHelp: "Enter your Atlassian site's Cloud ID.",
-      leaveBlankToKeepTheSavedToken: "Leave blank to keep the saved token",
-      enterYourToken: "Enter your token",
+
+      enterYourToken: "Enter token",
       testConnection: "Test connection",
     },
     searchConnectors: "Search connectors",
@@ -131,12 +230,8 @@ const en = {
       account: "Account",
       githubURL: "GitHub URL",
       enterYourGitHubSiteURL: "Enter your GitHub site URL",
-      urlHelp:
-        "Use the address of GitHub.com or your company's GitHub site, without a repository path.",
-      leaveBlankToKeepTheSavedToken: "Leave blank to keep the saved token",
-      enterYourToken: "Enter your token",
-      tokenHelp:
-        "Use a token from this site with access to the repositories and actions you need.",
+
+      enterYourToken: "Enter token",
       testConnection: "Test connection",
     },
     jira: {
@@ -146,14 +241,12 @@ const en = {
         "Connect Jira to manage issues, collaborate and plan your work.",
       deployment: "Deployment",
       jiraURL: "Jira URL",
-      urlHelp: "Use the site address, including /jira when present.",
       atlassianAccountEmail: "Atlassian account email",
       tokenType: "Token type",
       classicAPIToken: "Classic API token",
       apiTokenWithScopes: "API token with scopes",
-      cloudIdHelp: "Optional: leave blank to discover your site's Cloud ID.",
-      leaveBlankToKeepTheSavedToken: "Leave blank to keep the saved token",
-      enterYourToken: "Enter your token",
+
+      enterYourToken: "Enter token",
       testConnection: "Test connection",
     },
   },
@@ -202,6 +295,7 @@ const en = {
     },
   },
   provider: {
+    enterApiKey: "Enter API key",
     configureAuthentication: "Configure authentication",
     authentication: "Authentication",
     systemCredentials: "System credentials",

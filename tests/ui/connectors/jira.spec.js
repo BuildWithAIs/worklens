@@ -39,18 +39,16 @@ for (const language of ["en", "zh"]) {
         exact: true,
       });
       await expect(dialog).toBeVisible();
-      await dialog
-        .getByRole("button", {
+      await expect(
+        dialog.getByRole("button", {
           name: t("Test connection", "测试连接"),
           exact: true,
-        })
-        .click();
-      await expect(dialog.getByRole("alert")).toHaveText(
-        "Enter a Jira URL",
-      );
-      await dialog
-        .locator("#jira-url")
-        .fill("https://jira.example.test");
+        }),
+      ).toBeDisabled();
+      await expect(
+        dialog.getByRole("button", { name: t("Save", "保存"), exact: true }),
+      ).toBeDisabled();
+      await dialog.locator("#jira-url").fill("https://jira.example.test");
       await dialog.locator("#jira-deployment").selectOption("cloud");
       await dialog.locator("#jira-email").fill("fixture@example.test");
       await dialog.locator("#jira-token-type").selectOption("scoped");
@@ -75,7 +73,11 @@ for (const language of ["en", "zh"]) {
           exact: true,
         })
         .click();
-      await expect(dialog.getByRole("status")).toContainText("Fixture User");
+      await expect(
+        page
+          .locator('[data-slot="toast-title"]')
+          .filter({ hasText: t("Connected to Jira", "已连接 Jira") }),
+      ).toBeVisible();
       await dialog
         .getByRole("button", { name: t("Save", "保存"), exact: true })
         .click();
@@ -112,6 +114,51 @@ for (const language of ["en", "zh"]) {
       await dialog
         .getByRole("button", { name: t("Disconnect", "断开连接"), exact: true })
         .click();
+      const confirmation = page.getByRole("dialog", {
+        name: t("Disconnect Jira?", "断开 Jira 的连接？"),
+        exact: true,
+      });
+      await expect(confirmation).toBeVisible();
+      await expect(
+        confirmation.getByRole("button", {
+          name: t("Cancel", "取消"),
+          exact: true,
+        }),
+      ).toBeFocused();
+      expect(
+        await page.evaluate(
+          () => window.calls.filter((c) => c.name === "jiraRemove").length,
+        ),
+      ).toBe(0);
+      await confirmation
+        .getByRole("button", { name: t("Cancel", "取消"), exact: true })
+        .click();
+      await expect(
+        dialog.getByRole("button", {
+          name: t("Disconnect", "断开连接"),
+          exact: true,
+        }),
+      ).toBeFocused();
+      await dialog
+        .getByRole("button", { name: t("Disconnect", "断开连接"), exact: true })
+        .click();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => window.calls.filter((c) => c.name === "jiraRemove").length,
+        ),
+      ).toBe(0);
+      await dialog
+        .getByRole("button", { name: t("Disconnect", "断开连接"), exact: true })
+        .click();
+      await page.screenshot({
+        path: info.outputPath("disconnect-confirmation.png"),
+      });
+      await confirmation
+        .getByRole("button", { name: t("Disconnect", "断开连接"), exact: true })
+        .click();
+
       await expect(dialog).not.toBeVisible();
       await expect(connect).toBeVisible();
       const calls = await page.evaluate(() =>

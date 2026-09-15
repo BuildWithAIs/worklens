@@ -78,3 +78,8 @@
 .settings-navigation:has(> .background-effect) {
   border-right-color: transparent;
 }
+
+/* Keep daylight pigment subordinate to the white surface, including fallback. */
+:root[data-theme="light"] .background-effect {
+  opacity: .72;
+}

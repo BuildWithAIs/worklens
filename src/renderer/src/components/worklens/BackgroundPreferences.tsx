@@ -13,7 +13,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppTranslation } from "@/i18n";
-import { useDarkAppearance } from "./BackgroundEffect";
 import type { Settings } from "../../../../shared/contracts";
 
 export function BackgroundPreferences({
@@ -26,7 +25,6 @@ export function BackgroundPreferences({
   onError: (message: string) => void;
 }) {
   const { t } = useAppTranslation();
-  const dark = useDarkAppearance(settings);
   const [pending, setPending] = useState(false);
   const effect = settings.backgroundEffect ?? "none";
   // Retain stored electric/ice IDs so existing preferences remain valid.
@@ -47,7 +45,6 @@ export function BackgroundPreferences({
       setPending(false);
     }
   };
-  if (!dark) return null;
   return (
     <>
       <Item size="sm" role="listitem" className="settings-entry">

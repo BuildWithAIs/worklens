@@ -24,8 +24,14 @@
   animation: settings-content-enter 180ms ease-out 35ms both;
 }
 @keyframes settings-content-enter {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .settings-back,
@@ -55,7 +61,9 @@
   -webkit-app-region: drag;
   user-select: none;
 }
-:root[data-native-vibrancy="true"] .settings-page-heading :is(button, a, input, select, [role="button"]) {
+:root[data-native-vibrancy="true"]
+  .settings-page-heading
+  :is(button, a, input, select, [role="button"]) {
   -webkit-app-region: no-drag;
 }
 .settings-navigation {
@@ -233,7 +241,8 @@
   max-width: 50%;
   flex-shrink: 0;
 }
-:is(.settings-provider-list, .settings-connection-list, .settings-model-panel) .settings-entry {
+:is(.settings-provider-list, .settings-connection-list, .settings-model-panel)
+  .settings-entry {
   min-height: 48px;
   padding-block: 10px;
 }
@@ -314,6 +323,10 @@
   padding: 20px;
   gap: 20px;
 }
+.settings-dialog.settings-connector-dialog {
+  width: min(420px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+}
 .settings-dialog [data-slot="dialog-header"] {
   gap: 12px;
 }
@@ -325,6 +338,7 @@
   right: 12px;
 }
 .settings-dialog [data-slot="dialog-footer"] {
+  flex-wrap: wrap;
   margin-inline: -20px;
   margin-bottom: -20px;
   padding: 12px 20px;
@@ -498,11 +512,17 @@
 }
 
 @media (max-width: 580px) {
-  .settings-page-heading { padding: 12px 16px; gap: 12px; }
+  .settings-page-heading {
+    padding: 12px 16px;
+    gap: 12px;
+  }
 }
 
 @media (max-width: 580px) {
-  .settings-shell-dialog { width: 100vw; height: 100dvh; }
+  .settings-shell-dialog {
+    width: 100vw;
+    height: 100dvh;
+  }
 }
 
 .settings-page-content > .settings-section:first-child {

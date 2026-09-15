@@ -1,3 +1,4 @@
+import type { Bootstrap } from "../../src/shared/contracts";
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
@@ -71,9 +72,16 @@ test("reduced transparency and motion cover both navigation surfaces", async ({ 
 
 test("dark native sidebars share a translucent neutral scrim", async ({ page }) => {
   await mockWorklens(page);
+  await page.addInitScript(() => {
+    const invoke = window.worklens.invoke;
+    window.worklens.invoke = async (method, input) => {
+      const result = await invoke(method, input);
+      if (method === "bootstrap") (result as Bootstrap).settings.theme = "dark";
+      return result;
+    };
+  });
   await page.goto("/");
   await page.evaluate(() => {
-    document.documentElement.dataset.theme = "dark";
     document.documentElement.dataset.nativeVibrancy = "true";
   });
   const sidebar = page.locator(".sidebar");

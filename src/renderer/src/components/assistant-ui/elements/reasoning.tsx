@@ -249,6 +249,27 @@ function ReasoningText({
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const scroll = scrollRef.current;
+    const content = contentRef.current;
+    if (!scroll || !content) return;
+    const updateEdges = () => {
+      scroll.dataset.scrollAbove = String(scroll.scrollTop > 1);
+      scroll.dataset.scrollBelow = String(
+        scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop > 1,
+      );
+    };
+    updateEdges();
+    scroll.addEventListener("scroll", updateEdges, { passive: true });
+    const observer = new ResizeObserver(updateEdges);
+    observer.observe(scroll);
+    observer.observe(content);
+    return () => {
+      scroll.removeEventListener("scroll", updateEdges);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isPreview) return;
     const scrollEl = scrollRef.current;
     const contentEl = contentRef.current;
