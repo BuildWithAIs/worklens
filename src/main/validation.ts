@@ -116,6 +116,7 @@ export const schemas = {
   skillsToggle: z
     .object({ name: z.string().min(1).max(200), enabled: z.boolean() })
     .strict(),
+  skillsReveal: z.object({ name: z.string().min(1).max(200) }).strict(),
 };
 export function externalUrl(value: string) {
   const url = new URL(value);

@@ -269,6 +269,9 @@ else {
                 case "skillsToggle":
                   value = await skills.setEnabled(input.name, input.enabled);
                   break;
+                case "skillsReveal":
+                  shell.showItemInFolder(skills.pathOf(input.name));
+                  break;
               }
             return {
               ok: true,

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
-import { SkillsService } from "../src/main/skills";
+import { SkillsService, summarize } from "../src/main/skills";
 import { resources } from "../src/main/resources";
 import { StateStore } from "../src/main/storage";
 import { schemas } from "../src/main/validation";
@@ -19,26 +19,22 @@ async function skillMd(dir: string, name: string, description: string) {
   );
 }
 
-test("built-in skills are synced from the bundled resource and scanned separately from the universal directory", async () => {
+test("built-in skills are synced from the bundled resource and scanned separately from the local directory", async () => {
   const root = await mkdtemp(join(tmpdir(), "worklens-skills-"));
   try {
     const bundled = join(root, "bundled");
-    const universal = join(root, "agents-skills");
+    const local = join(root, "agents-skills");
     await skillMd(
       join(bundled, "pdf-tools"),
       "pdf-tools",
       "Extracts text from PDFs.",
     );
-    await skillMd(
-      join(universal, "brave-search"),
-      "brave-search",
-      "Web search.",
-    );
+    await skillMd(join(local, "brave-search"), "brave-search", "Web search.");
     const state = new StateStore(join(root, "settings.json"));
     await state.load();
     const skills = new SkillsService(
       join(root, "builtin"),
-      universal,
+      local,
       bundled,
       state,
     );
@@ -48,22 +44,24 @@ test("built-in skills are synced from the bundled resource and scanned separatel
       {
         name: "pdf-tools",
         description: "Extracts text from PDFs.",
+        summary: "Extracts text from PDFs.",
         path: join(root, "builtin", "pdf-tools", "SKILL.md"),
         source: "builtin",
         enabled: true,
       },
     ]);
-    expect(snapshot.universal).toEqual([
+    expect(snapshot.local).toEqual([
       {
         name: "brave-search",
         description: "Web search.",
-        path: join(universal, "brave-search", "SKILL.md"),
-        source: "agents",
+        summary: "Web search.",
+        path: join(local, "brave-search", "SKILL.md"),
+        source: "local",
         enabled: true,
       },
     ]);
-    // The universal directory is read-only from WorkLens's perspective.
-    expect(await readdir(universal)).toEqual(["brave-search"]);
+    // The local directory is read-only from WorkLens's perspective.
+    expect(await readdir(local)).toEqual(["brave-search"]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -151,7 +149,7 @@ test("resources() feeds SkillsService's paths into the real Pi resource loader a
   }
 });
 
-test("toggling a universal skill changes what the model is offered on the next turn of the same conversation", async () => {
+test("toggling a local skill changes what the model is offered on the next turn of the same conversation", async () => {
   const root = await mkdtemp(join(tmpdir(), "worklens-skills-session-"));
   const server = await mockServer();
   const paths = {
@@ -159,8 +157,8 @@ test("toggling a universal skill changes what the model is offered on the next t
     sessions: join(root, "sessions"),
     userData: join(root, "app"),
   };
-  const universal = join(root, "agents-skills");
-  await skillMd(join(universal, "brave-search"), "brave-search", "Web search.");
+  const local = join(root, "agents-skills");
+  await skillMd(join(local, "brave-search"), "brave-search", "Web search.");
   const runtime = await ModelRuntime.create({ modelsPath: null });
   runtime.registerProvider("worklens-test", {
     name: "本地测试",
@@ -174,7 +172,7 @@ test("toggling a universal skill changes what the model is offered on the next t
   await state.load();
   const skills = new SkillsService(
     join(root, "builtin"),
-    universal,
+    local,
     join(root, "missing-bundled"),
     state,
   );
@@ -251,4 +249,23 @@ test("skillsToggle input validates the skill name and keeps the request contract
   ]) {
     expect(schemas.skillsToggle.safeParse(value).success).toBe(false);
   }
+});
+
+test("summarize keeps the first sentence of a model-facing description within one row", () => {
+  expect(summarize("Web search.")).toBe("Web search.");
+  expect(
+    summarize(
+      'Use this skill when the user wants X. Trigger on queries like "what is X"; never answer from memory.',
+    ),
+  ).toBe("Use this skill when the user wants X.");
+  expect(summarize("用于生成周报。触发词：周报、汇报。")).toBe(
+    "用于生成周报。",
+  );
+  expect(summarize("Version 2.0 handles e.g. PDFs and more.")).toBe(
+    "Version 2.0 handles e.g. PDFs and more.",
+  );
+  const long = summarize(`${"word ".repeat(60)}end.`);
+  expect(long.length).toBeLessThanOrEqual(140);
+  expect(long.endsWith("…")).toBe(true);
+  expect(summarize("  spaced\n\nout   text  ")).toBe("spaced out text");
 });

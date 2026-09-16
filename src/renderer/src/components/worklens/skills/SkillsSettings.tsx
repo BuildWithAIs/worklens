@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Info, RefreshCw } from "lucide-react";
+import { FileSearchCorner, Info, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
@@ -26,6 +26,7 @@ import type {
 } from "../../../../../shared/contracts";
 
 const api = window.worklens;
+const mac = navigator.platform.startsWith("Mac");
 
 export function SkillsSettings({
   onSuccess,
@@ -73,7 +74,7 @@ export function SkillsSettings({
         await api.invoke("skillsToggle", { name: skill.name, enabled }),
       );
       onSuccess(
-        t(enabled ? "skills.enabled" : "skills.disabled", {
+        t(enabled ? "skills.skillEnabled" : "skills.skillDisabled", {
           skill: skill.name,
         }),
       );
@@ -82,6 +83,13 @@ export function SkillsSettings({
     } finally {
       pendingRef.current.delete(skill.name);
       setPending(new Set(pendingRef.current));
+    }
+  }
+  async function reveal(skill: SkillInfo) {
+    try {
+      await api.invoke("skillsReveal", { name: skill.name });
+    } catch (e) {
+      toast.add(settingsFailure(t("skills.revealFailed"), String(e), language));
     }
   }
   const search = query.trim().toLocaleLowerCase();
@@ -97,11 +105,11 @@ export function SkillsSettings({
         emptyLabel: t("skills.noBuiltinSkills"),
       },
       {
-        id: "agents",
-        label: t("skills.universal"),
-        description: t("skills.universalDescription"),
-        items: snapshot?.universal ?? [],
-        emptyLabel: t("skills.noUniversalSkills"),
+        id: "local",
+        label: t("skills.localHeading"),
+        description: t("skills.localDescription"),
+        items: snapshot?.local ?? [],
+        emptyLabel: t("skills.noLocalSkills"),
       },
     ] as const
   )
@@ -133,8 +141,8 @@ export function SkillsSettings({
           <NativeSelectOption value="builtin">
             {t("skills.builtin")}
           </NativeSelectOption>
-          <NativeSelectOption value="agents">
-            {t("skills.universal")}
+          <NativeSelectOption value="local">
+            {t("skills.local")}
           </NativeSelectOption>
         </NativeSelect>
         <TooltipIconButton
@@ -183,25 +191,48 @@ export function SkillsSettings({
                     <ItemTitle className="settings-entry-title">
                       {skill.name}
                     </ItemTitle>
-                    <Hint content={skill.description}>
-                      <ItemDescription
-                        className="settings-entry-description truncate"
-                        tabIndex={0}
-                      >
-                        {skill.description}
-                      </ItemDescription>
-                    </Hint>
+                    <ItemDescription className="settings-entry-description truncate">
+                      {skill.summary}
+                    </ItemDescription>
                   </ItemContent>
                   <ItemActions className="settings-entry-actions">
-                    <Switch
-                      size="sm"
-                      aria-label={t("skills.enableSkill", {
-                        skill: skill.name,
-                      })}
-                      checked={skill.enabled}
-                      disabled={pending.has(skill.name)}
-                      onCheckedChange={(checked) => void toggle(skill, checked)}
-                    />
+                    <Hint
+                      content={
+                        mac
+                          ? t("skills.showSkillFileInFinder")
+                          : t("skills.showSkillFileInFolder")
+                      }
+                    >
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t("skills.showSkillFile", {
+                          skill: skill.name,
+                        })}
+                        onClick={() => void reveal(skill)}
+                      >
+                        <FileSearchCorner strokeWidth={1.75} />
+                      </Button>
+                    </Hint>
+                    <Hint
+                      content={t(
+                        skill.enabled
+                          ? "skills.disableSkill"
+                          : "skills.enableSkill",
+                      )}
+                    >
+                      <Switch
+                        size="sm"
+                        aria-label={t("skills.toggleSkill", {
+                          skill: skill.name,
+                        })}
+                        checked={skill.enabled}
+                        disabled={pending.has(skill.name)}
+                        onCheckedChange={(checked) =>
+                          void toggle(skill, checked)
+                        }
+                      />
+                    </Hint>
                   </ItemActions>
                 </Item>
               ))}

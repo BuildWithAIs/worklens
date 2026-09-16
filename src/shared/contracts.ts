@@ -109,13 +109,16 @@ export interface Settings {
 export interface SkillInfo {
   name: string;
   description: string;
+  /** First sentence of the description, for list rows. */
+  summary: string;
   path: string;
-  source: "builtin" | "agents";
+  source: "builtin" | "local";
   enabled: boolean;
 }
 export interface SkillsSnapshot {
   builtin: SkillInfo[];
-  universal: SkillInfo[];
+  /** ~/.agents/skills on this machine, shared with other agent tools. */
+  local: SkillInfo[];
 }
 export interface MessageView {
   artifacts?: LocalArtifact[];
@@ -189,6 +192,7 @@ export interface Bootstrap {
   confluence?: ConfluenceConnection;
   jira?: JiraConnection;
   github?: GitHubConnection;
+  tavily?: TavilyConnection;
   globalUsage?: GlobalUsage;
   settings: Settings;
   providers: ProviderInfo[];
@@ -212,6 +216,9 @@ export interface Requests {
   githubSave: { input: GitHubSettingsInput; output: GitHubConnection };
   githubTest: { input: GitHubSettingsInput; output: string };
   githubRemove: { input: undefined; output: void };
+  tavilySave: { input: TavilySettingsInput; output: TavilyConnection };
+  tavilyTest: { input: TavilySettingsInput; output: string };
+  tavilyRemove: { input: undefined; output: void };
   htmlFileAction: {
     input: {
       id: string;
@@ -286,6 +293,7 @@ export interface Requests {
     input: { name: string; enabled: boolean };
     output: SkillsSnapshot;
   };
+  skillsReveal: { input: { name: string }; output: void };
 }
 export interface ConfluenceSettingsInput {
   url: string;
@@ -338,6 +346,15 @@ export interface GitHubConnection extends Omit<GitHubSettingsInput, "token"> {
   configured: boolean;
   login?: string;
   serverVersion?: string;
+  error?: string;
+}
+export interface TavilySettingsInput {
+  url: string;
+  token?: string;
+}
+export interface TavilyConnection extends Omit<TavilySettingsInput, "token"> {
+  configured: boolean;
+  plan?: string;
   error?: string;
 }
 export interface JiraConnection extends Omit<JiraSettingsInput, "token"> {
