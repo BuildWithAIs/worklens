@@ -12,6 +12,9 @@ import { connectorRequests } from "./ipc";
 import { GitHubConnections } from "./github/connection";
 import { GitHubService } from "./github/service";
 import { githubConnector } from "./github";
+import { TavilyConnections } from "./tavily/connection";
+import { TavilyService } from "./tavily/service";
+import { tavilyConnector } from "./tavily";
 
 /** Explicit composition; no dynamic loading, dependency container or plugin system. */
 export function createConnectors(
@@ -34,17 +37,24 @@ export function createConnectors(
     encryption,
   );
   const github = new GitHubService(githubConnections, artifacts);
+  const tavilyConnections = new TavilyConnections(
+    join(userData, "tavily.json"),
+    encryption,
+  );
+  const tavily = new TavilyService(tavilyConnections, artifacts);
   return {
     registry: new ConnectorRegistry([
       confluenceConnector(confluence),
       jiraConnector(jira),
       githubConnector(github),
+      tavilyConnector(tavily),
     ]),
-    requests: connectorRequests(confluence, jira, github),
+    requests: connectorRequests(confluence, jira, github, tavily),
     bootstrap: () => ({
       confluence: connections.info(),
       jira: jiraConnections.info(),
       github: githubConnections.info(),
+      tavily: tavilyConnections.info(),
     }),
   };
 }

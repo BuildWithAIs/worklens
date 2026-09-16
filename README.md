@@ -16,6 +16,10 @@ Connect one Confluence site in **Settings → Connections** using your URL and t
 
 Connect one GitHub site in **Settings → Connections** by entering its URL and a Personal Access Token. The address starts empty and supports your company's GitHub instance as well as GitHub.com. Explore code, manage issues and PRs, review changes, investigate CI, maintain releases, and work with Projects and Discussions. The integration uses Octokit and requires no GitHub CLI installation. See [setup, supported operations and validation limits](docs/connectors/github.md).
 
+## Web search (Tavily)
+
+Connect Tavily in **Settings → Connectors** with an API key to give the agent `web_search` and `web_fetch`. See [setup, tools and failure statuses](docs/connectors/tavily.md).
+
 ## Local development
 
 Requires Node.js 24 and npm.
