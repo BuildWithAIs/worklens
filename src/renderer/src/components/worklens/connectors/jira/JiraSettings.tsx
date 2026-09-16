@@ -245,6 +245,7 @@ export function JiraSettings({
           service="jira"
           action={action}
           missing={validation.missing}
+          unchanged={validation.unchanged}
           removable={!!connection?.url}
           onAction={(next) => void act(next)}
         />

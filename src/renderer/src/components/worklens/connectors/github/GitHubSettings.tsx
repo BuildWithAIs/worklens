@@ -146,6 +146,7 @@ export function GitHubSettings({
           service="github"
           action={action}
           missing={validation.missing}
+          unchanged={validation.unchanged}
           removable={!!connection?.url}
           onAction={(next) => void act(next)}
         />

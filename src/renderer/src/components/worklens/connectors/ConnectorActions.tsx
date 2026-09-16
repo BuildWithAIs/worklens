@@ -10,12 +10,15 @@ export function ConnectorActions({
   service,
   action,
   missing,
+  unchanged = false,
   removable,
   onAction,
 }: {
   service: string;
   action: ConnectorAction | null;
   missing: boolean;
+  /** Saved connection with no edits: testing stays possible, saving does not. */
+  unchanged?: boolean;
   removable: boolean;
   onAction: (action: ConnectorAction) => void;
 }) {
@@ -71,7 +74,7 @@ export function ConnectorActions({
           type="submit"
           className="w-24"
           form={`${service}-settings-form`}
-          disabled={!!action || missing}
+          disabled={!!action || missing || unchanged}
         >
           {action === "save" && (
             <LoaderCircle

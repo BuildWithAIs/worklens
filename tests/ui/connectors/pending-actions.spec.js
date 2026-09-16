@@ -66,9 +66,14 @@ for (const [service, name] of [
       await page.evaluate(() => {
         window.holdSave = true;
       });
-      await dialog
-        .getByRole("button", { name: t("Save", "保存"), exact: true })
-        .click();
+      // An unedited saved connection has nothing to save; rotate the token.
+      const save = dialog.getByRole("button", {
+        name: t("Save", "保存"),
+        exact: true,
+      });
+      await expect(save).toBeDisabled();
+      await dialog.locator(`#${service}-token`).fill("rotated-token");
+      await save.click();
       await expect(
         dialog.getByRole("button", {
           name: t("Saving…", "正在保存…"),

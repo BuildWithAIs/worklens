@@ -23,6 +23,7 @@ export function useConnectorAction(options: Options) {
   const { validation, refresh, onSuccess, onClose } = options;
   async function act(next: ConnectorAction) {
     if (busy) return;
+    if (next === "save" && validation.unchanged) return;
     if (next !== "remove" && !validation.validate()) return;
     setAction(next);
     validation.reset();
@@ -30,14 +31,13 @@ export function useConnectorAction(options: Options) {
       if (next === "test") {
         validation.notifyConnected(await options.test());
       } else {
-        if (next === "save") {
-          await options.save();
-          options.afterSave();
-        } else {
-          await options.remove();
-          options.afterRemove();
-        }
+        if (next === "save") await options.save();
+        else await options.remove();
         await refresh();
+        // Clear the form only once the parent holds the new connection, so a
+        // touched, now-empty field is not flagged as missing against the old one.
+        if (next === "save") options.afterSave();
+        else options.afterRemove();
         onSuccess(
           next === "save" ? options.savedMessage : options.removedMessage,
         );
