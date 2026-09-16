@@ -1,0 +1,1360 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>从一次代码评审，理解工具、技能与长任务 · WorkLens</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 28px;
+      }
+      body {
+        margin: 0;
+        background: #faf9f5;
+        color: #202d3b;
+        font:
+          16px/1.85 -apple-system,
+          BlinkMacSystemFont,
+          "PingFang SC",
+          "Microsoft YaHei",
+          sans-serif;
+      }
+      a {
+        color: #175bac;
+        text-underline-offset: 4px;
+      }
+      aside {
+        position: fixed;
+        width: 250px;
+        inset: 0 auto 0 0;
+        padding: 32px 24px;
+        overflow: auto;
+        border-right: 1px solid #d8dce0;
+        background: #f0f2ef;
+      }
+      aside b {
+        display: block;
+        font-size: 19px;
+        margin-bottom: 6px;
+      }
+      aside small {
+        color: #536373;
+      }
+      nav {
+        margin-top: 28px;
+      }
+      nav a {
+        display: block;
+        padding: 8px 0;
+        font-size: 13px;
+        text-decoration: none;
+        color: #36495b;
+      }
+      nav a:hover,
+      nav a:focus {
+        color: #175bac;
+        text-decoration: underline;
+      }
+      main {
+        max-width: 1120px;
+        margin-left: 250px;
+        padding: 65px 65px 80px;
+      }
+      header {
+        padding-bottom: 45px;
+        border-bottom: 3px solid #214e78;
+      }
+      .eyebrow {
+        letter-spacing: 0.13em;
+        font-size: 12px;
+        color: #526b81;
+        font-weight: 700;
+      }
+      h1 {
+        font-size: clamp(32px, 4vw, 53px);
+        line-height: 1.25;
+        letter-spacing: -0.035em;
+        margin: 22px 0;
+      }
+      header p {
+        max-width: 650px;
+        font-size: 19px;
+        color: #526373;
+      }
+      section {
+        padding: 48px 0;
+        border-bottom: 1px solid #d8dce0;
+      }
+      h2 {
+        font-size: 27px;
+        line-height: 1.5;
+        margin: 0 0 25px;
+      }
+      h3 {
+        font-size: 19px;
+        margin: 30px 0 12px;
+      }
+      p {
+        margin: 16px 0;
+      }
+      .lead {
+        font-size: 21px;
+        color: #214e78;
+      }
+      blockquote {
+        border-left: 3px solid #3b769e;
+        margin: 22px 0;
+        padding: 14px 22px;
+        background: #eef3f6;
+        color: #34566f;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        margin: 24px 0;
+      }
+      th {
+        text-align: left;
+        background: #eaf0f2;
+      }
+      th,
+      td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #d5dfe4;
+        vertical-align: top;
+      }
+      td:first-child {
+        min-width: 140px;
+        font-weight: 600;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 0.88em;
+        overflow-wrap: anywhere;
+      }
+      p code,
+      li code,
+      td code {
+        background: #eaf0f3;
+        padding: 2px 5px;
+        border-radius: 3px;
+      }
+      pre {
+        overflow: auto;
+        background: #162838;
+        color: #e6eef6;
+        padding: 22px;
+        line-height: 1.65;
+        white-space: pre;
+        font-size: 13px;
+        border-radius: 5px;
+        margin: 18px 0;
+      }
+      pre code {
+        font-size: inherit;
+        overflow-wrap: normal;
+      }
+      .source {
+        margin: 26px 0;
+      }
+      .source figcaption {
+        font:
+          12px/1.6 ui-monospace,
+          monospace;
+        overflow-wrap: anywhere;
+        color: #546776;
+      }
+      .source pre {
+        margin-top: 7px;
+        max-height: 520px;
+      }
+      .flow {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 24px 0;
+        font-size: 14px;
+      }
+      .flow span {
+        border: 1px solid #aac0cf;
+        padding: 10px 14px;
+        background: #f5f9fb;
+      }
+      .flow b {
+        color: #698296;
+      }
+      .lab {
+        margin: 30px 0;
+        padding: 22px 26px;
+        background: #edf3f1;
+        border: 1px solid #b8cbc5;
+        border-radius: 6px;
+      }
+      .lab h3 {
+        margin-top: 0;
+      }
+      .lab label {
+        display: block;
+        margin: 12px 0;
+      }
+      .lab pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 260px;
+      }
+      .lab small {
+        display: block;
+        color: #50685f;
+      }
+      button,
+      select {
+        font: inherit;
+        font-size: 14px;
+        padding: 9px 14px;
+        border: 1px solid #94a9b6;
+        border-radius: 4px;
+        background: white;
+        color: #173b55;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:hover {
+        background: #dfebf3;
+      }
+      button:disabled {
+        background: #e1e4e5;
+        color: #6a7176;
+        cursor: not-allowed;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #1874c8;
+        outline-offset: 3px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .note {
+        padding: 14px 18px;
+        border-left: 3px solid #b88b3e;
+        background: #f7f0df;
+      }
+      dt {
+        font-weight: 700;
+        margin-top: 20px;
+      }
+      dd {
+        margin: 4px 0 0 0;
+        color: #435767;
+      }
+      li {
+        margin: 10px 0;
+      }
+      footer {
+        padding-top: 35px;
+        font-size: 13px;
+        color: #65717b;
+      }
+      @media (max-width: 850px) {
+        aside {
+          position: static;
+          width: auto;
+          padding: 20px;
+          border-right: 0;
+          border-bottom: 1px solid #d8dce0;
+        }
+        nav {
+          display: flex;
+          gap: 14px;
+          overflow: auto;
+          margin-top: 14px;
+        }
+        nav a {
+          white-space: nowrap;
+        }
+        main {
+          margin-left: 0;
+          padding: 32px 22px;
+        }
+        td:first-child {
+          min-width: 95px;
+        }
+        table {
+          font-size: 13px;
+        }
+        th,
+        td {
+          padding: 9px 7px;
+        }
+        .source pre {
+          font-size: 12px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      @media print {
+        aside,
+        .lab {
+          display: none;
+        }
+        main {
+          margin: 0;
+          max-width: none;
+          padding: 0;
+        }
+        pre,
+        .source pre {
+          max-height: none;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          background: #eee;
+          color: #111;
+        }
+        section {
+          break-before: auto;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <b>WorkLens · 代码读本</b
+      ><small>PR #27 / 2026.09.16<br />从产品行为读到实际代码</small>
+      <nav aria-label="章节目录">
+        <a href="#map">先认识：谁在做什么</a
+        ><a href="#basics">读代码前：九个基础词</a
+        ><a href="#results">① 完整保存，短预览，路径放前面</a
+        ><a href="#read">② Web Fetch：按需续读，不是每页塞 12k</a
+        ><a href="#http">③ 8 MiB：检查真实收到的数据</a
+        ><a href="#research">④ Deep Research：一次提交，多次查询</a
+        ><a href="#skills">⑤ Skills：删除旧内容，统一实际来源</a
+        ><a href="#save">⑥ Save：禁用条件写得合理吗？</a
+        ><a href="#structure">⑦ 重复代码与文件大小，怎样判断</a
+        ><a href="#tests">⑧ 怎么测试：模拟能证明什么，真实调用看什么</a
+        ><a href="#pr">⑨ 提交之后：同一个 PR 会自动更新</a>
+      </nav>
+    </aside>
+    <main>
+      <header>
+        <div class="eyebrow">代码评审学习笔记</div>
+        <h1>同事的这几条建议，<br />到底在修什么？</h1>
+        <p>
+          一份可以慢慢读的代码讲解。先建立基础概念，再沿着真实数据流理解
+          Tavily、Skills、Save 状态和这次修复。
+        </p>
+        <small>约 30–45 分钟 · 3 个本地交互演示 · 无外部依赖</small>
+      </header>
+      <section id="map">
+        <h2>先认识：谁在做什么</h2>
+        <p class="lead">
+          这次改动的核心：让工具拿到的信息可以找回，让长任务可以继续，让界面显示的状态与真正执行的状态一致。
+        </p>
+        <p>
+          你可以把一次联网回答理解为下面这条调用链。模型负责决定需要什么资料；真正联网、保存文件的是
+          WorkLens 的代码。
+        </p>
+        <div class="flow">
+          <span>你的问题</span><b>→</b><span>模型选择工具</span><b>→</b
+          ><span>Connector</span><b>→</b><span>Tavily API</span><b>→</b
+          ><span>本地文件 + 短回执</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>名词</th>
+              <th>在本项目中是什么意思</th>
+              <th>不能混淆的地方</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Skill</td>
+              <td>
+                SKILL.md
+                中的说明：什么任务该用什么工具、怎么执行、怎么处理失败。
+              </td>
+              <td>说明本身不会实现网络请求，也不会自动配置 API Key。</td>
+            </tr>
+            <tr>
+              <td>Connector</td>
+              <td>连接服务的程序模块，管理凭据、HTTP 请求和可调用工具。</td>
+              <td>
+                配置好 Tavily 才能提供对应工具。单独安装 skill 不等于接入服务。
+              </td>
+            </tr>
+            <tr>
+              <td>Tool</td>
+              <td>模型能调用的函数入口，例如 web_search、web_research。</td>
+              <td>模型传入参数，主进程校验后执行，结果再返回模型。</td>
+            </tr>
+            <tr>
+              <td>API</td>
+              <td>Tavily 提供的程序接口，例如 POST /research。</td>
+              <td>远端接口能力与我们写的 skill 文案是两个来源。</td>
+            </tr>
+            <tr>
+              <td>Renderer / Main / IPC</td>
+              <td>
+                Renderer 画界面；Main 做网络、文件和凭据操作；IPC
+                是它们之间的类型化消息通道。
+              </td>
+              <td>按钮禁用改善体验，主进程校验才是执行边界。</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          <strong>所以两层都有价值：</strong>Connector
+          使“提交研究、查状态、保存报告”成为可能；skill
+          指导模型正确使用这些能力。当前 <code>tavily-research</code> 是
+          WorkLens 编写的指导文件，接的是 Tavily 官方 API，不能称为从 Tavily
+          官方下载的 skill。
+        </p>
+      </section>
+      <section id="basics">
+        <h2>读代码前：九个基础词</h2>
+        <dl>
+          <dt>函数与参数</dt>
+          <dd>
+            函数是一段可复用步骤。<code>saveResult(..., text)</code> 表示把 text
+            交给保存流程处理。
+          </dd>
+          <dt>对象与 JSON</dt>
+          <dd>
+            <code>{status: "success", resultPath: "…"}</code>
+            是键值组成的对象。JSON 是传输或保存这种结构的文本格式。<code
+              >JSON.stringify</code
+            >
+            把对象变成文本，<code>JSON.parse</code> 把文本读回对象。
+          </dd>
+          <dt>async / await / Promise</dt>
+          <dd>
+            网络和磁盘需要等待。Promise 表示尚未完成的结果；await
+            等结果完成，再执行后续语句。await
+            期间其他操作可以继续，所以会有并发。
+          </dd>
+          <dt>return / throw / try…catch…finally</dt>
+          <dd>
+            return 返回结果；throw 抛出失败；catch 处理失败；finally
+            无论成功失败都执行，常用来释放读取器、恢复按钮状态。
+          </dd>
+          <dt>&amp;&amp; / || / !</dt>
+          <dd>
+            分别是“并且”“或者”“取反”。<code>busy || missing || unchanged</code>
+            表示任一条件为真就禁用 Save。
+          </dd>
+          <dt>字符、字节、token</dt>
+          <dd>
+            它们不是同一单位。UTF-8 中中文常占 3 字节，许多 emoji 占 4
+            字节；模型 token 是另一种切分。JavaScript 的 string.length 实际数
+            UTF-16 单元，也不总等于肉眼看到的字符数。
+          </dd>
+          <dt>Stream / chunk</dt>
+          <dd>
+            Stream 是逐块到达的数据流；chunk
+            是一块数据。可以一边收一边统计，而不用先把整份响应读进内存。
+          </dd>
+          <dt>持久化 / compaction</dt>
+          <dd>
+            持久化是写入磁盘，重启后仍可读取。Compaction
+            把较早对话压缩为摘要，以腾出上下文；摘要不是完整原文备份。
+          </dd>
+          <dt>幂等 / handle</dt>
+          <dd>
+            幂等指重复执行不会制造额外效果。查询状态通常可以重复；创建付费研究不应随意重试。Handle
+            是本地任务标识，用来继续查已有任务。
+          </dd>
+        </dl>
+      </section>
+      <section id="results">
+        <h2>① 完整保存，短预览，路径放前面</h2>
+        <blockquote>
+          同事：web_search 和 web_fetch 超过阈值都应落完整结果，inline 只留短
+          preview；resultPath 放在结果最前面。
+        </blockquote>
+        <p>
+          <code>inline</code> 指直接塞进工具回复；<code>preview</code>
+          是简短预览；<code>resultPath</code> 是完整结果在磁盘上的位置。
+        </p>
+        <p>
+          锁定的 Pi 版本在为摘要序列化对话时，对一条工具结果保留前
+          <strong>2,000 个 JavaScript 字符单元</strong
+          >。这是摘要输入的截断规则，并非“所有正常工具输出都只能有 2,000
+          字符”，更不保证摘要模型一定逐字保留路径。
+        </p>
+        <p>
+          如果结果先放 20,000
+          字正文，最后才写路径，摘要输入可能根本看不到路径。即使完整文件存在，后续模型也可能不知道去哪里读。
+        </p>
+        <div class="lab">
+          <h3>试一试：同样的信息，顺序不同</h3>
+          <label
+            ><input id="pathFirst" type="checkbox" checked />
+            把路径放在最前面</label
+          >
+          <pre id="compactOutput" aria-live="polite"></pre>
+          <p id="compactStatus" role="status"></p>
+          <small
+            >本地教学模拟：生成约 3,000
+            字正文，只展示截取后的头尾；不会调用模型。</small
+          >
+        </div>
+        <p>
+          当前策略：搜索结果序列化后超过
+          <code>1800</code>
+          才落盘；抓网页结果<strong>无论长短都落盘</strong>；输出中先写路径、续读方式，再写状态和一段
+          <code>500</code>
+          字符预览。阈值留下少量包装余量，但它不是对任意超长路径的严格 2,000
+          字符保证。
+        </p>
+        <figure class="source">
+          <figcaption>
+            实际代码 · src/main/connectors/tavily/results.ts
+          </figcaption>
+          <pre><code>export async function toolResult(
+  connections: TavilyConnections,
+  artifacts: LocalArtifacts,
+  sessionId: string,
+  operation: string,
+  value: Json,
+  signal?: AbortSignal,
+  alwaysSave = false,
+) {
+  const full = connections.redact(JSON.stringify(value, null, 2));
+  let envelope = value;
+  if (alwaysSave || full.length &gt; INLINE_LIMIT) {
+    try {
+      const saved = await saveResult(
+        connections,
+        artifacts,
+        sessionId,
+        `${operation}-result.json`,
+        full,
+        signal,
+      );
+      envelope = {
+        ...saved,
+        status: value.status,
+        truncated: true,
+        preview: full.slice(0, 500),
+      };
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      // Never claim a full result exists when storage failed, or silently discard it.
+      envelope = {
+        status: &quot;storage_error&quot;,
+        remoteStatus: value.status,
+        retrievalError:
+          &quot;Could not save the result. Full data remains inline; preserve it before compaction.&quot;,
+        result: value,
+      };
+    }
+  }
+  return response(connections, envelope);
+}</code></pre>
+        </figure>
+        <ol>
+          <li>
+            <code>JSON.stringify(value, null, 2)</code>
+            保留完整对象，并排版为可读 JSON。
+          </li>
+          <li>
+            <code>connections.redact</code> 先去除凭据。这里的“完整”指保留 API
+            字段与正文，敏感值仍会脱敏。
+          </li>
+          <li>
+            <code>alwaysSave || full.length &gt; INLINE_LIMIT</code>
+            决定是否保存；web_fetch 会启用 alwaysSave。
+          </li>
+          <li>
+            <code>...saved</code> 把路径等字段展开到最前面；preview
+            是整次调用的一段预览。
+          </li>
+          <li>
+            磁盘失败时返回 <code>storage_error</code> 并保留完整 inline
+            数据，明确告知未保存。此时不能承诺压缩后可恢复。
+          </li>
+        </ol>
+        <p class="note">
+          “完整保存”也有边界：HTTP 响应已超过 8 MiB
+          会先拒绝；不能把超限拒绝与保存成功混为一谈。
+        </p>
+      </section>
+      <section id="read">
+        <h2>② Web Fetch：按需续读，不是每页塞 12k</h2>
+        <blockquote>
+          同事：超过阈值先落盘，需要时让模型用 read + offset/limit
+          续读，不要按页内联 12k × N；小于等于 12k 的页也要能找回。
+        </blockquote>
+        <p>
+          原来每页截取 12,000 字，如果抓 5 页，总计仍可能约 60,000 字，还没算
+          JSON 包装。“每页有限制”不等于“整次调用有限制”。同时，短页若只
+          inline，压缩后就缺少可定位的文件副本。
+        </p>
+        <p>
+          现在一次 web_fetch 把整个 API 返回对象保存下来，包括成功页与
+          failed_results。模型先看短回执，确实需要原文时再读磁盘。
+        </p>
+        <pre><code>// 教学示例：path 使用本次真实返回的 resultPath
+read({ path: resultPath, offset: 1, limit: 200 })
+// 如果确实已读到第 200 行，下一段从 201 开始。
+read({ path: resultPath, offset: 201, limit: 200 })</code></pre>
+        <p>
+          <strong>offset 是从 1 开始的行号，limit 是最多读取的行数</strong
+          >，不是字节位置，也不是页码。应按 read
+          实际返回的下一行提示继续，不要假定每次一定读满。
+        </p>
+        <p>
+          还有一个细节：JSON
+          的字符串可能本来就只有一行，但这一行有几十万字。按“行”续读时，超长单行可能被字节上限截断，因此当前生成显示副本，把每行控制在
+          200 UTF-8 字节以内。200 行加换行大约 40 KiB，低于 Pi 默认 50 KiB
+          限制。
+        </p>
+        <figure class="source">
+          <figcaption>实际代码 · src/main/readable-lines.ts</figcaption>
+          <pre><code>// 200 lines fit below Pi read&#x27;s 50 KiB byte limit, including multibyte text.
+export function readableLines(text: string): string[] {
+  return text.split(&quot;\n&quot;).flatMap((line) =&gt; {
+    const chunks: string[] = [];
+    let chunk = &quot;&quot;;
+    let bytes = 0;
+    for (const character of line) {
+      const size = Buffer.byteLength(character);
+      if (bytes + size &gt; 200) {
+        chunks.push(chunk);
+        chunk = &quot;&quot;;
+        bytes = 0;
+      }
+      chunk += character;
+      bytes += size;
+    }
+    chunks.push(chunk);
+    return chunks;
+  });
+}</code></pre>
+        </figure>
+        <p>
+          循环使用 <code>for…of</code> 遍历字符，再用
+          <code>Buffer.byteLength</code> 计算 UTF-8 字节数。超过 200
+          就开始新行，不从多字节字符中间硬切。
+        </p>
+        <table>
+          <tr>
+            <th>返回字段</th>
+            <th>用途</th>
+          </tr>
+          <tr>
+            <td>resultPath</td>
+            <td>给模型 read 的显示版本；可能插入换行。</td>
+          </tr>
+          <tr>
+            <td>rawResultPath</td>
+            <td>
+              保留脱敏后原始内容；程序要解析 JSON 或需要精确文本时使用它。
+            </td>
+          </tr>
+          <tr>
+            <td>totalLines / retrieval</td>
+            <td>总行数和续读说明。</td>
+          </tr>
+        </table>
+        <p>
+          两个路径有时相同：原文件不需要换行时，不重复生成副本。显示版本可能不是合法
+          JSON，所以不能用它代替 rawResultPath 做 JSON.parse。
+        </p>
+      </section>
+      <section id="http">
+        <h2>③ 8 MiB：检查真实收到的数据</h2>
+        <blockquote>
+          同事：HTTP 8 MiB 只看 Content-Length，应按实际字节 stream cap。
+        </blockquote>
+        <p>
+          <code>Content-Length</code>
+          是服务端的响应头。它可能缺失；在解压缩等场景下，它也不等于 fetch
+          暴露给代码的正文大小。因此，只在头部写“超过 8 MiB 就拒绝”并不足够。
+        </p>
+        <pre><code>// 原思路的教学简化：只信响应头
+if (Number(response.headers.get("content-length")) &gt; MAX_RESPONSE) throw error;
+const text = await response.text(); // 这里仍可能读入很大的正文</code></pre>
+        <p>
+          修复保留响应头预检查，同时读取真实数据流。<code
+            >8 × 1024 × 1024 = 8,388,608</code
+          >
+          字节；MiB 与十进制 MB 不一样。
+        </p>
+        <figure class="source">
+          <figcaption>实际代码 · src/main/connectors/tavily/http.ts</figcaption>
+          <pre><code>      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const reader = response.body?.getReader();
+      if (reader) {
+        try {
+          for (;;) {
+            this.signal.throwIfAborted();
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size &gt; MAX_RESPONSE)
+              throw new ServiceError(
+                &quot;result_too_large&quot;,
+                &quot;Tavily 响应超过 8 MiB，请缩小查询范围&quot;,
+              );
+            chunks.push(value);
+          }
+        } finally {
+          await reader.cancel().catch(() =&gt; {});
+          reader.releaseLock();
+        }
+      }
+      const text = Buffer.concat(chunks, size).toString(&quot;utf8&quot;);</code></pre>
+        </figure>
+        <ol>
+          <li><code>getReader()</code> 获取数据流读取器。</li>
+          <li><code>await reader.read()</code> 拿下一块，done 表示读完。</li>
+          <li>
+            先把
+            <code>value.byteLength</code>
+            加入累计值，超限立即抛错，避免继续累计。
+          </li>
+          <li><code>finally</code> 取消读取并释放锁，失败也执行清理。</li>
+          <li>
+            未超限才拼接缓冲区并解码 UTF-8，避免中文字符跨 chunk
+            时分段解码损坏。
+          </li>
+        </ol>
+        <p>
+          这个 cap 限制的是应用接受并累计的响应正文；不是整个进程内存绝不会超过
+          8 MiB。当前 chunk、缓冲区拼接和解码都会产生额外开销。测试覆盖缺失/错误
+          Content-Length 时实际超限的情况。
+        </p>
+      </section>
+      <section id="research">
+        <h2>④ Deep Research：一次提交，多次查询</h2>
+        <blockquote>
+          同事：去掉 DeerFlow prompt skill，改接 Tavily 官方 POST
+          /research。它是长任务，现有 120s 和 Accept: application/json 不够。
+        </blockquote>
+        <p>
+          之前的 prompt skill 是指导模型自己规划和搜索；它不等于调用 Tavily
+          托管的研究任务。现在删除旧
+          deep-research，添加四个工具中的研究两个入口：
+        </p>
+        <table>
+          <tr>
+            <th>工具</th>
+            <th>作用</th>
+            <th>模型拿到什么</th>
+          </tr>
+          <tr>
+            <td>web_research</td>
+            <td>POST /research 提交一次任务。</td>
+            <td>handle + accepted/其他状态。</td>
+          </tr>
+          <tr>
+            <td>web_research_status</td>
+            <td>
+              根据本地 handle 找 requestId，<a
+                href="https://docs.tavily.com/documentation/api-reference/endpoint/research-get"
+                >GET 查询已有任务</a
+              >。
+            </td>
+            <td>运行状态，或报告路径和来源数据路径。</td>
+          </tr>
+        </table>
+        <p>
+          <strong>我们选择 JSON 轮询，没有接 SSE。</strong>SSE
+          是持续连接、服务端不断发事件；polling 是客户端隔一段时间发查询。<a
+            href="https://docs.tavily.com/documentation/api-reference/endpoint/research"
+            >官方创建接口</a
+          >支持 <code>stream:false</code> 的任务方式，因此保留
+          <code>Accept: application/json</code>
+          合理。修复重点是把长任务寿命与一次 HTTP
+          等待分开，不是把所有请求超时改成无限。
+        </p>
+        <div class="flow">
+          <span>本地写 submitting</span><b>→</b><span>POST 一次</span><b>→</b
+          ><span>保存 requestId</span><b>→</b><span>GET 查询</span><b>→</b
+          ><span>保存报告</span>
+        </div>
+        <div class="lab">
+          <h3>任务生命周期模拟</h3>
+          <div class="controls">
+            <button id="jobSubmit">提交模拟任务</button
+            ><button id="jobPoll" disabled>查询一次</button
+            ><button id="jobRestart">模拟重启界面</button
+            ><button id="jobReset">重置演示</button>
+          </div>
+          <pre id="jobOutput" aria-live="polite">
+尚未提交。此演示不联网、不计费。</pre
+          >
+        </div>
+        <p>
+          实际代码每次 HTTP 等待有 60 秒超时，TavilyHttp 生命周期总上限 120
+          秒。一次状态调用的轮询等待窗口最多 30 秒，默认 5
+          秒；单次网络请求耗时也算实际等待，因此 wait_seconds
+          不是严格的墙钟超时保证。远端任务可以继续运行，稍后再拿同一个 handle
+          查询。
+        </p>
+        <figure class="source">
+          <figcaption>
+            实际代码 · src/main/connectors/tavily/research.ts
+          </figcaption>
+          <pre><code>      const existing = await this.load(path);
+      if (existing) {
+        this.check(existing, http);
+        return this.pending(handle, existing);
+      }
+      http.signal.throwIfAborted();
+      const record: ResearchRecord = {
+        revision: http.connection.revision,
+        state: &quot;submitting&quot;,
+      };
+      // Persist before dispatch: a crash or lost response must not trigger a second POST.
+      await atomicJson(path, record);
+      try {
+        const data = await http.request(&quot;POST&quot;, &quot;/research&quot;, {
+          ...input,
+          stream: false,
+        });
+        if (
+          typeof data.request_id !== &quot;string&quot; ||
+          !/^[\w-]{1,200}$/.test(data.request_id) ||
+          this.connections.redact(data.request_id) !== data.request_id
+        )
+          throw new ServiceError(
+            &quot;invalid_response&quot;,
+            &quot;Tavily 未返回有效的研究任务标识&quot;,
+          );
+        record.requestId = data.request_id;
+        record.state = &quot;pending&quot;;
+        // Preserve the receipt even if the local run was just cancelled.
+        await atomicJson(path, record);
+        return this.pending(handle, record);</code></pre>
+        </figure>
+        <h3>为什么必须先落一张“提交记录”？</h3>
+        <p>
+          最危险的情况是：Tavily 已收到付费任务，但网络断开，WorkLens
+          没拿到回执。如果此时自动重试 POST，可能创建第二个付费任务。
+        </p>
+        <p>
+          现在用连接 revision 与本次 runId/callId 生成稳定
+          handle，在同一会话的任务目录中先写
+          <code>submitting</code
+          >，再发请求。相同调用重试时先查记录，已有记录就不再发 POST。拿到
+          requestId 后，即使本地刚取消，也尽量保存它。
+        </p>
+        <p>
+          这叫“防止重复提交”，但不能宣称远端
+          exactly-once：它只覆盖同一调用标识。模型另起一次新调用会有新标识，所以
+          skill 也明确要求不要重新提交。
+        </p>
+        <table>
+          <tr>
+            <th>遇到的情况</th>
+            <th>处理</th>
+          </tr>
+          <tr>
+            <td>有 requestId，仍在运行</td>
+            <td>
+              同一会话中用 handle 继续查询；停止本地等待不会取消远端任务。
+            </td>
+          </tr>
+          <tr>
+            <td>发送后没有可靠回执</td>
+            <td>
+              submission_unknown。不要自动再提交；需核对 Tavily 账号侧任务。
+            </td>
+          </tr>
+          <tr>
+            <td>已完成但报告保存失败</td>
+            <td>storage_error；用同一 handle 再查，重试保存，不创建新研究。</td>
+          </tr>
+          <tr>
+            <td>应用重启</td>
+            <td>
+              任务记录在磁盘；原会话、原连接仍可恢复查询。没有实现后台自动通知。
+            </td>
+          </tr>
+          <tr>
+            <td>更换 Tavily 连接</td>
+            <td>revision 不同，旧 handle 被拒绝。已保存的本地报告仍在。</td>
+          </tr>
+        </table>
+        <h3>报告如何保存？</h3>
+        <p>
+          完成后保存原 API 对象 JSON 和带来源列表的 Markdown
+          报告。回执只返回路径、行数、handle、状态；模型需要读全文时再调用
+          read。查询已完成任务优先返回本地记录中的结果，避免重复下载。
+        </p>
+      </section>
+      <section id="skills">
+        <h2>⑤ Skills：删除旧内容，统一实际来源</h2>
+        <p>
+          <code>code-documentation</code>
+          已按你的要求删除，而不是继续修补不存在的 WorkLens 路径和 present_files
+          指令。旧 DeerFlow deep-research 也删除；新目录及 frontmatter 名称为
+          <code>tavily-research</code>。
+        </p>
+        <p>
+          这解决两种问题：文档指向不存在的工具，会让模型执行失败；名称或卡片描述与实际文件不同，会让用户难以判断自己启用了什么。
+        </p>
+        <p>
+          界面现在直接显示文件中的 name；卡片描述从原 description 提取首句、最多
+          140 字符，不另写宣传摘要；点击名称的 Dialog 显示完整
+          description。关于“下一轮生效”的说明只放在 Dialog，分组 information
+          不重复放。
+        </p>
+        <details>
+          <summary>查看这次 Dialog 的明暗主题截图</summary>
+          <p>
+            使用隔离模拟连接数据和真实 tavily-research
+            文件描述，展示当前构建的界面。
+          </p>
+          <figure>
+            <img
+              src="assets/skills-dialog-light.png"
+              alt="浅色主题：tavily-research 详情展示文件原始描述和下一轮生效提示"
+              style="width: 100%; height: auto"
+              loading="lazy"
+            />
+            <figcaption>浅色主题</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="assets/skills-dialog-dark.png"
+              alt="深色主题：同一个技能详情对话框"
+              style="width: 100%; height: auto"
+              loading="lazy"
+            />
+            <figcaption>深色主题</figcaption>
+          </figure>
+        </details>
+        <h3>同名文件为什么还需要 ID？</h3>
+        <p>
+          内置和本地都可能有同名 skill。name
+          适合表达名称，不能唯一定位文件。现在 ID 来自
+          <code>SHA256(source + path)</code>；打开文件和切换开关都按 ID
+          找记录。界面和真正加载给模型的路径采用同一套“内置优先”规则，本地同名项显示为被覆盖，不能通过它误改另一个来源。
+        </p>
+        <h3>为什么并发开关可能丢失设置？</h3>
+        <pre><code>// 教学时间线：初始 disabled = []
+A 读取 [] → 准备写 [alpha]
+B 读取 [] → 准备写 [beta]
+A 写 [alpha]
+B 写 [beta]   // alpha 的更新被覆盖
+
+// 修复：完整的读 → 改 → 写进入同一个队列
+A 读 [] → 写 [alpha] → B 读 [alpha] → 写 [alpha, beta]</code></pre>
+        <figure class="source">
+          <figcaption>实际代码 · src/main/skills.ts</figcaption>
+          <pre><code>  setEnabled(id: string, enabled: boolean) {
+    return this.queue.run(&quot;skills&quot;, async () =&gt; {
+      const skill = this.find(id);
+      if (skill.shadowedBy)
+        throw new Error(&quot;同名技能已由其他来源提供，请修改生效版本的开关&quot;);
+      const disabled = this.disabledNames();
+      if (enabled) disabled.delete(skill.name);
+      else disabled.add(skill.name);
+      await this.state.update({ disabledSkills: [...disabled] });
+      return this.refresh();
+    });
+  }</code></pre>
+        </figure>
+        <p>
+          重点是把“读取旧值”也放进队列；如果只把最后写盘串行，仍会把基于旧快照算出的结果写进去。队列复用项目原有
+          SerialQueue。
+        </p>
+        <h3>刷新为什么需要 generation？</h3>
+        <p>
+          只修改 SKILL.md
+          正文时，名字和开关可能都没变。若会话缓存只比较名字，就会继续用旧内容。刷新现在增加
+          generation，configurationKey
+          随之变化，下一轮重新加载配置。已经读入当前轮的旧指令不会从模型上下文凭空消失，这就是
+          Dialog 提示的实际含义。
+        </p>
+      </section>
+      <section id="save">
+        <h2>⑥ Save：禁用条件写得合理吗？</h2>
+        <p>
+          <strong
+            >整体合理，而且已集中为共享判断，没有让每个 Connector
+            各写一套。</strong
+          >连接器自己的字段与 IPC
+          调用仍各自维护，共享代码只处理表单评估和动作生命周期。
+        </p>
+        <table>
+          <tr>
+            <th>情况</th>
+            <th>Save</th>
+            <th>原因</th>
+          </tr>
+          <tr>
+            <td>必填字段只有空白</td>
+            <td>禁用</td>
+            <td>trim 后为空，无法组成请求。</td>
+          </tr>
+          <tr>
+            <td>已保存，没改动，token 输入为空</td>
+            <td>禁用</td>
+            <td>token 可以沿用加密保存的凭据，并非缺失；但无需重复保存。</td>
+          </tr>
+          <tr>
+            <td>输入新 token，其他必填完整</td>
+            <td>可点</td>
+            <td>有实际变更。</td>
+          </tr>
+          <tr>
+            <td>内容齐全但格式错误</td>
+            <td>可点，点击后显示字段错误</td>
+            <td>让用户知道为什么错误；校验失败不会发出保存请求。</td>
+          </tr>
+          <tr>
+            <td>上次连接出错，信息没变</td>
+            <td>可重试</td>
+            <td>不把失败连接永远锁为 unchanged。</td>
+          </tr>
+          <tr>
+            <td>正在 Test / Save / Remove</td>
+            <td>禁用</td>
+            <td>等待当前动作结束。</td>
+          </tr>
+        </table>
+        <div class="lab">
+          <h3>亲手看禁用条件</h3>
+          <label
+            >场景
+            <select id="saveCase">
+              <option value="empty">首次配置，缺少 token</option>
+              <option value="unchanged">已有连接，无改动</option>
+              <option value="edited">填入新 token</option>
+              <option value="invalid">已有 GitHub 地址，误加 /repo</option>
+              <option value="failed">已有连接上次失败</option>
+            </select></label
+          ><label
+            ><input id="saveBusy" type="checkbox" /> 当前有操作在进行</label
+          ><button id="saveDemo">Save</button>
+          <pre id="saveReason" aria-live="polite"></pre>
+          <small>这里演示的是状态公式，不会保存真实设置。</small>
+        </div>
+        <h3>这次复查发现的边界问题</h3>
+        <p>
+          保存地址原本为 <code>https://github.com</code>，用户误改成
+          <code>https://github.com/repo</code>。用于判断凭据能否复用的函数只比较
+          origin，两者 origin 相同，于是旧逻辑把它当成
+          unchanged；按钮禁用后，用户无法点击获得“不允许仓库路径”的错误。
+        </p>
+        <p>
+          修复让 unchanged
+          同时要求“当前没有字段错误”。正常的末尾斜杠仍视为同一个有效地址，不制造无意义的保存。
+        </p>
+        <figure class="source">
+          <figcaption>
+            实际代码 ·
+            src/renderer/src/components/worklens/connectors/connector-validation.ts
+          </figcaption>
+          <pre><code>  // Equivalent valid values need no save. Invalid edits must remain actionable
+  // so explicit validation can explain the error (for example a GitHub path).
+  // A connection whose last validation failed can still be re-saved as a retry.
+  const unchanged =
+    canReuseToken &amp;&amp;
+    !optional(form.token) &amp;&amp;
+    !connection?.error &amp;&amp;
+    Object.keys(errors).length === 0;</code></pre>
+        </figure>
+        <p>
+          <code>Object.keys(errors).length === 0</code>
+          表示没有任何错误字段；不是“没有输入”。新增回归测试覆盖路径、query、hash
+          三种无效修改。
+        </p>
+        <h3>保存成功为什么先刷新再清空 token？</h3>
+        <p>
+          如果先清空 token，但界面还保留旧的“未配置”连接状态，表单会瞬间判定
+          token 缺失并闪红。共享动作先 await
+          refresh，让父组件拿到已保存连接，再清空输入。保存成功也不等于连接测试成功，两种反馈仍区分。
+        </p>
+        <p>
+          禁用是交互规则，不能代替主进程校验。IPC
+          输入仍需校验格式、服务类型、凭据复用资格等，避免绕开界面的调用直接执行。
+        </p>
+      </section>
+      <section id="structure">
+        <h2>⑦ 重复代码与文件大小，怎样判断</h2>
+        <p>
+          不能用“文件越短越好”判断质量。更有用的检查是：一个概念有没有两份实现？一个文件是否同时承担无关职责？修复一处是否必须同步改很多地方？
+        </p>
+        <table>
+          <tr>
+            <th>文件</th>
+            <th>主要职责</th>
+          </tr>
+          <tr>
+            <td>tavily/connection.ts</td>
+            <td>配置、凭据与连接快照。</td>
+          </tr>
+          <tr>
+            <td>tavily/http.ts</td>
+            <td>请求、超时、重试、字节限制、HTTP 错误转换。</td>
+          </tr>
+          <tr>
+            <td>tavily/service.ts</td>
+            <td>工具参数定义、校验与分发。</td>
+          </tr>
+          <tr>
+            <td>tavily/research.ts</td>
+            <td>任务记录、提交去重、查状态与报告保存。</td>
+          </tr>
+          <tr>
+            <td>tavily/results.ts</td>
+            <td>完整结果保存与短回执。</td>
+          </tr>
+          <tr>
+            <td>main/readable-lines.ts</td>
+            <td>GitHub 与 Tavily 共用的 UTF-8 长行切分。</td>
+          </tr>
+          <tr>
+            <td>connector-validation.ts / use-connector-action.ts</td>
+            <td>共享表单规则 / 动作生命周期。</td>
+          </tr>
+        </table>
+        <p>
+          复查确实找到了一处重复：Tavily 与 GitHub 的 200
+          字节长行切分。现在提取为共享纯函数，保留两边各自的结果包装策略。没有为了统一而把服务特有的研究状态、鉴权等塞进通用框架。
+        </p>
+        <p>
+          本次主要新模块 research 约 243 行；Skills 服务约 126
+          行；SkillsSettings 约 338
+          行。它们没有被堆成一个巨型文件，但行数只能提示风险，不能证明没有 bug。
+        </p>
+      </section>
+      <section id="tests">
+        <h2>⑧ 怎么测试：模拟能证明什么，真实调用看什么</h2>
+        <p>
+          先区分三层测试，否则“测试通过”容易被误解为“真实 Tavily 账号全部试过”。
+        </p>
+        <table>
+          <tr>
+            <th>层次</th>
+            <th>怎么做</th>
+            <th>能证明什么</th>
+          </tr>
+          <tr>
+            <td>单元 / 本地集成</td>
+            <td>Vitest + 本地 HTTP 服务 + 临时目录。</td>
+            <td>
+              真实代码在指定响应、断网、超限、取消、重启条件下符合预期；不消耗
+              Tavily 额度。
+            </td>
+          </tr>
+          <tr>
+            <td>浏览器 / Electron</td>
+            <td>Playwright，隔离的 WORKLENS_TEST_ROOT。</td>
+            <td>
+              界面按钮、错误提示、Dialog、开关、刷新与本地状态持久化正常。
+            </td>
+          </tr>
+          <tr>
+            <td>真实账号验收</td>
+            <td>配置自己的 Tavily 连接，显式发起小范围研究。</td>
+            <td>
+              真实鉴权、账号权限、额度、官方响应和最终报告链路。此轮没有付费云端实测。
+            </td>
+          </tr>
+        </table>
+        <h3>你可以照做的验收步骤</h3>
+        <ol>
+          <li>
+            在 Tavily Connector 中保存 API
+            Key，再单独执行连接测试。成功后确认研究工具可用。
+          </li>
+          <li>
+            启用 tavily-research，开始下一轮对话。普通问答不应无故启动付费研究。
+          </li>
+          <li>
+            明确说：“请用 Tavily 深度研究一个小范围主题，提交一次后保留
+            handle，告诉我当前进度。”注意这一步可能消耗真实额度。
+          </li>
+          <li>看到 accepted 时，说明任务已创建，不代表报告已经完成。</li>
+          <li>
+            同一会话继续说：“查询刚才那个 handle 的任务，不要重新提交。”应走
+            web_research_status。
+          </li>
+          <li>
+            可以停止本地等待，重启应用再回原会话查询同一个
+            handle；不要更换连接配置。
+          </li>
+          <li>
+            completed 后检查返回的报告路径、来源 JSON；让模型用 read
+            分段读，确认结尾和来源也在。
+          </li>
+          <li>
+            不要在真实账号反复制造提交超时来测去重。网络丢回执等失败注入交给本地自动化测试。
+          </li>
+        </ol>
+        <pre><code>npm run typecheck
+npm test
+npm run build
+npx playwright test --config playwright.ui.config.ts
+npx playwright test tests/e2e/skills.spec.ts</code></pre>
+        <p>
+          使用 Node.js 24。需要先 build，再跑依赖 dist 的 UI
+          测试；测试过程中不要同时重建
+          dist。测试数据必须隔离，不能指向真实会话目录。
+        </p>
+        <p>
+          具体回归位于
+          <code>tests/connectors/tavily/http.test.ts</code
+          >、<code>service.test.ts</code>、<code>tests/skills.test.ts</code>、<code
+            >tests/connector-validation.test.ts</code
+          >
+          和 Skills UI/Electron
+          测试中。跨平台安装包与真实云端账号仍是独立验收范围。
+        </p>
+      </section>
+      <section id="pr">
+        <h2>⑨ 提交之后：同一个 PR 会自动更新</h2>
+        <p>
+          PR #27 的来源分支是
+          <code>feat/skills-and-web-search</code>。把这次变更 commit，再 push
+          到这个分支，就会更新现有 PR，不需要重新建 PR。
+        </p>
+        <div class="flow">
+          <span>本地修改</span><b>→</b><span>测试</span><b>→</b
+          ><span>commit</span><b>→</b><span>push 原分支</span><b>→</b
+          ><span>PR #27 更新</span>
+        </div>
+        <p>
+          同事留下 comments 代表给了反馈，不自动等于正式批准。更新代码和合并进
+          main 是两步，这次只提交并推送修复。
+        </p>
+        <h3>回到真实依据</h3>
+        <ul>
+          <li>
+            <a
+              href="https://github.com/BuildWithAIs/worklens/pull/27#issuecomment-5695648302"
+              >同事的原始评论</a
+            >
+          </li>
+          <li><a href="../connectors/tavily.md">本仓库 Tavily 实现说明</a></li>
+          <li>
+            <a href="../../resources/skills/tavily-research/SKILL.md"
+              >实际 tavily-research SKILL.md</a
+            >
+          </li>
+          <li>
+            <code
+              >node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js</code
+            >：当前锁定 Pi 的摘要截断规则。
+          </li>
+        </ul>
+        <p>
+          本页基于 2026-09-16
+          的分支实现；代码块标注“实际代码”的部分摘自本仓库，标注“教学示例”的部分用于解释概念。后续代码更新时，请以源文件为准。
+        </p>
+      </section>
+      <footer>
+        本地学习文档。演示不会联网、读取凭据或修改 WorkLens
+        设置。可使用浏览器打印功能导出阅读副本。
+      </footer>
+    </main>
+    <script>
+      const byId = (id) => document.getElementById(id);
+      function compact() {
+        const first = byId("pathFirst").checked;
+        const body = "这里是网页正文。".repeat(400);
+        const data = first
+          ? { resultPath: "/example/result.json", preview: body }
+          : { preview: body, resultPath: "/example/result.json" };
+        const text = JSON.stringify(data).slice(0, 2000);
+        byId("compactOutput").textContent =
+          text.slice(0, 170) + "\n……（中间省略显示）……\n" + text.slice(-90);
+        byId("compactStatus").textContent =
+          "截取后的输入" +
+          (text.includes("resultPath")
+            ? "包含路径，可定位本地文件。"
+            : "不包含路径，只有正文；文件地址丢在截断之后。");
+      }
+      byId("pathFirst").addEventListener("change", compact);
+      compact();
+      function save() {
+        const state = byId("saveCase").value,
+          busy = byId("saveBusy").checked,
+          missing = state === "empty",
+          unchanged = state === "unchanged";
+        byId("saveDemo").disabled = busy || missing || unchanged;
+        byId("saveReason").textContent =
+          JSON.stringify(
+            {
+              busy,
+              missing,
+              unchanged,
+              disabled: busy || missing || unchanged,
+            },
+            null,
+            2,
+          ) +
+          (state === "invalid"
+            ? "\n点击会显示 URL 格式错误，不会提交请求。"
+            : "");
+      }
+      byId("saveCase").addEventListener("change", save);
+      byId("saveBusy").addEventListener("change", save);
+      byId("saveDemo").addEventListener("click", () => {
+        byId("saveReason").textContent +=
+          byId("saveCase").value === "invalid"
+            ? "\n验证失败：请输入 GitHub 站点地址，不含仓库路径。"
+            : "\n演示：允许进入保存校验流程。";
+      });
+      save();
+      let receipt = null,
+        polls = 0;
+      function job(message) {
+        byId("jobSubmit").disabled = !!receipt;
+        byId("jobPoll").disabled = !receipt;
+        byId("jobOutput").textContent = message;
+      }
+      byId("jobSubmit").onclick = () => {
+        receipt = "demo-handle";
+        polls = 0;
+        job(
+          "POST 提交次数：1\n已保存 handle：demo-handle\nstatus: accepted；尚无报告。",
+        );
+      };
+      byId("jobPoll").onclick = () => {
+        polls++;
+        job(
+          polls < 3
+            ? "GET 查询第 " + polls + " 次；in_progress。仍是同一个任务。"
+            : "completed\nresultPath: /example/research.md\nsourceDataPath: /example/research.json\n报告已保存；没有再次 POST。",
+        );
+      };
+      byId("jobRestart").onclick = () =>
+        job(
+          receipt
+            ? "界面重新打开，模拟磁盘中的 handle 仍在。可以继续查询；无需再次提交。"
+            : "尚无任务记录。可以先提交一次。",
+        );
+      byId("jobReset").onclick = () => {
+        receipt = null;
+        polls = 0;
+        job("已重置演示。此演示不联网、不计费。");
+      };
+    </script>
+  </body>
+</html>

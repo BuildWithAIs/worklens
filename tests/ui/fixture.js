@@ -83,7 +83,9 @@ export async function mockWorklens(page, options = {}) {
         skills: "/Users/example/WorkLens/skills",
       },
     };
+    let skillId = 0;
     const skill = (name, source, summary, enabled = true) => ({
+      id: (++skillId).toString(16).padStart(64, "0"),
       name,
       source,
       summary,
@@ -93,8 +95,7 @@ export async function mockWorklens(page, options = {}) {
     });
     const skills = {
       builtin: [
-        skill("code-documentation", "builtin", "Use this skill when the user requests to generate, create, or improve documentation for code, APIs, libraries, repositories, or software projects."),
-        skill("deep-research", "builtin", "Use this skill instead of WebSearch for ANY question requiring web research.", false),
+        skill("tavily-research", "builtin", "Create a multi-source research report with Tavily.", false),
       ],
       local: [
         skill("brave-search", "local", "Web search."),
@@ -197,7 +198,7 @@ export async function mockWorklens(page, options = {}) {
         if (name === "skillsToggle") {
           await new Promise((resolve) => setTimeout(resolve, 80));
           for (const item of [...skills.builtin, ...skills.local])
-            if (item.name === input.name) item.enabled = input.enabled;
+            if (item.id === input.id) item.enabled = input.enabled;
           return structuredClone(skills);
         }
         if (name === "skillsReveal") return;

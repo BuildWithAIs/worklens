@@ -99,3 +99,19 @@ test("a saved connection with no edits is unchanged; edits, a token or a failed 
     ).unchanged,
   ).toBe(true);
 });
+
+test("invalid edits to a saved GitHub URL can still trigger field validation", () => {
+  const connection = { configured: true, url: "https://github.com" };
+  for (const suffix of ["/repo", "?tab=repositories", "#section"]) {
+    const result = evaluateConnectorForm(
+      "github",
+      { url: connection.url + suffix, token: "" },
+      connection,
+      t,
+    );
+    expect(result.canReuseToken).toBe(true);
+    expect(result.missing).toBe(false);
+    expect(result.unchanged).toBe(false);
+    expect(result.errors.url).toBeTruthy();
+  }
+});

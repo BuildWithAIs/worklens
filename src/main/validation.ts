@@ -114,9 +114,9 @@ export const schemas = {
   skillsList: z.undefined(),
   skillsRefresh: z.undefined(),
   skillsToggle: z
-    .object({ name: z.string().min(1).max(200), enabled: z.boolean() })
+    .object({ id: z.string().regex(/^[a-f0-9]{64}$/), enabled: z.boolean() })
     .strict(),
-  skillsReveal: z.object({ name: z.string().min(1).max(200) }).strict(),
+  skillsReveal: z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
 };
 export function externalUrl(value: string) {
   const url = new URL(value);

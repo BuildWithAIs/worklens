@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { SerialQueue } from "./storage";
 import { existsSync } from "node:fs";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
@@ -26,6 +28,8 @@ export function summarize(description: string) {
     : sentence;
 }
 export class SkillsService {
+  private queue = new SerialQueue();
+  private generation = 0;
   private snapshot: SkillsSnapshot = { builtin: [], local: [] };
   constructor(
     readonly builtinDir: string,
@@ -52,6 +56,9 @@ export class SkillsService {
     const { skills } = loadSkillsFromDir({ dir, source });
     return skills
       .map((skill) => ({
+        id: createHash("sha256")
+          .update(`${source}:${skill.filePath}`)
+          .digest("hex"),
         name: skill.name,
         description: skill.description,
         summary: summarize(skill.description),
@@ -66,32 +73,52 @@ export class SkillsService {
       builtin: this.scan(this.builtinDir, "builtin"),
       local: this.scan(this.localDir, "local"),
     };
+    const winners = new Map<string, SkillInfo>();
+    for (const skill of [...this.snapshot.builtin, ...this.snapshot.local]) {
+      const winner = winners.get(skill.name);
+      if (winner) {
+        skill.shadowedBy = winner.source;
+        skill.enabled = false;
+      } else winners.set(skill.name, skill);
+    }
+    this.generation++;
     return this.snapshot;
   }
   list() {
     return this.snapshot;
   }
-  /** Resolved from the snapshot so the renderer never names a path. */
-  pathOf(name: string) {
+  /** Opaque file identity prevents same-name rows revealing the wrong file. */
+  private find(id: string) {
     const skill = [...this.snapshot.builtin, ...this.snapshot.local].find(
-      (skill) => skill.name === name,
+      (skill) => skill.id === id,
     );
     if (!skill) throw new Error("未找到该技能，请刷新列表");
-    return skill.path;
+    return skill;
   }
-  async setEnabled(name: string, enabled: boolean) {
-    const disabled = this.disabledNames();
-    if (enabled) disabled.delete(name);
-    else disabled.add(name);
-    await this.state.update({ disabledSkills: [...disabled] });
-    return this.refresh();
+  pathOf(id: string) {
+    return this.find(id).path;
   }
-  /** Feeds the agent-session rebuild gate, mirroring ConnectorRegistry.configurationKey(). */
+  setEnabled(id: string, enabled: boolean) {
+    return this.queue.run("skills", async () => {
+      const skill = this.find(id);
+      if (skill.shadowedBy)
+        throw new Error("同名技能已由其他来源提供，请修改生效版本的开关");
+      const disabled = this.disabledNames();
+      if (enabled) disabled.delete(skill.name);
+      else disabled.add(skill.name);
+      await this.state.update({ disabledSkills: [...disabled] });
+      return this.refresh();
+    });
+  }
+  /** Refresh invalidates cached sessions even when names/descriptions are unchanged. */
   configurationKey() {
-    return JSON.stringify([...this.disabledNames()].sort());
+    return JSON.stringify([this.generation, [...this.disabledNames()].sort()]);
   }
   skillPaths() {
-    return [this.builtinDir, this.localDir];
+    // Resolve once, using the same built-in-first precedence displayed in Settings.
+    return [...this.snapshot.builtin, ...this.snapshot.local]
+      .filter((skill) => !skill.shadowedBy)
+      .map((skill) => skill.path);
   }
   disabledSkillNames() {
     return [...this.disabledNames()];

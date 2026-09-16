@@ -18,7 +18,7 @@ Connect one GitHub site in **Settings → Connections** by entering its URL and 
 
 ## Web search (Tavily)
 
-Connect Tavily in **Settings → Connectors** with an API key to give the agent `web_search` and `web_fetch`. See [setup, tools and failure statuses](docs/connectors/tavily.md).
+Connect Tavily in **Settings → Connectors** with an API key to give the agent `web_search`, `web_fetch`, and Tavily deep research. See [setup, tools and failure statuses](docs/connectors/tavily.md).
 
 ## Local development
 

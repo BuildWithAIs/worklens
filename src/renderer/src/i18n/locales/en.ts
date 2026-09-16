@@ -262,13 +262,19 @@ const en = {
     },
   },
   skills: {
+    loading: "Loading skills…",
+    retry: "Try again",
+    viewDetails: "About {{skill}}",
+    appliesNextTurn:
+      "Changes apply on the next conversation turn. Instructions already read in the current turn remain in context.",
+    shadowed: "Inactive: the {{source}} version takes precedence.",
     builtin: "Built-in",
     builtinDescription: "Ships with WorkLens.",
     local: "Local",
     localHeading: "Local (~/.agents/skills)",
     localDescription:
       "Skills in your home folder, shared with other agent tools on this machine.",
-    refreshSkills: "Rescan skill folders",
+    refreshSkills: "Refresh skills",
     noBuiltinSkills: "No built-in skills yet.",
     noLocalSkills: "No skills found in ~/.agents/skills.",
     enableSkill: "Enable",

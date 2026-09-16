@@ -107,6 +107,9 @@ export interface Settings {
   [key: string]: unknown;
 }
 export interface SkillInfo {
+  id: string;
+  /** Same-name skills use built-in-first precedence, even if the winner is disabled. */
+  shadowedBy?: "builtin" | "local";
   name: string;
   description: string;
   /** First sentence of the description, for list rows. */
@@ -290,10 +293,10 @@ export interface Requests {
   skillsList: { input: undefined; output: SkillsSnapshot };
   skillsRefresh: { input: undefined; output: SkillsSnapshot };
   skillsToggle: {
-    input: { name: string; enabled: boolean };
+    input: { id: string; enabled: boolean };
     output: SkillsSnapshot;
   };
-  skillsReveal: { input: { name: string }; output: void };
+  skillsReveal: { input: { id: string }; output: void };
 }
 export interface ConfluenceSettingsInput {
   url: string;

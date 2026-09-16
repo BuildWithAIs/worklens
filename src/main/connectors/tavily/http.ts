@@ -13,7 +13,7 @@ export class ServiceError extends Error {
 }
 const MAX_RESPONSE = 8 * 1024 * 1024;
 
-/** Every Tavily call is read-only and idempotent, so transient failures retry. */
+/** Only read endpoints retry; creating a research task is not idempotent. */
 export class TavilyHttp {
   readonly signal: AbortSignal;
   constructor(
@@ -29,6 +29,8 @@ export class TavilyHttp {
   }
   async request(method: "GET" | "POST", path: string, body?: Json) {
     const url = `${this.connection.settings.url}${path}`;
+    const retryable =
+      method === "GET" || ["/search", "/extract"].includes(path);
     for (let attempt = 0; ; attempt++) {
       this.signal.throwIfAborted();
       let response: Response;
@@ -46,13 +48,14 @@ export class TavilyHttp {
         });
       } catch {
         this.signal.throwIfAborted();
-        if (attempt >= 2)
+        if (!retryable || attempt >= 2)
           throw new ServiceError("network", "Tavily 网络请求失败或超时");
         await delay(500 * 2 ** attempt, undefined, { signal: this.signal });
         continue;
       }
       const status = response.status;
       if (
+        retryable &&
         attempt < 2 &&
         (status === 429 || [500, 502, 503, 504].includes(status))
       ) {
@@ -80,7 +83,29 @@ export class TavilyHttp {
           "Tavily 响应超过 8 MiB，请缩小查询范围",
         );
       }
-      const text = await response.text();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const reader = response.body?.getReader();
+      if (reader) {
+        try {
+          for (;;) {
+            this.signal.throwIfAborted();
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > MAX_RESPONSE)
+              throw new ServiceError(
+                "result_too_large",
+                "Tavily 响应超过 8 MiB，请缩小查询范围",
+              );
+            chunks.push(value);
+          }
+        } finally {
+          await reader.cancel().catch(() => {});
+          reader.releaseLock();
+        }
+      }
+      const text = Buffer.concat(chunks, size).toString("utf8");
       let data: Json = {};
       try {
         data = text ? JSON.parse(text) : {};
@@ -88,7 +113,15 @@ export class TavilyHttp {
         if (response.ok)
           throw new ServiceError("http", "Tavily 返回了无法解析的响应");
       }
-      if (response.ok) return data;
+      if (response.ok) {
+        if (!data || typeof data !== "object" || Array.isArray(data))
+          throw new ServiceError(
+            "invalid_response",
+            "Tavily 返回了无效的响应对象",
+          );
+        return data;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) data = {};
       const detail =
         typeof data.detail === "string"
           ? data.detail

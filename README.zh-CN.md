@@ -14,7 +14,7 @@ WorkLens 是一款本地优先的工作 Agent，面向中大型企业的员工�
 
 ## 联网搜索（Tavily）
 
-在 **设置 → 连接器** 中填入 Tavily API key，助手即可使用 `web_search` 和 `web_fetch`。详见 [设置、工具与错误状态](docs/connectors/tavily.md)。
+在 **设置 → 连接器** 中填入 Tavily API key，助手即可使用 `web_search`、`web_fetch` 和 Tavily 深度研究。详见 [设置、工具与错误状态](docs/connectors/tavily.md)。
 
 ## 本地运行
 

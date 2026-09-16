@@ -1,39 +1,55 @@
-# Tavily (web search)
+# Tavily connector
 
-Tavily gives the agent two read-only tools: `web_search` and `web_fetch`. It needs an API key from [app.tavily.com](https://app.tavily.com).
-
-## Setup
-
-Settings → Connectors → Tavily → paste the API key → **Test connection** → **Save**.
-
-- **API URL** is prefilled with `https://api.tavily.com` and can point at a proxy or gateway instead. It must be an `http(s)` address without credentials, query or fragment; a path prefix is kept. Changing the address requires entering the key again.
-- **Test connection** calls `GET <API URL>/usage`, which verifies the key and reports the plan without spending search credits.
-- The key is stored encrypted with the operating system's secure storage in `tavily.json` under the user-data directory, alongside `github.json` and the Atlassian files. A key whose last validation failed is retained so it can be retried or disconnected; the tools stay hidden until validation succeeds.
-- Saving, testing or disconnecting changes the connector configuration key, which rebuilds the agent session runtime without discarding history.
+Connect in **Settings → Connectors → Tavily** using an API key from
+[app.tavily.com](https://app.tavily.com). The default endpoint is
+`https://api.tavily.com`; a user-configured proxy is supported. The key is
+stored through OS encryption. `GET /usage` verifies it without a search.
 
 ## Tools
 
-| Tool         | Tavily endpoint | Notes                                                                                                                                                                                                                                                                              |
-| ------------ | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `web_search` | `POST /search`  | `query`, optional `max_results` (1–20, default 5), `topic` (`general` / `news` / `finance`), `time_range` (`day` / `week` / `month` / `year`), `include_domains`. Always `search_depth: "basic"` (1 credit). Returns title, URL, excerpt, score and, for news, the published date. |
-| `web_fetch`  | `POST /extract` | 1–5 URLs as Markdown. Pages over 12 000 characters are saved under the conversation's artifacts (`files/<session>/tavily/…/<host>.md`) and returned as a preview with the path, so the agent continues with `read`. Failed URLs are listed separately.                             |
+| Tool | Official API | Behavior |
+|---|---|---|
+| `web_search` | `POST /search` | Basic search; query, up to 20 results, topic, time range and domain filters. Full responses over 1,800 characters are saved. |
+| `web_fetch` | `POST /extract` | Extract 1–5 URLs as Markdown. Every response, including short pages and failed URLs, is saved together. |
+| `web_research` | `POST /research` | Submit a paid deep research task with `input` and optional `model` (`mini`, `pro`, `auto`). Returns a durable local handle, not the report. |
+| `web_research_status` | `GET /research/{request_id}` | Query the same handle; `wait_seconds` is 0–30, default 5. Pending jobs can be queried again across turns and app restarts. Completed reports are saved once and reused. |
 
-Both tools are `parallel`; every request is idempotent, so network errors, `429` and `5xx` retry up to three times (honouring `Retry-After` up to 30 s). Responses over 8 MiB are rejected.
+For saved search/extract results, `resultPath` and `rawResultPath` precede a
+single 500-character preview for the entire response. `read` uses line offsets:
+start with `offset: 1, limit: 200`, then continue at the next unread line.
+Long lines are wrapped for reading; `rawResultPath` preserves exact content.
+Secrets are redacted before any result is saved. If saving search/extract fails,
+`storage_error` is explicit and the full result remains inline as a fallback.
+Do not assume an unsaved result will survive context compaction.
 
-## Failure statuses
+Research uses JSON polling, not SSE. Each HTTP call has its own timeout; there
+is no 120-second lifetime limit on the remote job. Handles are scoped to the
+conversation and saved connection revision. Replacing/removing the connection
+invalidates access through its old handles; already saved reports remain local.
+Stopping a local run stops polling but does not cancel the remote task. No
+background polling or notifications occur after a status call returns.
 
-`details.status` on the tool result, projected as errors by the Pi tool-result hook:
+Creation is journaled before dispatch and never automatically retried. Replaying
+the same tool call returns its existing handle. An uncertain response returns
+`submission_unknown`: check the account before creating another paid task.
+A completed report that fails to save returns `storage_error`; query the same
+handle again to retry saving, not `web_research` to resubmit. A failed remote job
+returns `research_failed`. Transient errors on search/extract/status reads can retry.
 
-| HTTP      | status                                            |
-| --------- | ------------------------------------------------- |
-| 401       | `authentication`                                  |
-| 429       | `rate_limit`                                      |
-| 432 / 433 | `quota` (key or plan limit exceeded)              |
-| 400 / 422 | `invalid_request`                                 |
-| other     | `http`, `network`, `redirect`, `result_too_large` |
-
-Messages carry the `Tavily 返回 <status>。<detail>` form so the renderer's `system-text` mapping translates them like the other connectors. The API key and its URL-encoded and base64 forms are redacted from every tool result and error.
+All HTTP bodies are capped at 8 MiB of actual streamed bytes, even without a
+reliable Content-Length. Redirects do not forward credentials. Network, quota,
+authentication and rate-limit errors are returned as explicit tool statuses.
 
 ## Skills
 
-The bundled `deep-research` skill assumes a search tool and a `web_fetch` tool; it works unchanged once Tavily is connected. Until then it is better left disabled in Settings → Skills.
+The bundled `tavily-research` is WorkLens-authored guidance for these tools.
+It is limited to explicit deep research and multi-source report requests.
+Ordinary questions use search/extract. The former DeerFlow `deep-research` and
+`code-documentation` packages are no longer bundled. User-owned local skills
+are untouched.
+
+Official contracts: [Create research](https://docs.tavily.com/documentation/api-reference/endpoint/research),
+[Get research status](https://docs.tavily.com/documentation/api-reference/endpoint/research-get).
+
+Verification uses local simulated APIs and isolated temporary storage. It does
+not establish live Tavily account or cross-platform credential behavior.

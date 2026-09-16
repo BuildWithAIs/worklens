@@ -79,7 +79,9 @@ else {
         : join(app.getAppPath(), "resources/skills");
       const skills = new SkillsService(
         paths.skills,
-        join(homedir(), ".agents", "skills"),
+        testRoot
+          ? join(root, "local-skills")
+          : join(homedir(), ".agents", "skills"),
         bundledSkills,
         state,
       );
@@ -267,10 +269,10 @@ else {
                   value = skills.refresh();
                   break;
                 case "skillsToggle":
-                  value = await skills.setEnabled(input.name, input.enabled);
+                  value = await skills.setEnabled(input.id, input.enabled);
                   break;
                 case "skillsReveal":
-                  shell.showItemInFolder(skills.pathOf(input.name));
+                  shell.showItemInFolder(skills.pathOf(input.id));
                   break;
               }
             return {

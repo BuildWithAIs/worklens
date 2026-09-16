@@ -42,6 +42,7 @@ test("built-in skills are synced from the bundled resource and scanned separatel
     const snapshot = skills.list();
     expect(snapshot.builtin).toEqual([
       {
+        id: expect.stringMatching(/^[a-f0-9]{64}$/),
         name: "pdf-tools",
         description: "Extracts text from PDFs.",
         summary: "Extracts text from PDFs.",
@@ -52,6 +53,7 @@ test("built-in skills are synced from the bundled resource and scanned separatel
     ]);
     expect(snapshot.local).toEqual([
       {
+        id: expect.stringMatching(/^[a-f0-9]{64}$/),
         name: "brave-search",
         description: "Web search.",
         summary: "Web search.",
@@ -113,15 +115,15 @@ test("toggling a skill persists across reloads without touching the skill file, 
     await skills.initialize();
     const before = skills.configurationKey();
     expect(skills.list().builtin[0].enabled).toBe(true);
-    await skills.setEnabled("demo", false);
+    await skills.setEnabled(skills.list().builtin[0].id, false);
     expect(skills.list().builtin[0].enabled).toBe(false);
     expect(skills.configurationKey()).not.toBe(before);
     const restored = new StateStore(join(root, "settings.json"));
     await restored.load();
     expect(restored.value.disabledSkills).toEqual(["demo"]);
-    await skills.setEnabled("demo", true);
+    await skills.setEnabled(skills.list().builtin[0].id, true);
     expect(skills.list().builtin[0].enabled).toBe(true);
-    expect(skills.configurationKey()).toBe(before);
+    expect(skills.configurationKey()).not.toBe(before);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -209,7 +211,7 @@ test("toggling a local skill changes what the model is offered on the next turn 
     expect(systemPrompt()).toContain("<available_skills>");
     expect(systemPrompt()).toContain("<name>brave-search</name>");
 
-    await skills.setEnabled("brave-search", false);
+    await skills.setEnabled(skills.list().local[0].id, false);
     await service.send({
       conversationId: first.id,
       requestId: "b",
@@ -230,6 +232,26 @@ test("toggling a local skill changes what the model is offered on the next turn 
       .toBeTruthy();
     expect(systemPrompt()).not.toContain("brave-search");
     expect(systemPrompt()).not.toContain("<available_skills>");
+    await skillMd(
+      join(local, "new-skill"),
+      "new-skill",
+      "Newly installed skill.",
+    );
+    const key = skills.configurationKey();
+    skills.refresh();
+    expect(skills.configurationKey()).not.toBe(key);
+    const ended = events.filter((e) => e.type === "run_end").length;
+    await service.send({
+      conversationId: first.id,
+      requestId: "c",
+      text: "refresh",
+      selection,
+    });
+    await expect
+      .poll(() => events.filter((e) => e.type === "run_end").length)
+      .toBe(ended + 1);
+    expect(systemPrompt()).toContain("new-skill");
+    expect(systemPrompt()).not.toContain("brave-search");
   } finally {
     await service.shutdown();
     await server.close();
@@ -237,18 +259,25 @@ test("toggling a local skill changes what the model is offered on the next turn 
   }
 });
 
-test("skillsToggle input validates the skill name and keeps the request contract strict", () => {
-  expect(schemas.skillsToggle.parse({ name: "demo", enabled: false })).toEqual({
-    name: "demo",
+test("skill IPC validates opaque file IDs and rejects arbitrary paths and old name-only requests", () => {
+  const id = "a".repeat(64);
+  expect(schemas.skillsToggle.parse({ id, enabled: false })).toEqual({
+    id,
     enabled: false,
   });
   for (const value of [
-    { name: "", enabled: true },
+    { id: "", enabled: true },
     { enabled: true },
-    { name: "demo" },
+    { id },
+    { name: "demo", enabled: true },
+    { id: "/tmp/SKILL.md", enabled: true },
   ]) {
     expect(schemas.skillsToggle.safeParse(value).success).toBe(false);
   }
+  expect(schemas.skillsReveal.safeParse({ id }).success).toBe(true);
+  expect(
+    schemas.skillsReveal.safeParse({ path: "/tmp/SKILL.md" }).success,
+  ).toBe(false);
 });
 
 test("summarize keeps the first sentence of a model-facing description within one row", () => {
@@ -268,4 +297,84 @@ test("summarize keeps the first sentence of a model-facing description within on
   expect(long.length).toBeLessThanOrEqual(140);
   expect(long.endsWith("…")).toBe(true);
   expect(summarize("  spaced\n\nout   text  ")).toBe("spaced out text");
+});
+
+test("concurrent skill changes retain both writes and persist after reload", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-skills-concurrent-"));
+  try {
+    const local = join(root, "local");
+    for (const name of ["alpha", "beta"])
+      await skillMd(join(local, name), name, "Example.");
+    const state = new StateStore(join(root, "state.json"));
+    const skills = new SkillsService(
+      join(root, "builtin"),
+      local,
+      join(root, "absent"),
+      state,
+    );
+    await skills.initialize();
+    await Promise.all(
+      skills.list().local.map((skill) => skills.setEnabled(skill.id, false)),
+    );
+    expect(skills.list().local.every((skill) => !skill.enabled)).toBe(true);
+    const restored = new StateStore(join(root, "state.json"));
+    await restored.load();
+    expect(restored.value.disabledSkills?.sort()).toEqual(["alpha", "beta"]);
+    await expect(skills.setEnabled("a".repeat(64), true)).rejects.toThrow(
+      "未找到",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("duplicate names reveal their own file but only the built-in version reaches Pi", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-skills-duplicates-"));
+  try {
+    const local = join(root, "local");
+    const bundled = join(root, "bundled");
+    await skillMd(join(local, "demo"), "demo", "Local description.");
+    await skillMd(join(bundled, "demo"), "demo", "Built-in description.");
+    const skills = new SkillsService(
+      join(root, "builtin"),
+      local,
+      bundled,
+      new StateStore(join(root, "state.json")),
+    );
+    await skills.initialize();
+    const {
+      builtin: [builtin],
+      local: [shadowed],
+    } = skills.list();
+    expect(shadowed).toMatchObject({ shadowedBy: "builtin", enabled: false });
+    expect(skills.pathOf(shadowed.id)).toBe(join(local, "demo", "SKILL.md"));
+    expect(skills.pathOf(builtin.id)).toBe(builtin.path);
+    await expect(skills.setEnabled(shadowed.id, true)).rejects.toThrow(
+      "同名技能",
+    );
+    const loader = await resources(root, root, undefined, {
+      paths: skills.skillPaths(),
+      disabledNames: [],
+    });
+    expect(
+      loader.resourceLoader
+        .getSkills()
+        .skills.map((skill) => skill.description),
+    ).toEqual(["Built-in description."]);
+    await skills.setEnabled(builtin.id, false);
+    const disabled = await resources(root, root, undefined, {
+      paths: skills.skillPaths(),
+      disabledNames: skills.disabledSkillNames(),
+    });
+    expect(disabled.resourceLoader.getSkills().skills).toEqual([]);
+    await rm(join(root, "builtin", "demo"), { recursive: true });
+    const before = skills.configurationKey();
+    skills.refresh();
+    expect(skills.configurationKey()).not.toBe(before);
+    expect(skills.list().local[0].shadowedBy).toBeUndefined();
+    // The user's disable choice survives precedence changes.
+    expect(skills.list().local[0].enabled).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

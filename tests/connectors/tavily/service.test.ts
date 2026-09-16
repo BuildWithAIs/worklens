@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { TavilyConnections } from "../../../src/main/connectors/tavily/connection";
 import { TavilyService } from "../../../src/main/connectors/tavily/service";
 import { tavilyConnector } from "../../../src/main/connectors/tavily";
@@ -20,6 +20,10 @@ async function fakeTavily() {
     usageStatus: 200,
     searchStatus: 200,
     longPage: false,
+    searchContent: "",
+    researchStatus: "pending",
+    researchCreateStatus: 201,
+
     requests: [] as {
       method: string;
       path: string;
@@ -60,7 +64,7 @@ async function fakeTavily() {
           {
             title: "Result",
             url: "https://example.com/a",
-            content: `about ${body.query}`,
+            content: state.searchContent || `about ${body.query}`,
             score: 0.9,
             raw_content: null,
           },
@@ -75,6 +79,20 @@ async function fakeTavily() {
           raw_content: state.longPage ? "x".repeat(20_000) : `# ${url}`,
         })),
         failed_results: [{ url: "https://bad.example", error: "timeout" }],
+      });
+    if (req.url === "/research" && req.method === "POST")
+      return send(
+        state.researchCreateStatus,
+        state.researchCreateStatus === 201
+          ? { request_id: "research-1", status: "pending" }
+          : { detail: "unknown upstream error" },
+      );
+    if (req.url === "/research/research-1")
+      return send(200, {
+        request_id: "research-1",
+        status: state.researchStatus,
+        content: "研究报告\n" + "资料".repeat(40000) + KEY,
+        sources: [{ title: "Source", url: "https://example.com" }],
       });
     send(404, {});
   });
@@ -96,7 +114,10 @@ async function setup() {
   const input = { url: fake.api, token: KEY };
   const artifacts = new LocalArtifacts(join(root, "artifacts"), root);
   const service = new TavilyService(connections, artifacts);
-  const call = async (name: "web_search" | "web_fetch", params: object) => {
+  const call = async (
+    name: "web_search" | "web_fetch" | "web_research" | "web_research_status",
+    params: object,
+  ) => {
     const tool = service.tools("session1").find((t) => t.name === name)!;
     const result = await tool.execute(
       "call1",
@@ -125,7 +146,12 @@ test("save validates the key through /usage, encrypts it at rest and exposes the
   ]);
   const file = await readFile(join(f.root, "tavily.json"), "utf8");
   expect(file).not.toContain(KEY);
-  expect(f.service.names()).toEqual(["web_search", "web_fetch"]);
+  expect(f.service.names()).toEqual([
+    "web_search",
+    "web_fetch",
+    "web_research",
+    "web_research_status",
+  ]);
 
   // A fresh instance reloads and re-validates without a second save.
   const reloaded = new TavilyConnections(
@@ -192,8 +218,10 @@ test("web_search forwards the query with the bearer key and returns trimmed resu
         url: "https://example.com/a",
         content: "about worklens",
         score: 0.9,
+        raw_content: null,
       },
     ],
+    response_time: 0.1,
   });
   const request = f.fake.state.requests.at(-1)!;
   expect(request.auth).toBe(`Bearer ${KEY}`);
@@ -218,34 +246,38 @@ test("web_search maps quota and auth failures to tool statuses and never leaks t
   expect(f.connections.redact(`key=${KEY}`)).toBe("key=[redacted]");
 });
 
-test("web_fetch returns short pages inline and saves long pages as artifacts", async () => {
+test("web_fetch saves every page and keeps all paths ahead of one short preview", async () => {
   const f = await setup();
   await f.connections.save(f.input);
   const short = await f.call("web_fetch", {
     urls: ["https://example.com/doc"],
   });
-  expect(short.data.pages).toEqual([
-    { url: "https://example.com/doc", content: "# https://example.com/doc" },
+  const full = JSON.parse(await readFile(short.data.rawResultPath, "utf8"));
+  expect(full.results).toEqual([
+    {
+      url: "https://example.com/doc",
+      raw_content: "# https://example.com/doc",
+    },
   ]);
-  expect(short.data.failed).toEqual([
+  expect(full.failed_results).toEqual([
     { url: "https://bad.example", error: "timeout" },
   ]);
-  expect(f.fake.state.requests.at(-1)!.body).toMatchObject({
-    urls: ["https://example.com/doc"],
-    format: "markdown",
-  });
-
   f.fake.state.longPage = true;
-  const long = await f.call("web_fetch", {
-    urls: ["https://example.com/long"],
-  });
-  const [page] = long.data.pages;
-  expect(page.truncated).toBe(true);
-  expect(page.totalLength).toBe(20_000);
-  expect(page.content).toHaveLength(12_000);
-  expect(page.path).toMatch(/tavily/);
-  expect(page.path).toMatch(/example\.com\.md$/);
-  expect(await readFile(page.path, "utf8")).toHaveLength(20_000);
+  const urls = Array.from({ length: 5 }, (_, i) => `https://example.com/${i}`);
+  const long = await f.call("web_fetch", { urls });
+  const output = (long.result.content[0] as { text: string }).text;
+  expect(output.length).toBeLessThan(2000);
+  expect(output.indexOf("resultPath")).toBeLessThan(output.indexOf("preview"));
+  const saved = JSON.parse(await readFile(long.data.rawResultPath, "utf8"));
+  expect(saved.results).toHaveLength(5);
+  expect(
+    saved.results.every((page: any) => page.raw_content.length === 20000),
+  ).toBe(true);
+  expect(
+    (await readFile(long.data.resultPath, "utf8"))
+      .split("\n")
+      .every((line) => Buffer.byteLength(line) <= 200),
+  ).toBe(true);
 });
 
 test("the connector adapter gates tools and the configuration key on the saved connection", async () => {
@@ -255,13 +287,209 @@ test("the connector adapter gates tools and the configuration key on the saved c
   expect(connector.names()).toEqual([]);
   const before = connector.configurationKey();
   await f.connections.save(f.input);
-  expect(connector.names()).toEqual(["web_search", "web_fetch"]);
+  expect(connector.names()).toEqual([
+    "web_search",
+    "web_fetch",
+    "web_research",
+    "web_research_status",
+  ]);
   expect(connector.configurationKey()).not.toBe(before);
   expect(connector.tools("s", () => "r").map((t) => t.name)).toEqual([
     "web_search",
     "web_fetch",
+    "web_research",
+    "web_research_status",
   ]);
   await f.connections.remove();
   expect(connector.names()).toEqual([]);
   expect(f.connections.info()).toEqual({ url: "", configured: false });
+});
+
+test("long search results are saved in full and credentials are redacted before storage", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  f.fake.state.searchContent = "汉".repeat(50000) + KEY;
+  const result = await f.call("web_search", { query: "long" });
+  expect(JSON.stringify(result.data).length).toBeLessThan(2000);
+  const saved = await readFile(result.data.rawResultPath, "utf8");
+  expect(saved).not.toContain(KEY);
+  expect(JSON.parse(saved).results[0].content).toBe(
+    "汉".repeat(50000) + "[redacted]",
+  );
+});
+
+test("storage failures are explicit and do not silently discard fetched content", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  vi.spyOn(f.service.artifacts, "save").mockRejectedValue(
+    new Error("disk full"),
+  );
+  f.fake.state.longPage = true;
+  const { result, data } = await f.call("web_fetch", {
+    urls: ["https://example.com"],
+  });
+  expect(result).toMatchObject({ isError: true });
+  expect(data.status).toBe("storage_error");
+  expect(data.result.results[0].raw_content).toHaveLength(20000);
+  expect(data.resultPath).toBeUndefined();
+});
+
+test("research returns a durable handle, resumes after restart, and saves a redacted report once", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  const started = await f.call("web_research", {
+    input: "Research a topic",
+    model: "mini",
+  });
+  expect(started.data).toMatchObject({
+    status: "accepted",
+    handle: expect.stringMatching(/^[a-f0-9]{64}$/),
+  });
+  expect(f.fake.state.requests.at(-1)?.body).toEqual({
+    input: "Research a topic",
+    model: "mini",
+    stream: false,
+  });
+  await f.call("web_research", { input: "Research a topic", model: "mini" });
+  expect(
+    f.fake.state.requests.filter((r) => r.path === "/research"),
+  ).toHaveLength(1);
+  const handle = started.data.handle;
+  expect(
+    (await f.call("web_research_status", { handle, wait_seconds: 0 })).data
+      .status,
+  ).toBe("accepted");
+  // Restart both connection and service, using only their persisted state.
+  const connection = new TavilyConnections(
+    join(f.root, "tavily.json"),
+    f.crypto,
+    fetch,
+  );
+  await connection.load();
+  const resumed = new TavilyService(connection, f.service.artifacts);
+  const status = resumed
+    .tools("session1")
+    .find((tool) => tool.name === "web_research_status")!;
+  f.fake.state.researchStatus = "completed";
+  const result = await status.execute(
+    "status",
+    { handle, wait_seconds: 0 },
+    new AbortController().signal,
+    undefined,
+    {} as any,
+  );
+  const data = JSON.parse((result.content[0] as { text: string }).text);
+  expect(data).toMatchObject({
+    status: "success",
+    researchStatus: "completed",
+    handle,
+  });
+  expect(JSON.stringify(data).length).toBeLessThan(2000);
+  const report = await readFile(data.rawResultPath, "utf8");
+  expect(report).toContain("研究报告");
+  expect(report).toContain("https://example.com");
+  expect(report).not.toContain(KEY);
+  const before = f.fake.state.requests.length;
+  const cached = await status.execute(
+    "status-again",
+    { handle, wait_seconds: 0 },
+    new AbortController().signal,
+    undefined,
+    {} as any,
+  );
+  expect(
+    JSON.parse((cached.content[0] as { text: string }).text).resultPath,
+  ).toBe(data.resultPath);
+  expect(f.fake.state.requests).toHaveLength(before);
+  const otherSession = resumed
+    .tools("session2")
+    .find((tool) => tool.name === "web_research_status")!;
+  const other = await otherSession.execute(
+    "status",
+    { handle, wait_seconds: 0 },
+    new AbortController().signal,
+    undefined,
+    {} as any,
+  );
+  expect(other.details).toEqual({ status: "invalid_handle" });
+});
+
+test("uncertain research creation is never retried, including a replay after restart", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  f.fake.state.researchCreateStatus = 500;
+  const started = await f.call("web_research", { input: "Research" });
+  expect(started.data.status).toBe("submission_unknown");
+  const restarted = new TavilyService(f.connections, f.service.artifacts);
+  const tool = restarted
+    .tools("session1")
+    .find((t) => t.name === "web_research")!;
+  await tool.execute(
+    "call1",
+    { input: "Research" },
+    new AbortController().signal,
+    undefined,
+    {} as any,
+  );
+  expect(
+    f.fake.state.requests.filter((r) => r.path === "/research"),
+  ).toHaveLength(1);
+});
+
+test("completed research retries storage with its handle without creating a second task", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  const {
+    data: { handle },
+  } = await f.call("web_research", { input: "Research" });
+  f.fake.state.researchStatus = "completed";
+  const spy = vi
+    .spyOn(f.service.artifacts, "save")
+    .mockRejectedValueOnce(new Error("disk full"));
+  expect(
+    (await f.call("web_research_status", { handle, wait_seconds: 0 })).data
+      .status,
+  ).toBe("storage_error");
+  spy.mockRestore();
+  expect(
+    (await f.call("web_research_status", { handle, wait_seconds: 0 })).data
+      .status,
+  ).toBe("success");
+  expect(
+    f.fake.state.requests.filter((r) => r.path === "/research"),
+  ).toHaveLength(1);
+});
+
+test("polling cancellation preserves the handle; remote failures stay distinct from pending", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  const {
+    data: { handle },
+  } = await f.call("web_research", { input: "Research" });
+  const status = f.service
+    .tools("session1")
+    .find((tool) => tool.name === "web_research_status")!;
+  const controller = new AbortController();
+  const waiting = status.execute(
+    "status",
+    { handle, wait_seconds: 30 },
+    controller.signal,
+    undefined,
+    {} as any,
+  );
+  await vi.waitFor(() =>
+    expect(
+      f.fake.state.requests.some((r) => r.path === "/research/research-1"),
+    ).toBe(true),
+  );
+  controller.abort();
+  expect((await waiting).details).toEqual({ status: "cancelled" });
+  f.fake.state.researchStatus = "failed";
+  expect(
+    (await f.call("web_research_status", { handle, wait_seconds: 0 })).data
+      .status,
+  ).toBe("research_failed");
+  expect(
+    f.fake.state.requests.filter((r) => r.path === "/research"),
+  ).toHaveLength(1);
 });
