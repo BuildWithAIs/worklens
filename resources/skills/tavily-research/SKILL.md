@@ -5,7 +5,7 @@ description: Use Tavily to produce a multi-source research report when the user 
 
 # Tavily Research in WorkLens
 
-This is WorkLens-specific guidance for the official Tavily Research API, not an upstream Tavily skill or a DeerFlow prompt.
+This is WorkLens-specific guidance for the official Tavily Research API, not an upstream Tavily skill.
 
 1. Use this workflow only when `web_research` and `web_research_status` are available. Otherwise explain that Tavily needs to be connected in Settings. Never read credential files or ask for an API key in chat.
 2. Establish the user's research question and any material constraints. Keep ordinary questions on `web_search` / `web_fetch`; do not turn all content creation into paid research.
