@@ -47,8 +47,19 @@ export async function toolResult(
   alwaysSave = false,
 ) {
   const full = connections.redact(JSON.stringify(value, null, 2));
+  // Only promote locally generated recovery metadata, never arbitrary upstream fields.
+  const metadataKeys = operation.startsWith("web_research")
+    ? ["handle", "requestId", "researchStatus", "next"]
+    : operation === "web_fetch"
+      ? ["contentMode", "sourceComplete", "extractionPartial", "next"]
+      : [];
+  const metadata = Object.fromEntries(
+    metadataKeys
+      .filter((key) => value[key] !== undefined)
+      .map((key) => [key, value[key]]),
+  );
   let envelope = value;
-  if (alwaysSave || full.length > INLINE_LIMIT) {
+  if (alwaysSave || Buffer.byteLength(full, "utf8") > INLINE_LIMIT) {
     try {
       const saved = await saveResult(
         connections,
@@ -61,20 +72,39 @@ export async function toolResult(
       envelope = {
         ...saved,
         status: value.status,
+        ...metadata,
         truncated: true,
         preview: full.slice(0, 500),
       };
     } catch (error) {
-      if (signal?.aborted) throw error;
-      // Never claim a full result exists when storage failed, or silently discard it.
+      if (signal?.aborted)
+        return response(connections, {
+          status: "cancelled",
+          remoteStatus: value.status,
+          ...metadata,
+          next: "Local result saving was cancelled. For research use the existing handle; do not resubmit.",
+        });
+      // Storage failure must not bypass the context budget or claim recoverability.
       envelope = {
         status: "storage_error",
         remoteStatus: value.status,
+        ...metadata,
+        truncated: true,
+        recoverable: false,
         retrievalError:
-          "Could not save the result. Full data remains inline; preserve it before compaction.",
-        result: value,
+          "Could not save the full result; only a preview remains. Restore local storage, then retry search/fetch if needed. For research, use the existing handle; never automatically resubmit.",
+        preview: full.slice(0, 500),
       };
     }
+  }
+  // JSON escaping and UTF-8 can make a short preview exceed the byte budget.
+  while (
+    typeof envelope.preview === "string" &&
+    Buffer.byteLength(connections.redact(JSON.stringify(envelope)), "utf8") >
+      INLINE_LIMIT &&
+    envelope.preview.length > 0
+  ) {
+    envelope.preview = envelope.preview.slice(0, -1);
   }
   return response(connections, envelope);
 }

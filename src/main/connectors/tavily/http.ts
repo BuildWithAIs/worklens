@@ -100,6 +100,16 @@ export class TavilyHttp {
               );
             chunks.push(value);
           }
+        } catch (error) {
+          this.signal.throwIfAborted();
+          if (error instanceof ServiceError) throw error;
+          if (!retryable || attempt >= 2)
+            throw new ServiceError(
+              "network",
+              "Tavily 响应正文传输失败或超时；读取请求可稍后重试",
+            );
+          await delay(500 * 2 ** attempt, undefined, { signal: this.signal });
+          continue;
         } finally {
           await reader.cancel().catch(() => {});
           reader.releaseLock();

@@ -96,3 +96,71 @@ test("safe reads still retry transient responses", async () => {
   ).toEqual({ results: [] });
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
+
+function brokenBody() {
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"partial":'));
+        controller.error(new Error("connection reset"));
+      },
+    }),
+  );
+}
+
+test("body read failure retries safe reads and can recover", async () => {
+  const fetcher = vi
+    .fn()
+    .mockImplementationOnce(brokenBody)
+    .mockResolvedValueOnce(Response.json({ results: [] }));
+  expect(
+    await new TavilyHttp(snapshot(), fetcher).request("POST", "/extract", {}),
+  ).toEqual({ results: [] });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+test("exhausted body read failures are network errors", async () => {
+  const fetcher = vi.fn(brokenBody);
+  await expect(
+    new TavilyHttp(snapshot(), fetcher as unknown as typeof fetch).request(
+      "GET",
+      "/usage",
+    ),
+  ).rejects.toMatchObject({ code: "network" });
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});
+
+test("research creation body failure never retries", async () => {
+  const fetcher = vi.fn(brokenBody);
+  await expect(
+    new TavilyHttp(snapshot(), fetcher as unknown as typeof fetch).request(
+      "POST",
+      "/research",
+      {},
+    ),
+  ).rejects.toMatchObject({ code: "network" });
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
+test("cancellation during body failure stops retries", async () => {
+  const controller = new AbortController();
+  const fetcher = vi.fn(
+    async () =>
+      new Response(
+        new ReadableStream({
+          pull(stream) {
+            controller.abort();
+            stream.error(new Error("aborted transfer"));
+          },
+        }),
+      ),
+  );
+  await expect(
+    new TavilyHttp(snapshot(), fetcher, controller.signal).request(
+      "POST",
+      "/extract",
+      {},
+    ),
+  ).rejects.toMatchObject({ name: "AbortError" });
+  expect(fetcher).toHaveBeenCalledOnce();
+});

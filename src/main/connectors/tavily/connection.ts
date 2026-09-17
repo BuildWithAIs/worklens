@@ -163,7 +163,10 @@ export class TavilyConnections {
           e instanceof Error ? e.message : String(e),
         );
       }
-      const revision = randomUUID();
+      const revision =
+        next.settings.url === this.value.url && next.token === this.token
+          ? this.revision
+          : randomUUID();
       await atomicJson(this.path, {
         version: 1,
         revision,

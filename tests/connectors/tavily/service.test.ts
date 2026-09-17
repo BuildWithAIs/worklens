@@ -19,6 +19,7 @@ async function fakeTavily() {
   const state = {
     usageStatus: 200,
     searchStatus: 200,
+    errorDetail: "Limit",
     longPage: false,
     searchContent: "",
     researchStatus: "pending",
@@ -57,7 +58,9 @@ async function fakeTavily() {
     }
     if (req.url === "/search") {
       if (state.searchStatus !== 200)
-        return send(state.searchStatus, { detail: { error: "Limit" } });
+        return send(state.searchStatus, {
+          detail: { error: state.errorDetail },
+        });
       return send(200, {
         query: body.query,
         results: [
@@ -85,7 +88,7 @@ async function fakeTavily() {
         state.researchCreateStatus,
         state.researchCreateStatus === 201
           ? { request_id: "research-1", status: "pending" }
-          : { detail: "unknown upstream error" },
+          : { detail: state.errorDetail },
       );
     if (req.url === "/research/research-1")
       return send(200, {
@@ -330,7 +333,9 @@ test("storage failures are explicit and do not silently discard fetched content"
   });
   expect(result).toMatchObject({ isError: true });
   expect(data.status).toBe("storage_error");
-  expect(data.result.results[0].raw_content).toHaveLength(20000);
+  expect(data.recoverable).toBe(false);
+  expect(data.result).toBeUndefined();
+  expect(Buffer.byteLength(JSON.stringify(data))).toBeLessThanOrEqual(1800);
   expect(data.resultPath).toBeUndefined();
 });
 
@@ -492,4 +497,121 @@ test("polling cancellation preserves the handle; remote failures stay distinct f
   expect(
     f.fake.state.requests.filter((r) => r.path === "/research"),
   ).toHaveLength(1);
+});
+
+test.each(["web_search", "web_research"] as const)(
+  "long %s errors are saved and bounded",
+  async (name) => {
+    const f = await setup();
+    await f.connections.save(f.input);
+    f.fake.state.searchStatus = 400;
+    f.fake.state.researchCreateStatus = 400;
+    f.fake.state.errorDetail = "错".repeat(100000) + KEY;
+    const { result, data } = await f.call(
+      name,
+      name === "web_search" ? { query: "q" } : { input: "research" },
+    );
+    expect(result).toMatchObject({ isError: true });
+    expect(data.status).toBe("invalid_request");
+    expect(Buffer.byteLength(JSON.stringify(data))).toBeLessThanOrEqual(1800);
+    expect(Object.keys(data)[0]).toBe("resultPath");
+    const saved = await readFile(data.rawResultPath, "utf8");
+    expect(saved).toContain("错".repeat(100000));
+    expect(saved).not.toContain(KEY);
+    if (name === "web_research") expect(data.handle).toMatch(/^[a-f0-9]{64}$/);
+  },
+);
+
+test.each([undefined, "topic"])(
+  "fetch exposes extraction mode for query %s in preview and saved data",
+  async (query) => {
+    const f = await setup();
+    await f.connections.save(f.input);
+    const { data } = await f.call("web_fetch", {
+      urls: ["https://example.com"],
+      ...(query ? { query } : {}),
+    });
+    expect(data.contentMode).toBe(query ? "snippets" : "extracted_text");
+    expect(data.sourceComplete).toBe(false);
+    expect(data.extractionPartial).toBe(true);
+    const saved = JSON.parse(await readFile(data.rawResultPath, "utf8"));
+    expect(saved.contentMode).toBe(data.contentMode);
+    if (query) expect(data.next).toContain("Omit query");
+  },
+);
+
+test("same credentials preserve research identity across save and failed startup validation", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  const {
+    data: { handle },
+  } = await f.call("web_research", { input: "research" });
+  const revision = f.connections.snapshot().revision;
+  await f.connections.save({ url: f.input.url + "/", token: KEY });
+  expect(f.connections.snapshot().revision).toBe(revision);
+  expect(
+    (await f.call("web_research_status", { handle, wait_seconds: 0 })).data
+      .status,
+  ).toBe("accepted");
+  f.fake.state.usageStatus = 401;
+  const reloaded = new TavilyConnections(
+    join(f.root, "tavily.json"),
+    f.crypto,
+    fetch,
+  );
+  await reloaded.load();
+  f.fake.state.usageStatus = 200;
+  await reloaded.save({ url: f.input.url });
+  expect(reloaded.snapshot().revision).toBe(revision);
+  const service = new TavilyService(reloaded, f.service.artifacts);
+  const tool = service
+    .tools("session1")
+    .find((t) => t.name === "web_research_status")!;
+  const result = await tool.execute(
+    "status",
+    { handle, wait_seconds: 0 },
+    undefined,
+    undefined,
+    {} as any,
+  );
+  expect(result.details).toEqual({ status: "accepted" });
+  await expect(
+    reloaded.save({ url: f.input.url, token: "different" }),
+  ).rejects.toThrow();
+  const disk = JSON.parse(await readFile(join(f.root, "tavily.json"), "utf8"));
+  expect(disk.revision).not.toBe(revision);
+});
+
+test("long errors stay bounded when storage fails", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  f.fake.state.searchStatus = 400;
+  f.fake.state.errorDetail = "错".repeat(100000) + KEY;
+  vi.spyOn(f.service.artifacts, "save").mockRejectedValue(
+    new Error("disk full"),
+  );
+  const { result, data } = await f.call("web_search", { query: "q" });
+  expect(result).toMatchObject({ isError: true });
+  expect(data).toMatchObject({
+    status: "storage_error",
+    remoteStatus: "invalid_request",
+    recoverable: false,
+  });
+  expect(data.resultPath).toBeUndefined();
+  expect(Buffer.byteLength(JSON.stringify(data))).toBeLessThanOrEqual(1800);
+  expect(JSON.stringify(data)).not.toContain(KEY);
+});
+
+test("changing the endpoint invalidates old research handles", async () => {
+  const f = await setup();
+  await f.connections.save(f.input);
+  const {
+    data: { handle },
+  } = await f.call("web_research", { input: "research" });
+  const other = await fakeTavily();
+  await f.connections.save({ url: other.api, token: KEY });
+  expect(
+    (await f.call("web_research_status", { handle, wait_seconds: 0 })).data
+      .status,
+  ).toBe("invalid_handle");
 });

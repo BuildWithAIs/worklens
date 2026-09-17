@@ -6,8 +6,7 @@ user copies of bundled skills are replaced on the next launch.
 Local skills in `~/.agents/skills` are read only and never deleted or overwritten.
 
 `tavily-research` is WorkLens-authored guidance for its connector to the official
-Tavily Research API. It is not an upstream Tavily skill. The bundled DeerFlow
-`deep-research` and `code-documentation` packages have been removed.
+Tavily Research API. It is not an upstream Tavily skill.
 
 Settings and the agent use the same built-in-first precedence for duplicate
 names. A shadowed local skill is shown as inactive and can still be revealed.
