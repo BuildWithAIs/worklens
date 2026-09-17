@@ -7,12 +7,31 @@ stored through OS encryption. `GET /usage` verifies it without a search.
 
 ## Tools
 
-| Tool | Official API | Behavior |
-|---|---|---|
-| `web_search` | `POST /search` | Basic search; query, up to 20 results, topic, time range and domain filters. Saves the full response and returns an ordered source index with bounded excerpts. |
-| `web_fetch` | `POST /extract` | Extract 1–5 URLs as Markdown. Saves the full response, separate page files, and an index of successful and failed URLs. |
-| `web_research` | `POST /research` | Submit a paid deep research task with `input` and optional `model` (`mini`, `pro`, `auto`). Returns a durable local handle, not the report. |
-| `web_research_status` | `GET /research/{request_id}` | Query the same handle; `wait_seconds` is 0–30, default 5. Pending jobs can be queried again across turns and app restarts. Completed reports are saved once and reused. |
+| Tool                  | Official API                 | Behavior                                                                                                                                                                        |
+| --------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `web_search`          | `POST /search`               | Search with selectable depth; query, up to 20 results, topic, time range and domain filters. Saves the full response and returns an ordered source index with bounded excerpts. |
+| `web_fetch`           | `POST /extract`              | Extract 1–5 URLs as Markdown with selectable depth. Saves the full response, separate page files, and an index of successful and failed URLs.                                   |
+| `web_research`        | `POST /research`             | Submit a paid deep research task with `input` and optional `model` (`mini`, `pro`, `auto`). Returns a durable local handle, not the report.                                     |
+| `web_research_status` | `GET /research/{request_id}` | Query the same handle; `wait_seconds` is 0–30, default 5. Pending jobs can be queried again across turns and app restarts. Completed reports are saved once and reused.         |
+
+Use search to discover sources; known URLs can go directly to `web_fetch`.
+Fetch selected pages when more evidence is needed, not automatically after every
+search. Use `query` for focused snippets or omit it for extracted page text;
+neither extraction depth guarantees all original page content.
+
+The agent can select these depths; omitting either parameter uses `basic`:
+
+| Parameter       | Value             | Recommended use                                                                                            |
+| --------------- | ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `search_depth`  | `basic` (default) | General searches, balancing relevance and latency.                                                         |
+|                 | `advanced`        | Specific details or highest relevance; higher latency and credit cost.                                     |
+|                 | `fast`            | Relevant snippets when low latency is important.                                                           |
+|                 | `ultra-fast`      | Minimum latency is the priority.                                                                           |
+| `extract_depth` | `basic` (default) | Simple text pages.                                                                                         |
+|                 | `advanced`        | Complex pages, tables, embedded content, or insufficient basic extraction; higher latency and credit cost. |
+
+These options follow the official [Search](https://docs.tavily.com/documentation/api-reference/endpoint/search)
+and [Extract](https://docs.tavily.com/documentation/api-reference/endpoint/extract) contracts.
 
 Successful search/extract calls return a lightweight index rather than a prefix
 of the response JSON. The envelope includes:
@@ -81,13 +100,6 @@ while transferring the response body. Research creation never retries a body fai
 All HTTP bodies are capped at 8 MiB of actual streamed bytes, even without a
 reliable Content-Length. Redirects do not forward credentials. Network, quota,
 authentication and rate-limit errors are returned as explicit tool statuses.
-
-## Skills
-
-The bundled `tavily-research` is WorkLens-authored guidance for these tools.
-It is limited to explicit deep research and multi-source report requests.
-Ordinary questions use search/extract. User-owned local skills
-are untouched.
 
 Official contracts: [Create research](https://docs.tavily.com/documentation/api-reference/endpoint/research),
 [Get research status](https://docs.tavily.com/documentation/api-reference/endpoint/research-get).

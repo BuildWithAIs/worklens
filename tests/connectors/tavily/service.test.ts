@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { validateToolArguments } from "@earendil-works/pi-ai";
 import { TavilyConnections } from "../../../src/main/connectors/tavily/connection";
 import { TavilyService } from "../../../src/main/connectors/tavily/service";
 import { tavilyConnector } from "../../../src/main/connectors/tavily";
@@ -240,6 +241,79 @@ test("web_search forwards the query with the bearer key and returns trimmed resu
     time_range: "week",
     search_depth: "basic",
   });
+});
+
+test.each(["basic", "advanced", "fast", "ultra-fast"])(
+  "web_search accepts and forwards search_depth=%s through the agent schema",
+  async (search_depth) => {
+    const f = await setup();
+    await f.connections.save(f.input);
+    const tool = f.service
+      .tools("session1")
+      .find((t) => t.name === "web_search")!;
+    const args = validateToolArguments(tool, {
+      type: "toolCall",
+      id: "search-depth",
+      name: tool.name,
+      arguments: { query: "specific details", search_depth },
+    });
+    const { data } = await f.call("web_search", args);
+    expect(data.status).toBe("success");
+    expect(f.fake.state.requests.at(-1)).toMatchObject({
+      path: "/search",
+      body: { query: "specific details", search_depth },
+    });
+  },
+);
+
+test.each([undefined, "basic", "advanced"])(
+  "web_fetch accepts extract_depth=%s and forwards the selected or default depth",
+  async (extract_depth) => {
+    const f = await setup();
+    await f.connections.save(f.input);
+    const tool = f.service
+      .tools("session1")
+      .find((t) => t.name === "web_fetch")!;
+    const args = validateToolArguments(tool, {
+      type: "toolCall",
+      id: "extract-depth",
+      name: tool.name,
+      arguments: {
+        urls: ["https://example.com/table"],
+        ...(extract_depth ? { extract_depth } : {}),
+      },
+    });
+    const { data } = await f.call("web_fetch", args);
+    expect(data.status).toBe("success");
+    expect(f.fake.state.requests.at(-1)).toMatchObject({
+      path: "/extract",
+      body: {
+        urls: ["https://example.com/table"],
+        extract_depth: extract_depth ?? "basic",
+        format: "markdown",
+      },
+    });
+  },
+);
+
+test("agent schemas reject unsupported depth values before making requests", async () => {
+  const f = await setup();
+  for (const [name, args] of [
+    ["web_search", { query: "x", search_depth: "deep" }],
+    ["web_search", { query: "x", search_depth: 1 }],
+    ["web_fetch", { urls: ["https://example.com"], extract_depth: "fast" }],
+  ] as const) {
+    const tool = f.service.tools("session1").find((t) => t.name === name)!;
+    expect(() =>
+      validateToolArguments(tool, {
+        type: "toolCall",
+        id: "invalid-depth",
+        name,
+        arguments: args,
+      }),
+    ).toThrow();
+  }
+  expect(f.fake.state.requests).toHaveLength(0);
 });
 
 test("web_search maps quota and auth failures to tool statuses and never leaks the key", async () => {
