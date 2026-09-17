@@ -349,7 +349,7 @@ kbd {
 }
 .conversation-item:has(.conversation-unread) .conversation-open,
 .conversation-item:has(.history-loading-ring) .conversation-open {
-  padding-right: 28px;
+  padding-right: 36px;
 }
 .conversation-item:hover .conversation-open,
 .conversation-item:has(:focus-visible) .conversation-open,
@@ -1141,7 +1141,11 @@ kbd {
   padding-bottom: 6px;
 }
 .worklens-activity-section[data-running="false"] {
+  padding-bottom: 6px;
   border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+.worklens-activity-section[data-running="false"]:has([data-slot="reasoning-trigger"][aria-expanded="true"]) {
+  padding-bottom: 10px;
 }
 .aui-assistant-message-time,
 .aui-user-action-bar-wrapper {
@@ -1201,13 +1205,13 @@ kbd {
 
 .history-loading-ring {
   position: absolute;
-  right: 10.5px;
-  top: calc(50% - 5px);
+  right: 7.5px;
+  top: calc(50% - 8px);
   pointer-events: none;
-  width: 10px;
-  height: 10px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
-  border: 1.5px solid color-mix(in srgb, var(--muted) 22%, transparent);
+  border: 2px solid color-mix(in srgb, var(--muted) 25%, transparent);
   border-top-color: var(--muted);
   border-right-color: var(--muted);
   border-radius: 50%;
@@ -1482,4 +1486,64 @@ kbd {
 }
 .worklens-activity-section[data-running="false"] [data-slot="reasoning-text"][data-scroll-below="true"] {
   --activity-fade-bottom: 24px;
+}
+
+/* Navigation selects a location; it should not depress like an action button. */
+.conversation-open,
+.settings-navigation nav [data-slot="button"] {
+  translate: none;
+  transition-property: background-color, color, box-shadow;
+}
+.history-title-text { vertical-align: top; }
+
+/* Code blocks share one quiet surface, without a separate toolbar band. */
+.aui-code-header-root {
+  position: relative;
+  height: 0;
+  margin-top: 12px;
+  z-index: 1;
+}
+.aui-code-header-language {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  font-size: 11px;
+  line-height: 20px;
+}
+.aui-code-header-root .aui-code-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+  pointer-events: none;
+  color: var(--muted);
+  background: var(--bg);
+  transition: opacity 120ms ease;
+}
+.aui-code-header-root:hover .aui-code-copy,
+.aui-code-header-root:focus-within .aui-code-copy,
+.aui-code-header-root:has(+ .aui-md-pre:hover) .aui-code-copy {
+  opacity: 1;
+  pointer-events: auto;
+}
+.aui-md-pre { padding: 16px 48px 16px 16px; }
+.aui-code-header-root + .aui-md-pre { margin-top: 0; }
+.aui-code-header-root[data-language="true"] + .aui-md-pre { padding-top: 40px; }
+.aui-md-inline-code {
+  font-family: var(--code-font-family);
+  font-size: 0.88em;
+  padding: 0.18em 0.42em;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  overflow-wrap: anywhere;
+}
+@media (hover: none) {
+  .aui-code-header-root .aui-code-copy { opacity: 1; pointer-events: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aui-code-header-root .aui-code-copy { transition: none; }
 }

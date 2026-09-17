@@ -26,7 +26,7 @@ test("history scrolls long titles with hints and marks only unseen completed rep
   const first = page.locator(".conversation-item").filter({ hasText: "A long conversation" });
   const title = first.locator(".history-title-clip");
   await page.locator(".chat-header").hover();
-  await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "28px");
+  await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "36px");
   await expect(title).toHaveAttribute("data-overflow", "true");
   await expect(title).toHaveText("A long conversation title that should fade and scroll without an ellipsis at the end");
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -35,6 +35,14 @@ test("history scrolls long titles with hints and marks only unseen completed rep
   await expect(first.locator(".history-title-text")).toHaveCSS("animation-name", "history-title-pan");
   await expect(first.locator(".history-title-text")).toHaveCSS("animation-delay", "0.5s");
   await expect(first.locator(".history-title-text")).toHaveCSS("animation-timing-function", "linear");
+  const row = first.locator(".conversation-open");
+  const beforePress = await row.boundingBox();
+  await page.mouse.down();
+  const duringPress = await row.boundingBox();
+  expect(duringPress.y).toBe(beforePress.y);
+  await page.mouse.up();
+  await page.locator(".chat-header").hover();
+  await row.hover();
   const positions = await first.locator(".history-title-text").evaluate(node => {
     const animation = node.getAnimations()[0];
     animation.pause();
@@ -80,7 +88,7 @@ test("history scrolls long titles with hints and marks only unseen completed rep
   await page.evaluate(() => window.historyEvent("a", "run-1", 1, "completed"));
   await expect(first.getByRole("img", { name: "Unread reply" })).toHaveCount(1);
   await page.locator(".chat-header").hover();
-  await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "28px");
+  await expect(first.locator(".conversation-open")).toHaveCSS("padding-right", "36px");
   await first.hover();
   await first.getByRole("button", { name: /^Conversation options:/ }).click();
   const outside = await page.locator(".chat-header").boundingBox();
