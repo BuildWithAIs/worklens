@@ -112,12 +112,21 @@ export function evaluateConnectorForm(
     (cloud && !optional(form.email)) ||
     (needsCloudId && !optional(form.cloudId)) ||
     (!optional(form.token) && !canReuseToken);
+  // Equivalent valid values need no save. Invalid edits must remain actionable
+  // so explicit validation can explain the error (for example a GitHub path).
+  // A connection whose last validation failed can still be re-saved as a retry.
+  const unchanged =
+    canReuseToken &&
+    !optional(form.token) &&
+    !connection?.error &&
+    Object.keys(errors).length === 0;
   return {
     canReuseToken,
     cloud,
     needsCloudId,
     errors,
     missing,
+    unchanged,
     required,
     invalid,
   };

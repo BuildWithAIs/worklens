@@ -52,13 +52,22 @@ export const schemas = {
   settings: z
     .object({
       theme: z.enum(["light", "dark", "system"]).optional(),
-      backgroundEffect: z.enum(["none", "surface", "fluid", "aurora"]).optional(),
-      backgroundTone: z.enum(["violet", "electric", "ice", "sunset"]).optional(),
+      backgroundEffect: z
+        .enum(["none", "surface", "fluid", "aurora"])
+        .optional(),
+      backgroundTone: z
+        .enum(["violet", "electric", "ice", "sunset"])
+        .optional(),
       riskAccepted: z.boolean().optional(),
       defaults: selection.optional(),
       hiddenModels: z.array(z.string().min(1).max(400)).max(2000).optional(),
       lastConversation: id.optional(),
       pinnedConversationIds: z.array(id).max(2000).optional(),
+      disabledSkills: z.array(z.string().min(1).max(200)).max(2000).optional(),
+      disabledSkillIds: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .max(2000)
+        .optional(),
     })
     .strict(),
   login: z
@@ -102,8 +111,16 @@ export const schemas = {
   model: z.object({ id, selection }).strict(),
   external: z.object({ url: z.string().url().max(10000) }).strict(),
   showPath: z
-    .object({ which: z.enum(["root", "runtime", "sessions", "userData"]) })
+    .object({
+      which: z.enum(["root", "runtime", "sessions", "userData", "skills"]),
+    })
     .strict(),
+  skillsList: z.undefined(),
+  skillsRefresh: z.undefined(),
+  skillsToggle: z
+    .object({ id: z.string().regex(/^[a-f0-9]{64}$/), enabled: z.boolean() })
+    .strict(),
+  skillsReveal: z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
 };
 export function externalUrl(value: string) {
   const url = new URL(value);

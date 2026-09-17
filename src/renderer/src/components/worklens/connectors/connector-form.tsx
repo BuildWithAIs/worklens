@@ -30,6 +30,7 @@ export function useConnectorForm(
     needsCloudId,
     errors,
     missing,
+    unchanged,
     required,
     invalid,
   } = evaluateConnectorForm(service, form, connection, t);
@@ -55,6 +56,7 @@ export function useConnectorForm(
     notifyConnected: (result: string) =>
       toast.add(connectorSuccess(result, connectorName(service), language)),
     missing,
+    unchanged,
     fieldError,
     reset: () => setServerErrors({}),
     props: (field: FieldName) => ({

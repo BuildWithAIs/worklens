@@ -4,6 +4,7 @@ import { toast } from "@/components/ui/toast";
 import { BackgroundEffect } from "./BackgroundEffect";
 import { BackgroundPreferences } from "./BackgroundPreferences";
 import { ConnectionsSettings } from "./connectors/ConnectionsSettings";
+import { SkillsSettings } from "./skills/SkillsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   Settings2,
+  Sparkles,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -64,7 +66,8 @@ export type SettingsSection =
   | "general"
   | "providers"
   | "models"
-  | "connections";
+  | "connections"
+  | "skills";
 type Props = {
   data: Bootstrap;
   initialSection?: SettingsSection;
@@ -263,6 +266,7 @@ export function SettingsPage({
     { id: "providers" as const, label: t("settings.providers"), icon: Globe },
     { id: "models" as const, label: t("settings.models"), icon: Cpu },
     { id: "connections" as const, label: t("settings.connectors"), icon: Plug },
+    { id: "skills" as const, label: t("settings.skills"), icon: Sparkles },
   ];
   function providerRows(items: ProviderInfo[], isConnected: boolean) {
     return (
@@ -666,6 +670,7 @@ export function SettingsPage({
                 onSuccess={onSuccess}
               />
             )}
+            {section === "skills" && <SkillsSettings onSuccess={onSuccess} />}
             {section === "general" && (
               <>
                 <section className="settings-section">
@@ -759,6 +764,7 @@ export function SettingsPage({
                         ["runtime", t("settings.runtimeDirectory")],
                         ["sessions", t("settings.conversationHistory")],
                         ["userData", t("settings.settingsCredentials")],
+                        ["skills", t("settings.skillsDirectory")],
                       ] as const
                     ).map(([which, label]) => (
                       <Item

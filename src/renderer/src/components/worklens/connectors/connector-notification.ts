@@ -24,7 +24,7 @@ export function connectorSuccess(
   const t = i18n.getFixedT(language);
   // Remove only our own result prefix, preserving account names and site addresses.
   const description = result.replace(
-    /^(?:(?:Jira|Confluence|GitHub) )?(?:已连接：|Connected: )/,
+    /^(?:(?:Jira|Confluence|GitHub|Tavily) )?(?:已连接：|Connected: )/,
     "",
   );
   return {

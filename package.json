@@ -104,6 +104,10 @@
       {
         "from": "build/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "resources/skills",
+        "to": "skills"
       }
     ]
   }

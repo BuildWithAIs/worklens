@@ -6,7 +6,7 @@ This implements the daily-work categories from [issue #1](https://github.com/Bui
 
 ## Setup
 
-Open **Settings → Connectors → Connect Jira**. See the [connections catalog](../screenshots/jira-settings.png).
+Open **Settings → Connectors → Connect Jira**.
 
 | Deployment               | Settings                                  | Authentication / API                                                    |
 | ------------------------ | ----------------------------------------- | ----------------------------------------------------------------------- |
@@ -21,8 +21,6 @@ The Data Center compatibility target is the **Jira 9.12 REST contract and newer 
 Save automatically validates `/myself`; anonymous or invalid identities do not enable tools. Startup revalidates saved credentials. Failed saves retain encrypted settings for correction and disable tools. Blank token input retains the existing token only for the same site, deployment, email, token type and Cloud ID. Changing the connection aborts old requests and invalidates continuations/previews. Disconnect removes the credential file and keeps conversations and downloaded files.
 
 Credentials are encrypted with Electron safeStorage in `jira.json`; there is no plaintext fallback. Secrets and encoded Basic credentials are redacted from results, errors and operation records. Renderer/bootstrap contracts never return tokens. Cloud requires HTTPS; explicitly configured intranet Data Center HTTP URLs are accepted. API redirects are rejected. Attachment redirects can go to HTTPS download hosts but never receive the Jira Authorization header.
-
-![Jira connection dialog](../screenshots/jira-dialog.png)
 
 ## Tool discovery and fields
 

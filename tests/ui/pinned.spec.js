@@ -44,10 +44,12 @@ test("pinned groups share rows, scrollbars and survive refresh; failed saves kee
   await page.mouse.move(0, 0);
   const row = pinned.locator(".conversation-item");
   const ring = row.locator(".history-loading-ring");
-  await expect(row.locator(".conversation-open")).toHaveCSS("padding-right", "28px");
+  await expect(row.locator(".conversation-open")).toHaveCSS("padding-right", "36px");
   const rowBox = await row.boundingBox();
   const ringBox = await ring.boundingBox();
-  expect(rowBox.x + rowBox.width - ringBox.x - ringBox.width).toBeCloseTo(10.5, 1);
+  expect(ringBox.width).toBe(16);
+  expect(ringBox.height).toBe(16);
+  expect(rowBox.x + rowBox.width - ringBox.x - ringBox.width).toBeCloseTo(7.5, 1);
   expect(ringBox.y + ringBox.height / 2).toBeCloseTo(rowBox.y + rowBox.height / 2, 0);
   await expect(ring).toHaveCSS("opacity", "1");
   await row.hover();

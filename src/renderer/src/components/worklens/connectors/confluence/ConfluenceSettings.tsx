@@ -245,6 +245,7 @@ export function ConfluenceSettings({
           service="confluence"
           action={action}
           missing={validation.missing}
+          unchanged={validation.unchanged}
           removable={!!connection?.url}
           onAction={(next) => void act(next)}
         />

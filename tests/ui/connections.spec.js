@@ -19,13 +19,16 @@ for (const theme of ["light", "dark"]) {
       const nav = page.locator(".settings-navigation");
       await nav.getByRole("button", { name: language === "en" ? "Connectors" : "连接器", exact: true }).click();
       const content = page.locator('[data-section="connections"]');
-      await expect(content.getByRole("listitem")).toHaveCount(3);
+      await expect(content.getByRole("listitem")).toHaveCount(4);
       const search = content.getByRole("textbox", { name: language === "en" ? "Search connectors" : "搜索连接器" });
       await search.fill("  GITHUB  ");
       await expect(content.getByRole("listitem")).toHaveCount(1);
       await expect(content.getByText("GitHub", { exact: true })).toBeVisible();
       await search.fill("Atlassian");
       await expect(content.getByRole("listitem")).toHaveCount(2);
+      await search.fill("搜索");
+      await expect(content.getByRole("listitem")).toHaveCount(1);
+      await expect(content.getByText("Tavily", { exact: true })).toBeVisible();
       await search.fill("no match");
       await expect(content.locator(".settings-empty")).toBeVisible();
       await content.getByRole("button", { name: language === "en" ? "Clear search" : "清除搜索" }).click();
@@ -35,13 +38,13 @@ for (const theme of ["light", "dark"]) {
       await expect(content.getByRole("listitem")).toHaveCount(0);
       await expect(content.locator(".settings-empty")).toBeVisible();
       await filter.selectOption("available");
-      await expect(content.getByRole("listitem")).toHaveCount(3);
+      await expect(content.getByRole("listitem")).toHaveCount(4);
       await expect(content.getByRole("heading", { name: language === "en" ? "Available" : "可连接", exact: true })).toBeVisible();
       await filter.selectOption("all");
 
       await page.keyboard.press("Tab");
       const before = await page.evaluate(() => window.calls.length);
-      for (const name of ["Jira", "GitHub"]) {
+      for (const name of ["Jira", "GitHub", "Tavily"]) {
         const button = content.getByRole("button", { name: `${language === "en" ? "Connect" : "连接"} ${name}`, exact: true });
         await expect(button).toBeEnabled();
       }

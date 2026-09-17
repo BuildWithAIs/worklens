@@ -241,7 +241,12 @@
   max-width: 50%;
   flex-shrink: 0;
 }
-:is(.settings-provider-list, .settings-connection-list, .settings-model-panel)
+:is(
+    .settings-provider-list,
+    .settings-connection-list,
+    .settings-skill-list,
+    .settings-model-panel
+  )
   .settings-entry {
   min-height: 48px;
   padding-block: 10px;
@@ -249,6 +254,11 @@
 .settings-entry-copy {
   min-width: 0;
   flex: 1;
+}
+/* Skill summaries vary a lot in length; a fixed measure gives the column a
+   stable right edge instead of running up to the row controls. */
+.settings-skill-list .settings-entry-description {
+  max-width: 64ch;
 }
 .settings-entry-title {
   display: flex;
@@ -315,6 +325,10 @@
   color: var(--faint);
   text-align: center;
   padding: 56px 20px;
+}
+.settings-list > .settings-empty {
+  margin: 0;
+  padding: 28px 20px;
 }
 .settings-dialog {
   width: min(480px, calc(100vw - 32px));

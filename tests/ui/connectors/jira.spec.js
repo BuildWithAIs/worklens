@@ -97,7 +97,7 @@ for (const language of ["en", "zh"]) {
       await filter.selectOption("connected");
       await expect(content.getByRole("listitem")).toHaveCount(1);
       await filter.selectOption("available");
-      await expect(content.getByRole("listitem")).toHaveCount(2);
+      await expect(content.getByRole("listitem")).toHaveCount(3);
       await filter.selectOption("all");
       const manage = content.getByRole("button", {
         name: t("Manage Jira", "管理 Jira"),

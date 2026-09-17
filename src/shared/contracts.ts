@@ -103,7 +103,28 @@ export interface Settings {
   hiddenModels?: string[];
   lastConversation?: string;
   pinnedConversationIds?: string[];
+  /** Legacy names, migrated by SkillsService when matching files are found. */
+  disabledSkills?: string[];
+  disabledSkillIds?: string[];
   [key: string]: unknown;
+}
+export interface SkillInfo {
+  id: string;
+  /** Same-name skills use built-in-first precedence, even if the winner is disabled. */
+  shadowedBy?: "builtin" | "local";
+  name: string;
+  description: string;
+  /** First sentence of the description, for list rows. */
+  summary: string;
+  path: string;
+  source: "builtin" | "local";
+  enabled: boolean;
+  disableModelInvocation: boolean;
+}
+export interface SkillsSnapshot {
+  builtin: SkillInfo[];
+  /** ~/.agents/skills on this machine, shared with other agent tools. */
+  local: SkillInfo[];
 }
 export interface MessageView {
   artifacts?: LocalArtifact[];
@@ -177,11 +198,18 @@ export interface Bootstrap {
   confluence?: ConfluenceConnection;
   jira?: JiraConnection;
   github?: GitHubConnection;
+  tavily?: TavilyConnection;
   globalUsage?: GlobalUsage;
   settings: Settings;
   providers: ProviderInfo[];
   conversations: Conversation[];
-  paths: { root: string; runtime: string; sessions: string; userData: string };
+  paths: {
+    root: string;
+    runtime: string;
+    sessions: string;
+    userData: string;
+    skills: string;
+  };
   version: string;
   tools: string[];
   diagnostics: string[];
@@ -194,6 +222,9 @@ export interface Requests {
   githubSave: { input: GitHubSettingsInput; output: GitHubConnection };
   githubTest: { input: GitHubSettingsInput; output: string };
   githubRemove: { input: undefined; output: void };
+  tavilySave: { input: TavilySettingsInput; output: TavilyConnection };
+  tavilyTest: { input: TavilySettingsInput; output: string };
+  tavilyRemove: { input: undefined; output: void };
   htmlFileAction: {
     input: {
       id: string;
@@ -259,9 +290,16 @@ export interface Requests {
   dismissRecovery: { input: { runId: string }; output: void };
   refreshModels: { input: { provider: string }; output: string };
   showPath: {
-    input: { which: "root" | "runtime" | "sessions" | "userData" };
+    input: { which: "root" | "runtime" | "sessions" | "userData" | "skills" };
     output: void;
   };
+  skillsList: { input: undefined; output: SkillsSnapshot };
+  skillsRefresh: { input: undefined; output: SkillsSnapshot };
+  skillsToggle: {
+    input: { id: string; enabled: boolean };
+    output: SkillsSnapshot;
+  };
+  skillsReveal: { input: { id: string }; output: void };
 }
 export interface ConfluenceSettingsInput {
   url: string;
@@ -314,6 +352,15 @@ export interface GitHubConnection extends Omit<GitHubSettingsInput, "token"> {
   configured: boolean;
   login?: string;
   serverVersion?: string;
+  error?: string;
+}
+export interface TavilySettingsInput {
+  url: string;
+  token?: string;
+}
+export interface TavilyConnection extends Omit<TavilySettingsInput, "token"> {
+  configured: boolean;
+  plan?: string;
   error?: string;
 }
 export interface JiraConnection extends Omit<JiraSettingsInput, "token"> {

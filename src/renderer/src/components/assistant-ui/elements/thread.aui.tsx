@@ -89,6 +89,7 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
+  ComposerInput?: ComponentType<{ autoFocus: boolean }>;
   ToolFallback?: ToolCallMessagePartComponent | undefined;
   ToolGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -264,6 +265,7 @@ const ThreadWelcome: FC = () => {
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const { t } = useAppTranslation();
+  const { ComposerInput } = useContext(ThreadComponentsContext);
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone
@@ -275,14 +277,18 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         }
       >
         <ComposerAttachments />
-        <ComposerPrimitive.Input
-          placeholder={t("thread.doAnything")}
-          className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
-          rows={1}
-          autoFocus={autoFocus}
-          enterKeyHint="send"
-          aria-label={t("thread.message")}
-        />
+        {ComposerInput ? (
+          <ComposerInput autoFocus={autoFocus} />
+        ) : (
+          <ComposerPrimitive.Input
+            placeholder={t("thread.doAnything")}
+            className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
+            rows={1}
+            autoFocus={autoFocus}
+            enterKeyHint="send"
+            aria-label={t("thread.message")}
+          />
+        )}
         <ComposerAction />
       </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>

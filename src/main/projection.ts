@@ -1,4 +1,5 @@
 import type { MessageView } from "../shared/contracts";
+import { parseSkillBlock } from "@earendil-works/pi-coding-agent";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 type RecordValue = Record<string, any>;
@@ -23,8 +24,17 @@ export function projectMessages(
     const message = raw as RecordValue;
     const id = `m-${index}`;
     const firstNew = result.length;
-    if (message.role === "user")
-      result.push({ id, role: "user", text: textContent(message.content) });
+    if (message.role === "user") {
+      const text = textContent(message.content);
+      const skill = parseSkillBlock(text);
+      result.push({
+        id,
+        role: "user",
+        text: skill
+          ? `/skill:${skill.name}${skill.userMessage ? ` ${skill.userMessage}` : ""}`
+          : text,
+      });
+    }
     if (message.role === "assistant") {
       const thinking = Array.isArray(message.content)
         ? message.content

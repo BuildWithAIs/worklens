@@ -4,6 +4,11 @@ import i18n, { type AppLanguage } from "../i18n";
 // known application-owned text and leave conversation/tool content untouched.
 const messages = [
   [
+    "该技能未启用或已不存在，请在设置中检查技能",
+    "This skill is disabled or no longer available. Check Skills in Settings.",
+    "skills.unavailable",
+  ],
+  [
     "Cloud 需要 HTTPS 地址",
     "Cloud requires an HTTPS address.",
     "connectors.runtime.cloudHttps",
@@ -261,23 +266,26 @@ export function systemText(text: string, language: AppLanguage) {
   // Connector-owned runtime messages carry service names and status codes.
   // Translate their known wording while retaining server-provided details.
   result = result
-    .replace(/(Jira|Confluence|GitHub) 网络请求失败或超时/g, (_, service) =>
-      t("connectors.runtime.network", { service }),
-    )
-    .replace(/(Jira|Confluence|GitHub) 返回 (\d{3})。/g, (_, service, status) =>
-      t("connectors.runtime.httpStatus", { service, status }),
+    .replace(
+      /(Jira|Confluence|GitHub|Tavily) 网络请求失败或超时/g,
+      (_, service) => t("connectors.runtime.network", { service }),
     )
     .replace(
-      /无法读取或解密 (Jira|Confluence|GitHub) 配置，原文件已保留。请重新填写 token 或断开连接。/g,
+      /(Jira|Confluence|GitHub|Tavily) 返回 (\d{3})。/g,
+      (_, service, status) =>
+        t("connectors.runtime.httpStatus", { service, status }),
+    )
+    .replace(
+      /无法读取或解密 (Jira|Confluence|GitHub|Tavily) 配置，原文件已保留。请重新填写 token 或断开连接。/g,
       (_, service) =>
         t("connectors.runtime.credentialsUnreadable", { service }),
     )
     .replace(
-      /请先在设置 → 连接中保存并验证 (Jira|Confluence|GitHub) 连接/g,
+      /请先在设置 → 连接中保存并验证 (Jira|Confluence|GitHub|Tavily) 连接/g,
       (_, service) => t("connectors.runtime.connectFirst", { service }),
     )
     .replace(
-      /(Jira|Confluence|GitHub) 连接已变更，请重新读取目标/g,
+      /(Jira|Confluence|GitHub|Tavily) 连接已变更，请重新读取目标/g,
       (_, service) => t("connectors.runtime.changed", { service }),
     )
     .replace(

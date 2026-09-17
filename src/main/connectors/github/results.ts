@@ -2,26 +2,7 @@ import type { LocalArtifacts } from "../../local-artifacts";
 import type { GitHubConnections } from "./connection";
 import type { Json } from "./http";
 
-// 200 lines fit below Pi read's 50 KiB byte limit, including multibyte text.
-function readableLines(json: string): string[] {
-  return json.split("\n").flatMap((line) => {
-    const chunks: string[] = [];
-    let chunk = "";
-    let bytes = 0;
-    for (const character of line) {
-      const size = Buffer.byteLength(character);
-      if (bytes + size > 200) {
-        chunks.push(chunk);
-        chunk = "";
-        bytes = 0;
-      }
-      chunk += character;
-      bytes += size;
-    }
-    chunks.push(chunk);
-    return chunks;
-  });
-}
+import { readableLines } from "../../readable-lines";
 
 /** Successes and errors share the same recoverable output budget. */
 export async function toolResult(

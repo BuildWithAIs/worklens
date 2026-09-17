@@ -18,7 +18,7 @@ for (const language of ["en", "zh"]) {
           {
             id: "a",
             role: "assistant",
-            text: "[Website](https://example.com/path?q=1#section)\n\nhttp://example.org\n\n[File](/tmp/example.txt)",
+            text: "[Website](https://example.com/path?q=1#section)\n\nhttp://example.org\n\n[File](/tmp/example.txt)\n\n`https://example.com/image.jpg`\n\n[`https://example.com/nested`](https://example.com/nested)\n\n`max_results`\n\n来源：（https://www.yzwb.net/news/tt/202609/t20260916_393366.html）。预报会更新，出门前建议再看一次当天实时。",
           },
         ],
       };
@@ -57,6 +57,35 @@ for (const language of ["en", "zh"]) {
     expect(await page.evaluate(() => window.externalLinks[2])).toMatch(
       /^http:\/\/example.org\/?$/,
     );
+    const inline = page.getByRole("link", {
+      name: "https://example.com/image.jpg",
+      exact: true,
+    });
+    await inline.click();
+    await inline.click({ modifiers: ["ControlOrMeta"] });
+    await inline.focus();
+    await page.keyboard.press("Enter");
+    expect((await page.evaluate(() => window.externalLinks)).slice(-3)).toEqual(
+      Array(3).fill("https://example.com/image.jpg"),
+    );
+    await expect(page.locator("a a")).toHaveCount(0);
+    await expect(
+      page.locator("code").filter({ hasText: /^max_results$/ }),
+    ).toHaveCount(1);
+    const weather = page.getByRole("link", {
+      name: "https://www.yzwb.net/news/tt/202609/t20260916_393366.html",
+      exact: true,
+    });
+    await weather.click();
+    expect((await page.evaluate(() => window.externalLinks)).at(-1)).toBe(
+      "https://www.yzwb.net/news/tt/202609/t20260916_393366.html",
+    );
+    await expect(
+      page.locator("a").filter({ hasText: "预报会更新" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(/预报会更新，出门前建议再看一次当天实时。/),
+    ).toBeVisible();
     await page.evaluate(() => {
       window.failOpen = true;
     });

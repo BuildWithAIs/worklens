@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/native-select";
 import { BrandIcon } from "../ProviderIcon";
 import { Plus, Settings2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Item,
@@ -84,48 +85,56 @@ export function ConnectionsSettings({
             </span>
           </h2>
           <ItemGroup className="settings-list settings-connection-list">
-            {group.platforms.map(({ id, name, icon, connection, Settings }) => (
-              <Item
-                key={id}
-                size="sm"
-                role="listitem"
-                className="settings-entry"
-                data-connection={id}
-              >
-                <ItemContent className="settings-entry-copy">
-                  <ItemTitle className="settings-entry-title">
-                    <BrandIcon source={icon} />
-                    {name}
-                  </ItemTitle>
-                  {connection?.(data)?.error && (
-                    <ItemDescription>
-                      {t("settingsFeedback.connectionNeedsAttention")}
-                    </ItemDescription>
-                  )}
-                  {group.connected && (
-                    <ItemDescription className="settings-entry-description">
-                      {connection?.(data)?.url}
-                    </ItemDescription>
-                  )}
-                </ItemContent>
-                <ItemActions className="settings-entry-actions">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!Settings}
-                    onClick={() => setEditing(id)}
-                    aria-label={`${group.connected ? t("common.manage") : t("common.connect")} ${name}`}
-                  >
-                    {group.connected ? (
-                      <Settings2 data-icon="inline-start" aria-hidden="true" />
-                    ) : (
-                      <Plus data-icon="inline-start" aria-hidden="true" />
+            {group.platforms.map(
+              ({ id, name, icon, tagline, connection, Settings }) => (
+                <Item
+                  key={id}
+                  size="sm"
+                  role="listitem"
+                  className="settings-entry"
+                  data-connection={id}
+                >
+                  <ItemContent className="settings-entry-copy">
+                    <ItemTitle className="settings-entry-title">
+                      <BrandIcon source={icon} />
+                      <span>{name}</span>
+                      {tagline && <Badge variant="outline">{tagline(t)}</Badge>}
+                    </ItemTitle>
+                    {connection?.(data)?.error && (
+                      <ItemDescription>
+                        {t("settingsFeedback.connectionNeedsAttention")}
+                      </ItemDescription>
                     )}
-                    {group.connected ? t("common.manage") : t("common.connect")}
-                  </Button>
-                </ItemActions>
-              </Item>
-            ))}
+                    {group.connected && (
+                      <ItemDescription className="settings-entry-description">
+                        {connection?.(data)?.url}
+                      </ItemDescription>
+                    )}
+                  </ItemContent>
+                  <ItemActions className="settings-entry-actions">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!Settings}
+                      onClick={() => setEditing(id)}
+                      aria-label={`${group.connected ? t("common.manage") : t("common.connect")} ${name}`}
+                    >
+                      {group.connected ? (
+                        <Settings2
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Plus data-icon="inline-start" aria-hidden="true" />
+                      )}
+                      {group.connected
+                        ? t("common.manage")
+                        : t("common.connect")}
+                    </Button>
+                  </ItemActions>
+                </Item>
+              ),
+            )}
           </ItemGroup>
         </section>
       ))}

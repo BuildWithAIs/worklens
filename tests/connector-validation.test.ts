@@ -62,3 +62,56 @@ test("complete but invalid input stays enabled until explicit validation", () =>
   expect(result.missing).toBe(false);
   expect(result.errors.url).toBeTruthy();
 });
+
+test("a saved connection with no edits is unchanged; edits, a token or a failed connection are not", () => {
+  const form = { ...saved, token: "" };
+  expect(evaluateConnectorForm("jira", form, saved, t).unchanged).toBe(true);
+  expect(evaluateConnectorForm("jira", form, undefined, t).unchanged).toBe(
+    false,
+  );
+  expect(
+    evaluateConnectorForm("jira", { ...form, token: "new" }, saved, t)
+      .unchanged,
+  ).toBe(false);
+  expect(
+    evaluateConnectorForm(
+      "jira",
+      { ...form, url: "https://other.test" },
+      saved,
+      t,
+    ).unchanged,
+  ).toBe(false);
+  expect(
+    evaluateConnectorForm("jira", form, { ...saved, error: "401" }, t)
+      .unchanged,
+  ).toBe(false);
+  const github = { configured: true, url: "https://github.example.test" };
+  expect(
+    evaluateConnectorForm("github", { ...github, token: "" }, github, t)
+      .unchanged,
+  ).toBe(true);
+  expect(
+    evaluateConnectorForm(
+      "github",
+      { url: "https://github.example.test/", token: "" },
+      github,
+      t,
+    ).unchanged,
+  ).toBe(true);
+});
+
+test("invalid edits to a saved GitHub URL can still trigger field validation", () => {
+  const connection = { configured: true, url: "https://github.com" };
+  for (const suffix of ["/repo", "?tab=repositories", "#section"]) {
+    const result = evaluateConnectorForm(
+      "github",
+      { url: connection.url + suffix, token: "" },
+      connection,
+      t,
+    );
+    expect(result.canReuseToken).toBe(true);
+    expect(result.missing).toBe(false);
+    expect(result.unchanged).toBe(false);
+    expect(result.errors.url).toBeTruthy();
+  }
+});

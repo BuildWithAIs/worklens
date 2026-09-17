@@ -7,12 +7,17 @@ import { connectionSchema as jiraSchema } from "./jira/connection";
 import type { JiraService } from "./jira/service";
 import { connectionSchema as githubSchema } from "./github/connection";
 import type { GitHubService } from "./github/service";
+import { connectionSchema as tavilySchema } from "./tavily/connection";
+import type { TavilyService } from "./tavily/service";
 
 // Each connector owns its settings schema; the IPC surface remains explicit and typed.
 export const connectorSchemas = {
   githubSave: githubSchema,
   githubTest: githubSchema,
   githubRemove: z.undefined(),
+  tavilySave: tavilySchema,
+  tavilyTest: tavilySchema,
+  tavilyRemove: z.undefined(),
   jiraSave: jiraSchema,
   jiraTest: jiraSchema,
   jiraRemove: z.undefined(),
@@ -30,6 +35,7 @@ export function connectorRequests(
   confluence: ConfluenceService,
   jira: JiraService,
   github: GitHubService,
+  tavily: TavilyService,
 ) {
   const handlers: {
     [K in ConnectorRequest]: (
@@ -39,6 +45,9 @@ export function connectorRequests(
     githubSave: (input) => github.connections.save(input),
     githubTest: (input) => github.test(input),
     githubRemove: () => github.connections.remove(),
+    tavilySave: (input) => tavily.connections.save(input),
+    tavilyTest: (input) => tavily.test(input),
+    tavilyRemove: () => tavily.connections.remove(),
     jiraSave: (input) => jira.connections.save(input),
     jiraTest: (input) => jira.test(input),
     jiraRemove: () => jira.connections.remove(),

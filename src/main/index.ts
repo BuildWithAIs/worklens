@@ -28,6 +28,7 @@ import type { Requests } from "../shared/contracts";
 import { createConnectors } from "./connectors";
 import { isConnectorRequest } from "./connectors/ipc";
 import { LocalArtifacts } from "./local-artifacts";
+import { SkillsService } from "./skills";
 
 // Keep the original safeStorage identity: changing case selects a different
 // macOS Keychain key. The application bundle controls the Dock display name.
@@ -46,6 +47,7 @@ const paths = {
   runtime: join(root, "runtime"),
   sessions: join(root, "sessions"),
   userData: app.getPath("userData"),
+  skills: join(root, "skills"),
 };
 let window: BrowserWindow | undefined;
 export let agents: AgentService | undefined;
@@ -72,6 +74,18 @@ else {
       );
       const state = new StateStore(join(paths.userData, "app-state.json"));
       await state.load();
+      const bundledSkills = app.isPackaged
+        ? join(process.resourcesPath, "skills")
+        : join(app.getAppPath(), "resources/skills");
+      const skills = new SkillsService(
+        paths.skills,
+        testRoot
+          ? join(root, "local-skills")
+          : join(homedir(), ".agents", "skills"),
+        bundledSkills,
+        state,
+      );
+      await skills.initialize();
       const artifacts = new LocalArtifacts(
         join(root, "artifacts"),
         paths.runtime,
@@ -101,6 +115,7 @@ else {
         (event) => broadcast("worklens:chat", event),
         redact,
         connectors.registry,
+        skills,
       );
       await agents.initialize();
       providers = new ProviderService(runtime, credentials, (event) =>
@@ -247,6 +262,18 @@ else {
                 case "refreshModels":
                   value = await providers!.refreshModels(input.provider);
                   break;
+                case "skillsList":
+                  value = await skills.refresh(false);
+                  break;
+                case "skillsRefresh":
+                  value = await skills.refresh();
+                  break;
+                case "skillsToggle":
+                  value = await skills.setEnabled(input.id, input.enabled);
+                  break;
+                case "skillsReveal":
+                  shell.showItemInFolder(skills.pathOf(input.id));
+                  break;
               }
             return {
               ok: true,
@@ -296,8 +323,13 @@ else {
         contents.on("dom-ready", () => contents.setZoomFactor(1));
         contents.on("zoom-changed", () => contents.setZoomFactor(1));
         contents.on("before-input-event", (event, input) => {
-          const modifier = process.platform === "darwin" ? input.meta : input.control;
-          if (modifier && !input.alt && ["+", "=", "-", "0"].includes(input.key)) {
+          const modifier =
+            process.platform === "darwin" ? input.meta : input.control;
+          if (
+            modifier &&
+            !input.alt &&
+            ["+", "=", "-", "0"].includes(input.key)
+          ) {
             event.preventDefault();
           }
         });

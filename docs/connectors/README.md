@@ -8,7 +8,7 @@ Office integrations live under `src/main/connectors/<service>/`. Local file and 
 - `registry.ts` aggregates these methods for the Agent. Configuration changes rebuild the session runtime without discarding its history. Only enabled connectors contribute instructions and active tool names.
 - `index.ts` explicitly assembles the installed connectors and their dependencies. There is no dynamic plugin loading or dependency injection framework.
 - `ipc.ts` collects typed settings request handlers and their schemas. The application entry point still validates the IPC sender and input before dispatch. Shared request and UI contracts stay in `src/shared/contracts.ts`.
-- `confluence/index.ts`, `jira/index.ts`, and `github/index.ts` adapt each service to this interface. Their domain modules stay together; they are not promoted to generic infrastructure just because another connector may eventually need similar functionality.
+- `confluence/index.ts`, `jira/index.ts`, `github/index.ts`, and `tavily/index.ts` adapt each service to this interface. Their domain modules stay together; they are not promoted to generic infrastructure just because another connector may eventually need similar functionality.
 
 The renderer maintains a separate UI-only `components/worklens/connectors/catalog.tsx`. It maps display metadata to settings components and public connection information. The common connections page has no service-specific branches. Renderer modules must not import main-process connector implementations or credentials.
 
@@ -25,4 +25,4 @@ Tools use service-prefixed names. Their `details.status` uses `success` or `acce
 
 This source reorganization preserves the existing `confluenceSave`, `confluenceTest`, `confluenceRemove` and bootstrap contracts. It also preserves the encrypted `confluence.json` filename, session data, operation journals, cursor records, and artifact/index paths. Code directories do not determine user-data locations. The existing `confluence` artifact subdirectory remains unchanged; the source parameter adds Jira files under `jira` without relocating existing files.
 
-See [Confluence behavior and validation](confluence.md), [Jira behavior, capability matrix and validation](jira.md), and [GitHub setup, operations and validation](github.md).
+See [Confluence behavior and validation](confluence.md), [Jira behavior, capability matrix and validation](jira.md), [GitHub setup, operations and validation](github.md), and [Tavily web search](tavily.md).

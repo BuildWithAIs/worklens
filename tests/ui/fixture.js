@@ -80,7 +80,27 @@ export async function mockWorklens(page, options = {}) {
         runtime: "/Users/example",
         sessions: "/Users/example/WorkLens/sessions",
         userData: "/Users/example/Library/Application Support/WorkLens",
+        skills: "/Users/example/WorkLens/skills",
       },
+    };
+    let skillId = 0;
+    const skill = (name, source, summary, enabled = true) => ({
+      id: (++skillId).toString(16).padStart(64, "0"),
+      name,
+      source,
+      summary,
+      description: `${summary} Much longer guidance follows for the model.`,
+      path: `/Users/example/${source}/${name}/SKILL.md`,
+      enabled,
+    });
+    const skills = {
+      builtin: [
+        skill("example-guide", "builtin", "Example built-in instructions.", false),
+      ],
+      local: [
+        skill("brave-search", "local", "Web search."),
+        skill("pdf-tools", "local", "Extracts text from PDFs.", false),
+      ],
     };
     data.providers.push({
       id: "azure-openai-responses",
@@ -172,6 +192,26 @@ export async function mockWorklens(page, options = {}) {
         if (name === "githubTest") {
           if (!input.url) throw Error("Enter a GitHub URL");
           return `fixture-user · ${input.url}`;
+        }
+        if (name === "skillsList" || name === "skillsRefresh")
+          return structuredClone(skills);
+        if (name === "skillsToggle") {
+          await new Promise((resolve) => setTimeout(resolve, 80));
+          for (const item of [...skills.builtin, ...skills.local])
+            if (item.id === input.id) item.enabled = input.enabled;
+          return structuredClone(skills);
+        }
+        if (name === "skillsReveal") return;
+        if (name === "tavilySave") {
+          if (!input.url) throw Error("请填写 Tavily API 地址");
+          if (!input.token) throw Error("请填写 Tavily API key");
+          data.tavily = { url: input.url, configured: true, plan: "dev" };
+          return structuredClone(data.tavily);
+        }
+        if (name === "tavilyRemove") { data.tavily = undefined; return; }
+        if (name === "tavilyTest") {
+          if (!input.token) throw Error("请填写 Tavily API key");
+          return "Tavily 已连接：dev";
         }
         if (name === "jiraRemove") { data.jira = undefined; return; }
         if (name === "jiraTest") {

@@ -12,10 +12,13 @@ import {
   isHtmlArtifact,
 } from "@/components/worklens/HtmlArtifact";
 import remarkGfm from "remark-gfm";
+import { remarkCjkAutolinks } from "@/lib/remark-cjk-autolinks";
 import {
   type ComponentPropsWithoutRef,
   type FC,
   memo,
+  createContext,
+  useContext,
   useMemo,
   useRef,
 } from "react";
@@ -61,7 +64,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
 
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkCjkAutolinks]}
       className={cn(
         "aui-md font-normal antialiased",
         compact ? "text-sm leading-6" : "text-[14px] leading-[1.7]",
@@ -90,11 +93,15 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
     return <HtmlArtifactCard code={code} />;
 
   return (
-    <div className="aui-code-header-root border-border/50 bg-muted/50 mt-3 flex items-center justify-between rounded-t-xl border border-b-0 px-3.5 py-1.5 text-xs">
+    <div className="aui-code-header-root" data-language={Boolean(language)}>
       <span className="aui-code-header-language text-muted-foreground font-medium lowercase">
         {language}
       </span>
-      <TooltipIconButton tooltip={t("common.copy")} onClick={onCopy}>
+      <TooltipIconButton
+        className="aui-code-copy"
+        tooltip={t("common.copy")}
+        onClick={onCopy}
+      >
         {!isCopied && (
           <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
         )}
@@ -106,6 +113,17 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   );
 };
 
+const InsideChatLink = createContext(false);
+
+function isInlineWebUrl(text: string) {
+  if (!/^https?:\/\/[^\s]+$/i.test(text)) return false;
+  try {
+    return Boolean(new URL(text).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function ChatLink({
   className,
   href,
@@ -114,29 +132,31 @@ function ChatLink({
 }: ComponentPropsWithoutRef<"a">) {
   const { t } = useAppTranslation();
   return (
-    <a
-      {...props}
-      href={href}
-      className={cn(
-        "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
-        className,
-      )}
-      onClick={(event) => {
-        if (!href || !/^https?:\/\//i.test(href)) {
-          onClick?.(event);
-          return;
-        }
-        event.preventDefault();
-        void window.worklens.invoke("external", { url: href }).catch(() => {
-          toast.add({
-            type: "error",
-            title: t("chatLinks.openFailed"),
-            timeout: 0,
-            priority: "high",
+    <InsideChatLink.Provider value={true}>
+      <a
+        {...props}
+        href={href}
+        className={cn(
+          "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+          className,
+        )}
+        onClick={(event) => {
+          if (!href || !/^https?:\/\//i.test(href)) {
+            onClick?.(event);
+            return;
+          }
+          event.preventDefault();
+          void window.worklens.invoke("external", { url: href }).catch(() => {
+            toast.add({
+              type: "error",
+              title: t("chatLinks.openFailed"),
+              timeout: 0,
+              priority: "high",
+            });
           });
-        });
-      }}
-    />
+        }}
+      />
+    </InsideChatLink.Provider>
   );
 }
 
@@ -291,7 +311,7 @@ const defaultComponents = memoizeMarkdownComponents({
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "aui-md-pre border-border/50 bg-muted/30 overflow-x-auto rounded-t-none rounded-b-xl border border-t-0 p-3.5 text-[13px] leading-relaxed",
+        "aui-md-pre border-border/50 bg-muted/30 my-3 overflow-x-auto rounded-xl border text-[13px] leading-relaxed",
         className,
       )}
       {...props}
@@ -299,6 +319,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ),
   code: function Code({ className, ...props }) {
     const isCodeBlock = useIsMarkdownCodeBlock();
+    const insideLink = useContext(InsideChatLink);
     const assistant = useAuiState((s) => s.message.role === "assistant");
     const path =
       typeof props.children === "string" ? props.children.trim() : "";
@@ -308,13 +329,15 @@ const defaultComponents = memoizeMarkdownComponents({
       /^(?:\/|[A-Za-z]:[\\/]).*\.html?$/i.test(path)
     )
       return <HtmlFileCard path={path} />;
+    if (!isCodeBlock && !insideLink && isInlineWebUrl(path))
+      return (
+        <ChatLink href={path} className="aui-md-code-link">
+          <code className={cn("aui-md-inline-code", className)} {...props} />
+        </ChatLink>
+      );
     return (
       <code
-        className={cn(
-          !isCodeBlock &&
-            "aui-md-inline-code bg-muted rounded-md px-1.5 py-0.5 font-mono text-[0.85em]",
-          className,
-        )}
+        className={cn(!isCodeBlock && "aui-md-inline-code", className)}
         {...props}
       />
     );

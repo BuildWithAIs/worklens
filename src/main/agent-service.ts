@@ -24,6 +24,7 @@ import {
 import { resources, toolNames } from "./resources";
 import { worklensTools } from "./tools";
 import { ConnectorRegistry } from "./connectors/registry";
+import type { SkillsService } from "./skills";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import type {
@@ -114,6 +115,7 @@ export class AgentService {
     private emit: (event: ChatEvent) => void,
     private redact: (text: string) => string,
     private connectors = new ConnectorRegistry(),
+    private skills?: SkillsService,
   ) {}
   async initialize() {
     await Promise.all([
@@ -354,7 +356,11 @@ export class AgentService {
     const view = await this.open(id);
     return readHtmlPreview(this.paths.runtime, path, view.messages);
   }
-  private async ensureSession(runtime: Runtime, selection: Selection) {
+  private async ensureSession(
+    runtime: Runtime,
+    selection: Selection,
+    requestedSkill?: string,
+  ) {
     const model = this.assertSelection(selection);
     if (
       !(
@@ -364,7 +370,18 @@ export class AgentService {
       ).some((m) => m.id === model.id)
     )
       throw new Error("模型尚未配置或不可用，请在设置中完成认证");
-    const integrationConfiguration = this.connectors.configurationKey();
+    const skillConfiguration = await this.skills?.configuration();
+    if (
+      requestedSkill &&
+      !skillConfiguration?.resources.skills.some(
+        (skill) => skill.name === requestedSkill,
+      )
+    )
+      throw new Error("该技能未启用或已不存在，请在设置中检查技能");
+    const integrationConfiguration =
+      this.connectors.configurationKey() +
+      "|" +
+      (skillConfiguration?.key ?? "");
     if (
       runtime.session &&
       runtime.integrationConfiguration !== integrationConfiguration
@@ -380,6 +397,7 @@ export class AgentService {
           tools: this.connectors.names(),
           instructions: this.connectors.instructions(),
         },
+        skillConfiguration?.resources,
       );
       const customTools = worklensTools(
         this.paths.runtime,
@@ -569,7 +587,15 @@ export class AgentService {
             updated: new Date().toISOString(),
           };
         if (runtime.active) throw new Error("当前会话正在运行，请先停止");
-        await this.ensureSession(runtime, input.selection);
+        const skillCommand = /^\/skill:([^\s]+)(?:\s+([\s\S]*))?$/.exec(
+          input.text,
+        );
+        if (input.text.startsWith("/skill:") && !skillCommand)
+          throw new Error("该技能未启用或已不存在，请在设置中检查技能");
+        await this.ensureSession(runtime, input.selection, skillCommand?.[1]);
+        const prompt = skillCommand
+          ? `/skill:${skillCommand[1]}${skillCommand[2] ? ` ${skillCommand[2]}` : ""}`
+          : input.text;
         const id = runtime.manager.getSessionId();
         if (!runtime.manager.getSessionName())
           runtime.session!.setSessionName(input.text.trim().slice(0, 48));
@@ -623,8 +649,8 @@ export class AgentService {
         active.done = Promise.resolve().then(async () => {
           try {
             if (active.cancelled) return;
-            await runtime.session!.prompt(input.text, {
-              expandPromptTemplates: false,
+            await runtime.session!.prompt(prompt, {
+              expandPromptTemplates: !!skillCommand,
             });
             const last = [...runtime.session!.messages]
               .reverse()

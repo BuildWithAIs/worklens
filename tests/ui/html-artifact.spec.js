@@ -112,7 +112,8 @@ test(`HTML card auto preview respects viewport and close: ${width}`, async ({ pa
     };
   });
   await page.goto("/");
-  await expect(page.locator(".aui-code-header-root")).toBeVisible();
+  await expect(page.locator(".aui-md-pre")).toBeVisible();
+  await expect(page.locator(".aui-code-header-language")).toHaveText("html");
   await expect(page.locator('[data-slot="html-artifact-card"]')).toHaveCount(0);
   await page.evaluate(() => window.finishHtml());
   await expect(page.locator('[data-slot="html-artifact-card"]')).toHaveCount(1);
