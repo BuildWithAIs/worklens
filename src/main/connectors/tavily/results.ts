@@ -2,6 +2,7 @@ import { readableLines } from "../../readable-lines";
 import type { LocalArtifacts } from "../../local-artifacts";
 import type { TavilyConnections } from "./connection";
 import type { Json } from "./http";
+import { indexedResult } from "./result-index";
 
 // Pi keeps the first 2,000 characters per tool result in summary input.
 const INLINE_LIMIT = 1800;
@@ -59,8 +60,24 @@ export async function toolResult(
       .map((key) => [key, value[key]]),
   );
   let envelope = value;
-  if (alwaysSave || Buffer.byteLength(full, "utf8") > INLINE_LIMIT) {
+  const indexed =
+    value.status === "success" &&
+    (operation === "web_search" || operation === "web_fetch");
+  if (indexed || alwaysSave || Buffer.byteLength(full, "utf8") > INLINE_LIMIT) {
     try {
+      if (indexed) {
+        return response(
+          connections,
+          await indexedResult(
+            operation,
+            JSON.parse(full),
+            (name, text) =>
+              saveResult(connections, artifacts, sessionId, name, text, signal),
+            (text) => connections.redact(text),
+            INLINE_LIMIT,
+          ),
+        );
+      }
       const saved = await saveResult(
         connections,
         artifacts,

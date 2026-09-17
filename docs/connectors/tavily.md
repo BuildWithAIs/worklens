@@ -9,19 +9,51 @@ stored through OS encryption. `GET /usage` verifies it without a search.
 
 | Tool | Official API | Behavior |
 |---|---|---|
-| `web_search` | `POST /search` | Basic search; query, up to 20 results, topic, time range and domain filters. Full responses over 1,800 UTF-8 bytes are saved. |
-| `web_fetch` | `POST /extract` | Extract 1–5 URLs as Markdown. Every response, including short pages and failed URLs, is saved together. |
+| `web_search` | `POST /search` | Basic search; query, up to 20 results, topic, time range and domain filters. Saves the full response and returns an ordered source index with bounded excerpts. |
+| `web_fetch` | `POST /extract` | Extract 1–5 URLs as Markdown. Saves the full response, separate page files, and an index of successful and failed URLs. |
 | `web_research` | `POST /research` | Submit a paid deep research task with `input` and optional `model` (`mini`, `pro`, `auto`). Returns a durable local handle, not the report. |
 | `web_research_status` | `GET /research/{request_id}` | Query the same handle; `wait_seconds` is 0–30, default 5. Pending jobs can be queried again across turns and app restarts. Completed reports are saved once and reused. |
 
-For saved search/extract results, `resultPath` and `rawResultPath` precede a
-single preview of up to 500 characters for the entire response. `read` uses line offsets:
-start with `offset: 1, limit: 200`, then continue at the next unread line.
-Long lines are wrapped for reading; `rawResultPath` preserves exact content.
+Successful search/extract calls return a lightweight index rather than a prefix
+of the response JSON. The envelope includes:
+
+- `resultPath`: the index file, not the combined page bodies.
+- `rawResultPath`: the complete API response, including fields omitted from the index.
+- `totalResults`, `results`, `resultsTruncated`: the entry count, entries that fit
+  inline, and whether more entries remain in the index. Fetch counts include failures.
+- `nextOffset`: the first line of the first entry not shown inline; omitted when
+  all entries fit. This is a local file line offset, not remote API pagination.
+- `rawIndexPath`: present when the display index is wrapped, preserving exact
+  URLs and paths for programmatic reading. The raw API path is also in the index
+  header and may be omitted inline when data-root paths consume too much space.
+
+Use `read(path=resultPath, offset=nextOffset, limit=40)` to browse more entries,
+then follow the next offset returned by `read`. Start at 1 to reread the index.
+Display lines are wrapped at 200 UTF-8 bytes, keeping 40 lines around 8 KiB.
+Inline entries share a 1,800 UTF-8 byte budget with the envelope; whole entries
+are omitted when they do not fit. URLs are never shortened to fit inline.
+
+Search entries preserve the upstream ranking and contain `id`, `title`, `url`,
+`score` (when provided), `excerpt`, and `excerptTruncated`. Titles and excerpts
+are whitespace-normalized copies of upstream text, limited to 120 and 240 UTF-8
+bytes respectively without splitting Unicode characters. Truncated titles have
+`titleTruncated: true`. This is deterministic code: there is no extra LLM call,
+search request, reranking, or generated summary. Full originals remain in the
+saved response even for short search results.
+
+Fetch entries contain `id`, `url`, and `status`. Successful entries also have
+their own `resultPath`, `rawResultPath`, and `totalLines`. Read the selected page
+at `offset: 1, limit: 40` and continue as needed. Each page is stored as Markdown
+with real newlines; its raw file preserves exact extracted text before wrapping.
+Failed entries have an error excerpt and no page path. To read page 5, consult
+the index and open its file directly; do not read through pages 1–4.
+
 Secrets are redacted before any result is saved. If saving search/extract fails,
 `storage_error` is explicit, with a bounded preview and `recoverable: false`.
 Restore storage before retrying retrieval; never resubmit a research task automatically.
-Success and error results use the same output management, including research errors.
+Errors and research responses retain bounded output management. Large errors
+are saved with a short preview and recovery paths; research reports still use
+their existing Markdown result paths.
 
 For `web_fetch`, omit `query` to get extracted page text. A supplied `query`
 returns relevant snippets (default maximum 3 per source, 500 characters each).

@@ -212,18 +212,23 @@ test("web_search forwards the query with the bearer key and returns trimmed resu
     isError: false,
     details: { status: "success" },
   });
-  expect(data).toEqual({
+  expect(data).toMatchObject({
     status: "success",
-    query: "worklens",
+    totalResults: 1,
+    resultsTruncated: false,
     results: [
       {
+        id: 1,
         title: "Result",
         url: "https://example.com/a",
-        content: "about worklens",
+        excerpt: "about worklens",
+        excerptTruncated: false,
         score: 0.9,
-        raw_content: null,
       },
     ],
+  });
+  expect(JSON.parse(await readFile(data.rawResultPath, "utf8"))).toMatchObject({
+    query: "worklens",
     response_time: 0.1,
   });
   const request = f.fake.state.requests.at(-1)!;
@@ -249,7 +254,7 @@ test("web_search maps quota and auth failures to tool statuses and never leaks t
   expect(f.connections.redact(`key=${KEY}`)).toBe("key=[redacted]");
 });
 
-test("web_fetch saves every page and keeps all paths ahead of one short preview", async () => {
+test("web_fetch saves every page and returns an index instead of a body preview", async () => {
   const f = await setup();
   await f.connections.save(f.input);
   const short = await f.call("web_fetch", {
@@ -270,7 +275,9 @@ test("web_fetch saves every page and keeps all paths ahead of one short preview"
   const long = await f.call("web_fetch", { urls });
   const output = (long.result.content[0] as { text: string }).text;
   expect(output.length).toBeLessThan(2000);
-  expect(output.indexOf("resultPath")).toBeLessThan(output.indexOf("preview"));
+  expect(Object.keys(long.data)[0]).toBe("resultPath");
+  expect(long.data.preview).toBeUndefined();
+  expect(long.data.totalResults).toBe(6);
   const saved = JSON.parse(await readFile(long.data.rawResultPath, "utf8"));
   expect(saved.results).toHaveLength(5);
   expect(
