@@ -1365,6 +1365,11 @@ kbd {
 [data-slot="aui_assistant-message-root"][data-has-activity="true"] {
   margin-top: -16px;
 }
+/* Completed answers use the same 14px breathing room as body paragraphs. */
+[data-slot="aui_assistant-message-root"]:has(.worklens-activity-section[data-running="false"])
+  + [data-slot="aui_assistant-message-root"][data-has-activity="true"] {
+  margin-top: -10px;
+}
 .worklens-activity-section[data-running="true"][data-show-progress="false"] > div:first-child {
   margin-bottom: 0;
 }
@@ -1379,6 +1384,25 @@ kbd {
 }
 @media (max-width: 760px) {
   .agent-thread { --user-message-max-width: 88%; }
+}
+
+/* Keep process steps together; arrows describe the label, not the whole panel. */
+.worklens-activity-section .aui-reasoning-text-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.worklens-activity-section .aui-reasoning-text-content > * {
+  margin-block: 0;
+}
+.worklens-activity-section [data-slot="tool-fallback-trigger"] {
+  padding-block: 4px;
+}
+.worklens-activity-section [data-slot="tool-fallback-trigger-chevron"] {
+  margin-left: 0;
+}
+.worklens-activity-section [data-slot="tool-fallback-duration"] {
+  flex-shrink: 0;
 }
 
 /* Tool activity stays subordinate to narration on both themes. */

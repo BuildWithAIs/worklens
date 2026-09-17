@@ -178,6 +178,13 @@ test("compact tool activity, history actions and fluid message width", async ({
   await expect(
     page.getByText("Thinking step 4", { exact: true }),
   ).toBeVisible();
+  const toolGeometry = await page.locator('[data-slot="tool-fallback-trigger"]').first().evaluate(row => {
+    const chevron = row.querySelector('[data-slot="tool-fallback-trigger-chevron"]').getBoundingClientRect();
+    const duration = (row.querySelector('[data-slot="tool-fallback-duration"]') ?? row.querySelector('[data-slot="tool-fallback-trigger-label"]')).getBoundingClientRect();
+    return { arrowGap: chevron.left - duration.right, height: row.getBoundingClientRect().height };
+  });
+  expect(toolGeometry.arrowGap).toBeCloseTo(8, 0);
+  expect(toolGeometry.height).toBe(32);
   await page.locator('[data-slot="tool-fallback-trigger"]').first().click();
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const argsBlock = page.locator('[data-slot="tool-fallback-args"]').first();

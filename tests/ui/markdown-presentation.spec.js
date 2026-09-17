@@ -58,6 +58,24 @@ for (const theme of ["light", "dark"]) {
       "1px",
     );
     await expect(page.locator(".aui-md-hr")).toBeVisible();
+    const spacing = await page.evaluate(() => {
+      const activity = document
+        .querySelector(".worklens-activity-section")
+        .getBoundingClientRect();
+      const answer = document.querySelector(
+        '[data-slot="aui_assistant-message-root"][data-has-activity="true"]',
+      );
+      const paragraph = answer
+        .querySelector(".aui-md-p")
+        .getBoundingClientRect();
+      const rule = answer.querySelector(".aui-md-hr").getBoundingClientRect();
+      return {
+        before: paragraph.top - activity.bottom,
+        after: rule.top - paragraph.bottom,
+      };
+    });
+    expect(spacing.before).toBeCloseTo(14, 0);
+    expect(spacing.after).toBeCloseTo(spacing.before, 0);
     const trigger = page.locator('[data-slot="reasoning-trigger"]');
     await trigger.click();
     await expect(page.locator(".worklens-activity-section")).toHaveCSS(
