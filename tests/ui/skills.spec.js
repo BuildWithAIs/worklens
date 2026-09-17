@@ -24,12 +24,12 @@ for (const theme of ["light", "dark"]) {
       await expect(content.getByRole("heading", { name: t("Local (~/.agents/skills)", "本地 (~/.agents/skills)") })).toBeVisible();
       await expect(content.getByRole("listitem")).toHaveCount(3);
       // Rows show the one-sentence summary, clipped to a single line.
-      const row = content.getByRole("listitem").filter({ hasText: "tavily-research" });
+      const row = content.getByRole("listitem").filter({ hasText: "example-guide" });
       const description = row.locator(".settings-entry-description");
       const source = await page.evaluate(async () => (await window.worklens.invoke("skillsList", undefined)).builtin[0]);
       await expect(description).toHaveText(source.summary);
-      await row.getByRole("button", { name: t("About tavily-research", "了解tavily-research"), exact: true }).click();
-      const details = page.getByRole("dialog", { name: "tavily-research", exact: true });
+      await row.getByRole("button", { name: t("About example-guide", "了解example-guide"), exact: true }).click();
+      const details = page.getByRole("dialog", { name: "example-guide", exact: true });
       await expect(details.locator('[data-slot="dialog-description"]')).toHaveText(source.description);
       await expect(details).toContainText(t("Changes apply on the next conversation turn.", "更改将在下一轮对话生效。"));
       await page.keyboard.press("Escape");
@@ -37,14 +37,14 @@ for (const theme of ["light", "dark"]) {
       await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(t("Ships with WorkLens.", "随 WorkLens 安装。"));
       expect(await description.evaluate((el) => getComputedStyle(el).whiteSpace)).toBe("nowrap");
       // Every row exposes its SKILL.md and a labelled toggle.
-      await expect(content.getByRole("button", { name: t("Show SKILL.md for tavily-research", "显示 tavily-research 的 SKILL.md") })).toBeVisible();
-      const toggle = content.getByRole("switch", { name: t("Enable tavily-research", "启用 tavily-research") });
+      await expect(content.getByRole("button", { name: t("Show SKILL.md for example-guide", "显示 example-guide 的 SKILL.md") })).toBeVisible();
+      const toggle = content.getByRole("switch", { name: t("Enable example-guide", "启用 example-guide") });
       await expect(toggle).not.toBeChecked();
       await toggle.hover();
       await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(t("Enable", "启用"));
       await toggle.click();
       await expect(toggle).toBeChecked();
-      await expect(page.locator('[data-slot="toast-title"]').filter({ hasText: t("tavily-research enabled", "已启用 tavily-research") })).toBeVisible();
+      await expect(page.locator('[data-slot="toast-title"]').filter({ hasText: t("example-guide enabled", "已启用 example-guide") })).toBeVisible();
       const reveal = content.getByRole("button", { name: t("Show SKILL.md for brave-search", "显示 brave-search 的 SKILL.md") });
       await reveal.click();
       expect(await page.evaluate(() => window.calls.filter((c) => c.name === "skillsReveal").map((c) => c.input))).toEqual([{ id: "2".padStart(64, "0") }]);
@@ -98,8 +98,8 @@ test("duplicate skills explain precedence, reveal their own file, and expose ful
     window.worklens.invoke = async (name, input) => {
       const result = await invoke(name, input);
       if (name === "skillsList" || name === "skillsRefresh") result.local.push({
-        id: "f".repeat(64), name: "tavily-research", source: "local", enabled: false, shadowedBy: "builtin",
-        summary: "Local research.", description: "Local research. " + "Full local description. ".repeat(30), path: "/local/tavily-research/SKILL.md",
+        id: "f".repeat(64), name: "example-guide", source: "local", enabled: false, shadowedBy: "builtin",
+        summary: "Local example instructions.", description: "Local example instructions. " + "Full local description. ".repeat(30), path: "/local/example-guide/SKILL.md",
       });
       return result;
     };
@@ -111,12 +111,12 @@ test("duplicate skills explain precedence, reveal their own file, and expose ful
   const local = content.getByRole("listitem").filter({hasText: "Inactive:"});
   await expect(local.getByRole("switch")).toBeDisabled();
   await expect(local).toContainText("Built-in version takes precedence");
-  await local.getByRole("button", {name: "Show SKILL.md for tavily-research", exact: true}).click();
+  await local.getByRole("button", {name: "Show SKILL.md for example-guide", exact: true}).click();
   expect(await page.evaluate(() => window.calls.filter((call) => call.name === "skillsReveal").at(-1).input)).toEqual({id: "f".repeat(64)});
-  const details = local.getByRole("button", {name: "About tavily-research", exact: true});
+  const details = local.getByRole("button", {name: "About example-guide", exact: true});
   await details.focus();
   await page.keyboard.press("Enter");
-  const dialog = page.getByRole("dialog", {name: "tavily-research", exact: true});
+  const dialog = page.getByRole("dialog", {name: "example-guide", exact: true});
   await expect(dialog).toContainText("Full local description.");
   await expect(dialog).toContainText("Changes apply on the next conversation turn");
   await page.keyboard.press("Escape");

@@ -36,20 +36,20 @@ test("Skills: bundled migration, isolated local files, concurrent IPC toggles an
   try {
     await createSkill("skills", "code-documentation");
     await createSkill("skills", "deep-research");
+    await createSkill("skills", "retired-skill");
     await createSkill("local-skills", "alpha");
     await createSkill("local-skills", "beta");
-    await createSkill("local-skills", "tavily-research");
+    await createSkill("local-skills", "retired-skill");
     let page = await launch();
     const initial = await page.evaluate(() =>
       window.worklens.invoke("skillsList", undefined),
     );
-    expect(initial.builtin.map((skill) => skill.name)).toEqual([
-      "tavily-research",
-    ]);
+    expect(initial.builtin).toEqual([]);
     expect(initial.local).toHaveLength(3);
     expect(
-      initial.local.find((skill) => skill.name === "tavily-research"),
-    ).toMatchObject({ enabled: false, shadowedBy: "builtin" });
+      initial.local.find((skill) => skill.name === "retired-skill"),
+    ).toMatchObject({ enabled: true });
+    expect(initial.local.every((skill) => !skill.shadowedBy)).toBe(true);
     const ids = initial.local
       .filter((skill) => !skill.shadowedBy)
       .map((skill) => skill.id);
@@ -74,6 +74,7 @@ test("Skills: bundled migration, isolated local files, concurrent IPC toggles an
       .locator(".settings-navigation")
       .getByRole("button", { name: "Skills", exact: true })
       .click();
+    await expect(page.getByText("No built-in skills yet.")).toBeVisible();
     await createSkill("local-skills", "gamma");
     await page
       .getByRole("button", { name: "Refresh skills", exact: true })
@@ -100,12 +101,14 @@ test("Skills: bundled migration, isolated local files, concurrent IPC toggles an
       "alpha",
       "beta",
       "gamma",
-      "tavily-research",
+      "retired-skill",
     ]);
     expect(await readdir(join(root, "skills"))).not.toContain(
       "code-documentation",
     );
     expect(await readdir(join(root, "skills"))).not.toContain("deep-research");
+    expect(await readdir(join(root, "skills"))).not.toContain("retired-skill");
+    expect(restored.builtin).toEqual([]);
   } finally {
     await app?.close();
     await rm(root, { recursive: true, force: true });

@@ -35,7 +35,7 @@ for (const language of ["en", "zh"]) {
     await expect(menu.getByRole("option")).toHaveCount(2);
     await expect(menu).toContainText("/skill:brave-search");
     await expect(menu).toContainText("/skill:manual-report");
-    await expect(menu).not.toContainText("tavily-research");
+    await expect(menu).not.toContainText("example-guide");
     await expect(menu).not.toContainText("pdf-tools");
     await page.keyboard.press("ArrowDown");
     await expect(menu.getByRole("option", { selected: true })).toContainText(

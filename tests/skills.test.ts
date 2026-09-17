@@ -97,6 +97,20 @@ test("a newer app version drops built-in skills removed from the bundled resourc
     );
     await second.initialize();
     expect(await readdir(builtin)).toEqual(["new-skill"]);
+    // An app can ship no skills while retaining its built-in resource directory.
+    await rm(join(bundled, "new-skill"), { recursive: true });
+    await writeFile(join(bundled, "README.md"), "No bundled skills.");
+    await skillMd(
+      join(root, "agents-skills", "new-skill"),
+      "new-skill",
+      "User-owned instructions.",
+    );
+    await second.initialize();
+    expect(second.list().builtin).toEqual([]);
+    expect(second.list().local).toEqual([
+      expect.objectContaining({ name: "new-skill", enabled: true }),
+    ]);
+    expect(await readdir(builtin)).toEqual(["README.md"]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

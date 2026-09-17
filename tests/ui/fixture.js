@@ -95,7 +95,7 @@ export async function mockWorklens(page, options = {}) {
     });
     const skills = {
       builtin: [
-        skill("tavily-research", "builtin", "Create a multi-source research report with Tavily.", false),
+        skill("example-guide", "builtin", "Example built-in instructions.", false),
       ],
       local: [
         skill("brave-search", "local", "Web search."),
