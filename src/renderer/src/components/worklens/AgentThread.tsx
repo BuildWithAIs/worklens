@@ -663,6 +663,7 @@ export function AgentThread({
           <div className="agent-thread">
             <Thread
               components={{
+                ComposerInput: SkillComposerInput,
                 ToolFallback: WorkLensTool,
                 ProcessGroup: WorkLensToolGroup,
                 LiveStatus: WorkLensLiveStatus,
@@ -674,3 +675,4 @@ export function AgentThread({
     </AssistantRuntimeProvider>
   );
 }
+import { SkillComposerInput } from "./skills/SkillComposerInput";

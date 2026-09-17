@@ -103,7 +103,9 @@ export interface Settings {
   hiddenModels?: string[];
   lastConversation?: string;
   pinnedConversationIds?: string[];
+  /** Legacy names, migrated by SkillsService when matching files are found. */
   disabledSkills?: string[];
+  disabledSkillIds?: string[];
   [key: string]: unknown;
 }
 export interface SkillInfo {
@@ -117,6 +119,7 @@ export interface SkillInfo {
   path: string;
   source: "builtin" | "local";
   enabled: boolean;
+  disableModelInvocation: boolean;
 }
 export interface SkillsSnapshot {
   builtin: SkillInfo[];

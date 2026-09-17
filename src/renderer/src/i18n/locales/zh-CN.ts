@@ -247,6 +247,12 @@ const zhCN = {
     },
   },
   skills: {
+    chooseSkill: "选择技能",
+    noEnabledSkillsMatch: "没有匹配的已启用技能，可前往设置管理。",
+    messagePlaceholder: "想做什么？输入 / 选择技能",
+    manualOnly: "此技能仅在你主动调用时使用。在对话框中输入：",
+    autoAndManual: "助手可按需使用此技能。你也可以在对话框中输入：",
+    unavailable: "该技能未启用或已不存在，请在设置中检查技能",
     loading: "正在加载技能…",
     retry: "重试",
     viewDetails: "了解{{skill}}",

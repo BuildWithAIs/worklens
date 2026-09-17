@@ -10,6 +10,7 @@ import { StateStore } from "../src/main/storage";
 import { schemas } from "../src/main/validation";
 import { mockServer, fixtureModel } from "./mock-server";
 import type { ChatEvent } from "../src/shared/contracts";
+import { textContent } from "../src/main/projection";
 
 async function skillMd(dir: string, name: string, description: string) {
   await mkdir(dir, { recursive: true });
@@ -49,6 +50,7 @@ test("built-in skills are synced from the bundled resource and scanned separatel
         path: join(root, "builtin", "pdf-tools", "SKILL.md"),
         source: "builtin",
         enabled: true,
+        disableModelInvocation: false,
       },
     ]);
     expect(snapshot.local).toEqual([
@@ -60,6 +62,7 @@ test("built-in skills are synced from the bundled resource and scanned separatel
         path: join(local, "brave-search", "SKILL.md"),
         source: "local",
         enabled: true,
+        disableModelInvocation: false,
       },
     ]);
     // The local directory is read-only from WorkLens's perspective.
@@ -120,7 +123,9 @@ test("toggling a skill persists across reloads without touching the skill file, 
     expect(skills.configurationKey()).not.toBe(before);
     const restored = new StateStore(join(root, "settings.json"));
     await restored.load();
-    expect(restored.value.disabledSkills).toEqual(["demo"]);
+    expect(restored.value.disabledSkillIds).toEqual([
+      skills.list().builtin[0].id,
+    ]);
     await skills.setEnabled(skills.list().builtin[0].id, true);
     expect(skills.list().builtin[0].enabled).toBe(true);
     expect(skills.configurationKey()).not.toBe(before);
@@ -129,22 +134,40 @@ test("toggling a skill persists across reloads without touching the skill file, 
   }
 });
 
-test("resources() feeds SkillsService's paths into the real Pi resource loader and skillsOverride hides disabled skills", async () => {
+test("resources() uses the resolved skill snapshot without reparsing mutable files", async () => {
   const root = await mkdtemp(join(tmpdir(), "worklens-resources-skills-"));
   try {
     const skillsDir = join(root, "skills");
     await skillMd(join(skillsDir, "demo"), "demo", "Demo skill for testing.");
-    const enabled = await resources(root, root, undefined, {
-      paths: [skillsDir],
-      disabledNames: [],
-    });
+    const skills = new SkillsService(
+      join(root, "builtin"),
+      skillsDir,
+      join(root, "missing"),
+      new StateStore(join(root, "state.json")),
+    );
+    await skills.initialize();
+    const configuration = await skills.configuration();
+    await skillMd(join(skillsDir, "demo"), "renamed", "Updated description.");
+    const enabled = await resources(
+      root,
+      root,
+      undefined,
+      configuration.resources,
+    );
     expect(
       enabled.resourceLoader.getSkills().skills.map((s) => s.name),
     ).toEqual(["demo"]);
-    const disabled = await resources(root, root, undefined, {
-      paths: [skillsDir],
-      disabledNames: ["demo"],
+    await skills.setEnabled(skills.list().local[0].id, false);
+    expect(skills.list().local[0]).toMatchObject({
+      name: "renamed",
+      enabled: false,
     });
+    const disabled = await resources(
+      root,
+      root,
+      undefined,
+      (await skills.configuration()).resources,
+    );
     expect(disabled.resourceLoader.getSkills().skills).toEqual([]);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -238,7 +261,7 @@ test("toggling a local skill changes what the model is offered on the next turn 
       "Newly installed skill.",
     );
     const key = skills.configurationKey();
-    skills.refresh();
+    await skills.refresh();
     expect(skills.configurationKey()).not.toBe(key);
     const ended = events.filter((e) => e.type === "run_end").length;
     await service.send({
@@ -319,7 +342,12 @@ test("concurrent skill changes retain both writes and persist after reload", asy
     expect(skills.list().local.every((skill) => !skill.enabled)).toBe(true);
     const restored = new StateStore(join(root, "state.json"));
     await restored.load();
-    expect(restored.value.disabledSkills?.sort()).toEqual(["alpha", "beta"]);
+    expect(restored.value.disabledSkillIds?.sort()).toEqual(
+      skills
+        .list()
+        .local.map((s) => s.id)
+        .sort(),
+    );
     await expect(skills.setEnabled("a".repeat(64), true)).rejects.toThrow(
       "未找到",
     );
@@ -352,29 +380,223 @@ test("duplicate names reveal their own file but only the built-in version reache
     await expect(skills.setEnabled(shadowed.id, true)).rejects.toThrow(
       "同名技能",
     );
-    const loader = await resources(root, root, undefined, {
-      paths: skills.skillPaths(),
-      disabledNames: [],
-    });
+    const loader = await resources(
+      root,
+      root,
+      undefined,
+      (await skills.configuration()).resources,
+    );
     expect(
       loader.resourceLoader
         .getSkills()
         .skills.map((skill) => skill.description),
     ).toEqual(["Built-in description."]);
     await skills.setEnabled(builtin.id, false);
-    const disabled = await resources(root, root, undefined, {
-      paths: skills.skillPaths(),
-      disabledNames: skills.disabledSkillNames(),
-    });
+    const disabled = await resources(
+      root,
+      root,
+      undefined,
+      (await skills.configuration()).resources,
+    );
     expect(disabled.resourceLoader.getSkills().skills).toEqual([]);
     await rm(join(root, "builtin", "demo"), { recursive: true });
     const before = skills.configurationKey();
-    skills.refresh();
+    await skills.refresh();
     expect(skills.configurationKey()).not.toBe(before);
     expect(skills.list().local[0].shadowedBy).toBeUndefined();
-    // The user's disable choice survives precedence changes.
-    expect(skills.list().local[0].enabled).toBe(false);
+    // Each file retains its own preference when precedence changes.
+    expect(skills.list().local[0].enabled).toBe(true);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("legacy name preferences migrate to file IDs and survive renaming and restart", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-skills-migration-"));
+  try {
+    const local = join(root, "local");
+    const bundled = join(root, "bundled");
+    await skillMd(join(local, "demo"), "demo", "Local.");
+    await skillMd(join(bundled, "demo"), "demo", "Built-in.");
+    const statePath = join(root, "state.json");
+    const state = new StateStore(statePath);
+    await state.update({ disabledSkills: ["demo", "temporarily-missing"] });
+    const skills = new SkillsService(
+      join(root, "builtin"),
+      local,
+      bundled,
+      state,
+    );
+    await skills.initialize();
+    const ids = [...skills.list().builtin, ...skills.list().local].map(
+      (s) => s.id,
+    );
+    expect(state.value.disabledSkillIds?.sort()).toEqual(ids.sort());
+    expect(state.value.disabledSkills).toEqual(["temporarily-missing"]);
+    await skillMd(join(local, "demo"), "renamed", "Renamed local skill.");
+    expect((await skills.configuration()).resources.skills).toEqual([]);
+    expect(skills.list().local[0]).toMatchObject({
+      name: "renamed",
+      enabled: false,
+    });
+    const restored = new StateStore(statePath);
+    await restored.load();
+    const restarted = new SkillsService(
+      join(root, "builtin"),
+      local,
+      bundled,
+      restored,
+    );
+    await restarted.initialize();
+    expect((await restarted.configuration()).resources.skills).toEqual([]);
+    await restarted.setEnabled(restarted.list().local[0].id, true);
+    expect(
+      (await restarted.configuration()).resources.skills.map((s) => s.name),
+    ).toEqual(["renamed"]);
+    await skillMd(
+      join(local, "later"),
+      "temporarily-missing",
+      "Installed later.",
+    );
+    await restarted.configuration();
+    expect(
+      restarted.list().local.find((s) => s.name === "temporarily-missing")
+        ?.enabled,
+    ).toBe(false);
+    expect(restored.value.disabledSkills).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("sessions rescan enabled skills and support Pi commands without exposing manual-only skills in the prompt", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-skills-commands-"));
+  const server = await mockServer();
+  const local = join(root, "local");
+  await skillMd(
+    join(local, "ordinary"),
+    "ordinary",
+    "Use for an ordinary task.",
+  );
+  await skillMd(join(local, "manual"), "manual", "Manual task.");
+  await writeFile(
+    join(local, "manual", "SKILL.md"),
+    "---\nname: manual\ndescription: Manual task.\ndisable-model-invocation: true\n---\nMANUAL_WORKFLOW_BODY",
+  );
+  const modelRuntime = await ModelRuntime.create({ modelsPath: null });
+  modelRuntime.registerProvider("worklens-test", {
+    name: "Test",
+    api: "openai-completions",
+    baseUrl: server.url,
+    apiKey: "test-placeholder",
+    models: [fixtureModel],
+  });
+  await modelRuntime.refresh({ allowNetwork: false });
+  const state = new StateStore(join(root, "state.json"));
+  const skills = new SkillsService(
+    join(root, "builtin"),
+    local,
+    join(root, "missing"),
+    state,
+  );
+  await skills.initialize();
+  const events: ChatEvent[] = [];
+  const service = new AgentService(
+    modelRuntime,
+    {
+      runtime: join(root, "runtime"),
+      sessions: join(root, "sessions"),
+      userData: join(root, "app"),
+    },
+    (event) => events.push(event),
+    (value) => value,
+    undefined,
+    skills,
+  );
+  const selection = {
+    provider: "worklens-test",
+    model: "worklens-test",
+    thinking: "off" as const,
+  };
+  let request = 0;
+  const send = async (text: string, conversationId?: string) => {
+    const view = await service.send({
+      requestId: String(++request),
+      text,
+      selection,
+      conversationId,
+    });
+    await expect
+      .poll(() =>
+        events.some(
+          (e) =>
+            e.conversationId === view.id &&
+            e.runId === view.runId &&
+            e.type === "run_end",
+        ),
+      )
+      .toBe(true);
+    return service.open(view.id);
+  };
+  const messages = () => server.requests.at(-1).messages;
+  const prompt = () =>
+    textContent(messages().find((m: any) => m.role === "system").content);
+  try {
+    await service.initialize();
+    const first = await send("hi");
+    expect(prompt()).toContain("<name>ordinary</name>");
+    expect(prompt()).toContain("Use for an ordinary task.");
+    expect(prompt()).not.toContain("<name>manual</name>");
+    expect(prompt()).not.toContain("MANUAL_WORKFLOW_BODY");
+    const manual = await send("/skill:manual\nRun this task.", first.id);
+    const userText = textContent(
+      messages().findLast((m: any) => m.role === "user").content,
+    );
+    expect(userText).toContain('<skill name="manual"');
+    expect(userText).toContain("MANUAL_WORKFLOW_BODY");
+    expect(userText).toContain("Run this task.");
+    expect(manual.messages.filter((m) => m.role === "user").at(-1)?.text).toBe(
+      "/skill:manual Run this task.",
+    );
+    // Ordinary skills retain explicit invocation as well as automatic disclosure.
+    await send("/skill:ordinary Do it.", first.id);
+    expect(
+      textContent(messages().findLast((m: any) => m.role === "user").content),
+    ).toContain('<skill name="ordinary"');
+    await skills.setEnabled(
+      skills.list().local.find((s) => s.name === "manual")!.id,
+      false,
+    );
+    const count = server.requests.length;
+    for (const name of ["manual", "missing"]) {
+      await expect(
+        service.send({
+          requestId: String(++request),
+          text: `/skill:${name} do it`,
+          selection,
+          conversationId: first.id,
+        }),
+      ).rejects.toThrow("未启用");
+    }
+    expect(server.requests.length).toBe(count);
+    // New sessions discover changes without a Settings refresh and honor current settings.
+    const ordinaryId = skills
+      .list()
+      .local.find((s) => s.name === "ordinary")!.id;
+    await state.update({
+      disabledSkillIds: [...state.value.disabledSkillIds!, ordinaryId],
+    });
+    await skillMd(join(local, "ordinary"), "renamed", "Renamed ordinary.");
+    await skillMd(join(local, "installed"), "installed", "Newly installed.");
+    await send("new session");
+    expect(prompt()).toContain("<name>installed</name>");
+    expect(prompt()).not.toContain("<name>renamed</name>");
+    expect(prompt()).not.toContain("<name>ordinary</name>");
+    expect(prompt()).not.toContain("<name>manual</name>");
+    expect(JSON.stringify(messages())).not.toContain("MANUAL_WORKFLOW_BODY");
+  } finally {
+    await service.shutdown();
+    await server.close();
     await rm(root, { recursive: true, force: true });
   }
 });

@@ -4,6 +4,11 @@ import i18n, { type AppLanguage } from "../i18n";
 // known application-owned text and leave conversation/tool content untouched.
 const messages = [
   [
+    "该技能未启用或已不存在，请在设置中检查技能",
+    "This skill is disabled or no longer available. Check Skills in Settings.",
+    "skills.unavailable",
+  ],
+  [
     "Cloud 需要 HTTPS 地址",
     "Cloud requires an HTTPS address.",
     "connectors.runtime.cloudHttps",

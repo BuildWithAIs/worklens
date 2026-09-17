@@ -6,6 +6,8 @@ import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
 import type { StateStore } from "./storage";
 import type { SkillInfo, SkillsSnapshot } from "../shared/contracts";
 
+export type SkillResources = ReturnType<typeof loadSkillsFromDir>;
+
 /**
  * Two sources only, both directories of SKILL.md packages:
  * - builtin: shipped with the app, resynced from the bundled resource on
@@ -31,6 +33,8 @@ export class SkillsService {
   private queue = new SerialQueue();
   private generation = 0;
   private snapshot: SkillsSnapshot = { builtin: [], local: [] };
+  private discovered = new Map<string, SkillResources["skills"][number]>();
+  private diagnostics: SkillResources["diagnostics"] = [];
   constructor(
     readonly builtinDir: string,
     readonly localDir: string,
@@ -45,7 +49,7 @@ export class SkillsService {
       await rm(this.builtinDir, { recursive: true, force: true });
       await cp(this.bundledSource, this.builtinDir, { recursive: true });
     }
-    this.refresh();
+    await this.refresh();
   }
   private disabledNames() {
     return new Set(this.state.value.disabledSkills ?? []);
@@ -53,22 +57,31 @@ export class SkillsService {
   private scan(dir: string, source: SkillInfo["source"]): SkillInfo[] {
     if (!existsSync(dir)) return [];
     const disabled = this.disabledNames();
-    const { skills } = loadSkillsFromDir({ dir, source });
+    const disabledIds = new Set(this.state.value.disabledSkillIds ?? []);
+    const { skills, diagnostics } = loadSkillsFromDir({ dir, source });
+    this.diagnostics.push(...diagnostics);
     return skills
-      .map((skill) => ({
-        id: createHash("sha256")
+      .map((skill) => {
+        const id = createHash("sha256")
           .update(`${source}:${skill.filePath}`)
-          .digest("hex"),
-        name: skill.name,
-        description: skill.description,
-        summary: summarize(skill.description),
-        path: skill.filePath,
-        source,
-        enabled: !disabled.has(skill.name),
-      }))
+          .digest("hex");
+        this.discovered.set(id, skill);
+        return {
+          id,
+          name: skill.name,
+          description: skill.description,
+          summary: summarize(skill.description),
+          path: skill.filePath,
+          source,
+          enabled: !disabledIds.has(id) && !disabled.has(skill.name),
+          disableModelInvocation: skill.disableModelInvocation,
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
   }
-  refresh(): SkillsSnapshot {
+  private scanAll(): SkillsSnapshot {
+    this.discovered.clear();
+    this.diagnostics = [];
     this.snapshot = {
       builtin: this.scan(this.builtinDir, "builtin"),
       local: this.scan(this.localDir, "local"),
@@ -81,8 +94,36 @@ export class SkillsService {
         skill.enabled = false;
       } else winners.set(skill.name, skill);
     }
-    this.generation++;
     return this.snapshot;
+  }
+  private async rescan() {
+    this.scanAll();
+    // Migrate existing name-based preferences without re-enabling skills.
+    // Keep unmatched legacy names until the corresponding files are available.
+    const legacy = this.disabledNames();
+    const disabled = new Set(this.state.value.disabledSkillIds ?? []);
+    const matches = [...this.snapshot.builtin, ...this.snapshot.local].filter(
+      (skill) => legacy.has(skill.name),
+    );
+    if (matches.length) {
+      for (const skill of matches) {
+        disabled.add(skill.id);
+        legacy.delete(skill.name);
+      }
+      await this.state.update({
+        disabledSkills: [...legacy],
+        disabledSkillIds: [...disabled],
+      });
+      this.scanAll();
+    }
+    return this.snapshot;
+  }
+  refresh(invalidate = true) {
+    return this.queue.run("skills", async () => {
+      const snapshot = await this.rescan();
+      if (invalidate) this.generation++;
+      return snapshot;
+    });
   }
   list() {
     return this.snapshot;
@@ -100,27 +141,37 @@ export class SkillsService {
   }
   setEnabled(id: string, enabled: boolean) {
     return this.queue.run("skills", async () => {
+      await this.rescan();
       const skill = this.find(id);
       if (skill.shadowedBy)
         throw new Error("同名技能已由其他来源提供，请修改生效版本的开关");
-      const disabled = this.disabledNames();
-      if (enabled) disabled.delete(skill.name);
-      else disabled.add(skill.name);
-      await this.state.update({ disabledSkills: [...disabled] });
-      return this.refresh();
+      const disabled = new Set(this.state.value.disabledSkillIds ?? []);
+      if (enabled) disabled.delete(id);
+      else disabled.add(id);
+      await this.state.update({ disabledSkillIds: [...disabled] });
+      this.generation++;
+      return this.scanAll();
     });
   }
   /** Refresh invalidates cached sessions even when names/descriptions are unchanged. */
   configurationKey() {
-    return JSON.stringify([this.generation, [...this.disabledNames()].sort()]);
+    return createHash("sha256")
+      .update(JSON.stringify([this.generation, this.snapshot]))
+      .digest("hex");
   }
-  skillPaths() {
-    // Resolve once, using the same built-in-first precedence displayed in Settings.
-    return [...this.snapshot.builtin, ...this.snapshot.local]
-      .filter((skill) => !skill.shadowedBy)
-      .map((skill) => skill.path);
-  }
-  disabledSkillNames() {
-    return [...this.disabledNames()];
+  /** One authoritative snapshot for both the UI and Pi; never reparse in Pi. */
+  configuration() {
+    return this.queue.run("skills", async () => {
+      await this.rescan();
+      return {
+        key: this.configurationKey(),
+        resources: {
+          skills: [...this.snapshot.builtin, ...this.snapshot.local]
+            .filter((skill) => skill.enabled)
+            .map((skill) => ({ ...this.discovered.get(skill.id)! })),
+          diagnostics: [...this.diagnostics],
+        } satisfies SkillResources,
+      };
+    });
   }
 }

@@ -64,6 +64,10 @@ export const schemas = {
       lastConversation: id.optional(),
       pinnedConversationIds: z.array(id).max(2000).optional(),
       disabledSkills: z.array(z.string().min(1).max(200)).max(2000).optional(),
+      disabledSkillIds: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .max(2000)
+        .optional(),
     })
     .strict(),
   login: z

@@ -262,6 +262,16 @@ const en = {
     },
   },
   skills: {
+    chooseSkill: "Choose a skill",
+    noEnabledSkillsMatch:
+      "No matching enabled skills. Manage skills in Settings.",
+    messagePlaceholder: "What would you like to do? Type / to choose a skill",
+    manualOnly:
+      "This skill is only used when you call it explicitly. In chat, type:",
+    autoAndManual:
+      "The assistant can use this skill when relevant. You can also type:",
+    unavailable:
+      "This skill is disabled or no longer available. Check Skills in Settings.",
     loading: "Loading skills…",
     retry: "Try again",
     viewDetails: "About {{skill}}",

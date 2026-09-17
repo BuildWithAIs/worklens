@@ -321,6 +321,14 @@ export function SkillsSettings({
               </p>
             )}
             <p className="text-sm text-muted-foreground">
+              {t(
+                selected.disableModelInvocation
+                  ? "skills.manualOnly"
+                  : "skills.autoAndManual",
+              )}{" "}
+              <code>/skill:{selected.name}</code>
+            </p>
+            <p className="text-sm text-muted-foreground">
               {t("skills.appliesNextTurn")}
             </p>
             <Button variant="outline" onClick={() => void reveal(selected)}>

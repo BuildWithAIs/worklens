@@ -263,10 +263,10 @@ else {
                   value = await providers!.refreshModels(input.provider);
                   break;
                 case "skillsList":
-                  value = skills.list();
+                  value = await skills.refresh(false);
                   break;
                 case "skillsRefresh":
-                  value = skills.refresh();
+                  value = await skills.refresh();
                   break;
                 case "skillsToggle":
                   value = await skills.setEnabled(input.id, input.enabled);
