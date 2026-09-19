@@ -1,46 +1,45 @@
-# 仓库贡献指南
+# Repository Guidelines
 
-## 项目结构与模块划分
+## Project Structure & Module Organization
 
-本项目是本地优先的桌面工作助手，使用 Electron、React、TypeScript、Tailwind CSS 和 Pi。
+WorkLens is a desktop working agent built with Electron, React, TypeScript, Tailwind CSS, and Pi Agent.
 
-- `src/main/`：应用生命周期、服务商、认证、会话执行、存储、工具和输入校验。
-- `src/main/connectors/<service>/`：办公服务连接器；各服务维护自己的认证、API 和 Agent 工具，通过轻量注册表接入。前端配置组件位于 `src/renderer/src/components/worklens/connectors/`，接入约定见 `docs/connectors/README.md`。
-- `src/preload/`：最小化的类型化进程桥接；`src/shared/`：进程通信与界面数据契约。
-- `src/renderer/src/`：界面组件与样式。
-- `tests/`：集成测试及本地模型测试服务器；`tests/e2e/`：桌面端到端测试。
-- `build/`：安装包图标。
-- `dist/`、`release/`：构建产物。`reference/` 和 `prd.md` 属于本地忽略内容，不要提交。
+- `src/main/`: lifecycle, authentication, sessions, storage, and validation; service integrations live in `connectors/<service>/`.
+- `src/preload/`: typed Electron bridge; `src/shared/`: IPC and UI contracts.
+- `src/renderer/src/`: React components, styles, brand assets, and `i18n/locales/` translations.
+- `tests/`: unit/integration tests; `tests/e2e/`: Electron acceptance; `tests/ui/`: browser UI checks.
+- `resources/skills/`: bundled agent skills; `build/`: installer icons.
+- `website/`: separate website package with its own scripts and README.
 
-## 安装、开发与构建命令
+## Build, Test, and Development Commands
 
-使用 Node.js 24 和 npm。
+Use Node.js 24 and npm. Run these from the repository root:
 
-- 依次执行 `npm ci`、`node node_modules/electron/install.js`：安装锁定版本的依赖及桌面运行时。
-- `npm run dev`：启动开发环境。
-- `npm run typecheck`：执行严格类型检查，不生成文件。
-- `npm test`：运行集成与单元测试。
-- `npm run test:e2e`：构建并运行桌面验收测试。
-- 依次执行 `npm run build`、`npm start`：构建并启动生产版本。
-- `npm run pack`：生成未封装为安装器的应用目录。
-- `npm run dist:win`、`npm run dist:mac`：分别生成对应平台的安装包；苹果系统安装包须在对应系统上构建。
+- `npm ci`: install locked dependencies; `node node_modules/electron/install.js`: install the Electron runtime.
+- `npm run dev`: launch desktop development.
+- `npm run typecheck`: run strict TypeScript checks.
+- `npm test`: run Vitest tests.
+- `npm run test:e2e`: build and run Playwright Electron tests.
+- `npm run test:ui`: build and run browser UI tests; requires Chrome.
+- `npm run build`, then `npm start`: build and launch production code.
+- `npm run pack`: create an unpacked application; `npm run dist:win` / `npm run dist:mac`: create installers in `release/` (build macOS installers on macOS).
 
-## 代码风格与命名约定
+## Coding Style & Naming Conventions
 
-沿用两空格缩进、双引号、分号和尾随逗号。组件与类型使用大驼峰命名，函数与变量使用小驼峰命名，多词服务文件名使用连字符分隔，例如 `agent-service.ts`。共享数据契约集中在 `src/shared/contracts.ts`。
+Follow surrounding code: two-space indentation, double quotes, semicolons, and trailing commas. Use PascalCase for components/types, camelCase for functions/variables, and kebab-case for service files such as `agent-service.ts`. Keep shared contracts in `src/shared/`. Update both English and Chinese locales for UI text.
 
-已安装 Prettier，可用 `npx prettier --write <文件路径>` 格式化修改的文件；当前未配置独立的代码规范检查脚本。
+Prettier is installed: `npx prettier --write <file>`. No dedicated lint script is configured.
 
-## 测试要求
+## Testing Guidelines
 
-Vitest 测试命名为 `*.test.ts`，Playwright 测试命名为 `*.spec.ts`。行为修复应补充回归测试，重点覆盖取消、并发、持久化和凭据处理；当前没有数值化覆盖率门槛。
+Name Vitest tests `*.test.ts` and Playwright tests `*.spec.ts`. Add regression coverage for behavior fixes; no numeric coverage threshold is configured. Run focused tests with `npx vitest run tests/core.test.ts` and relevant acceptance suites before submitting.
 
-使用临时目录，并通过 `WORKLENS_TEST_ROOT` 隔离桌面测试数据。测试结合真实 Pi 工具和本地模型服务器，无需付费账号。打包产物测试需要设置 `WORKLENS_PACKAGED_EXE`，否则会跳过。
+Use temporary directories and `WORKLENS_TEST_ROOT` for desktop isolation. Local model-server fixtures avoid paid model calls. Packaged tests require `WORKLENS_PACKAGED_EXE`.
 
-## 提交与合并请求
+## Commit & Pull Request Guidelines
 
-沿用历史中的 `feat:`、`docs:`、`chore:` 前缀，以简洁的动词短语描述修改，每次提交保持范围明确。合并请求应说明行为变化、关联相关问题并列出已执行的检查；界面修改附截图。明确区分本机验证、真实云端账号验证和跨平台验证。
+Follow history's `feat:`, `fix:`, `chore:`, and `docs:` prefixes with concise action phrases. Keep commits focused. Describe behavior changes, link relevant issues, list checks performed, and attach screenshots for UI changes. Distinguish local verification from live-service and cross-platform validation.
 
-## 架构与安全约定
+## Security & Configuration
 
-以锁定版本的 Pi 公开接口为服务商与会话历史的依据。特权操作放在主进程，通过类型明确且经过校验的进程通信接口调用。禁止明文持久化凭据或在日志中暴露秘密。保留用户数据，测试不得使用真实会话目录。
+Keep privileged operations in the main process behind validated IPC. Never log secrets or persist plaintext credentials. Tests must not touch real user sessions. Exclude generated outputs, `reference/`, and local configuration from commits.

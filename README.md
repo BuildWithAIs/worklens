@@ -10,15 +10,15 @@ Built with Electron, React, TypeScript, Tailwind CSS, and Pi.
 
 ## Confluence
 
-Connect one Confluence site in **Settings → Connections** using your URL and token. Search/read documents, make version-aware edits, publish Markdown with attachments, and download/export files into the current conversation. Cloud supports email/API-token authentication; Data Center supports PAT authentication. See [setup, operations, safeguards and validation limits](docs/connectors/confluence.md).
+Connect one Confluence site in **Settings → Connections** using your URL and token. Search/read documents, make version-aware edits, publish Markdown with attachments, and download/export files into the current conversation. Cloud supports email/API-token authentication; Data Center supports PAT authentication.
 
 ## GitHub
 
-Connect one GitHub site in **Settings → Connections** by entering its URL and a Personal Access Token. The address starts empty and supports your company's GitHub instance as well as GitHub.com. Explore code, manage issues and PRs, review changes, investigate CI, maintain releases, and work with Projects and Discussions. The integration uses Octokit and requires no GitHub CLI installation. See [setup, supported operations and validation limits](docs/connectors/github.md).
+Connect one GitHub site in **Settings → Connections** by entering its URL and a Personal Access Token. The address starts empty and supports your company's GitHub instance as well as GitHub.com. Explore code, manage issues and PRs, review changes, investigate CI, maintain releases, and work with Projects and Discussions. The integration uses Octokit and requires no GitHub CLI installation.
 
 ## Web search (Tavily)
 
-Connect Tavily in **Settings → Connectors** with an API key to give the agent `web_search`, `web_fetch`, and Tavily deep research. See [setup, tools and failure statuses](docs/connectors/tavily.md).
+Connect Tavily in **Settings → Connectors** with an API key to give the agent `web_search`, `web_fetch`, and Tavily deep research.
 
 ## Local development
 
@@ -71,7 +71,7 @@ Installers are written to `release/`. By default the build does not upload, publ
 
 ## Source layout
 
-Office integrations are grouped by service under `src/main/connectors/`, with corresponding settings components and tests. See [connector organization and extension guide](docs/connectors/README.md).
+Office integrations are grouped by service under `src/main/connectors/`, with corresponding settings components and tests.
 
 ```text
 src/main/        app lifecycle, models and auth, session execution, scheduling, storage, input validation

@@ -10,11 +10,11 @@ WorkLens 是一款本地优先的工作 Agent，面向中大型企业的员工�
 
 ## Confluence
 
-在 **设置 → 连接** 中填写站点地址和 token，即可连接一个 Confluence 服务，查找和阅读文档、按版本修改内容、发布带附件的 Markdown，并将下载和导出文件保存在当前会话中。Cloud 使用邮箱和 API token，Data Center 使用 PAT。详见[配置、操作范围与验证说明](docs/connectors/confluence.md)。
+在 **设置 → 连接** 中填写站点地址和 token，即可连接一个 Confluence 服务，查找和阅读文档、按版本修改内容、发布带附件的 Markdown，并将下载和导出文件保存在当前会话中。Cloud 使用邮箱和 API token，Data Center 使用 PAT。
 
 ## 联网搜索（Tavily）
 
-在 **设置 → 连接器** 中填入 Tavily API key，助手即可使用 `web_search`、`web_fetch` 和 Tavily 深度研究。详见 [设置、工具与错误状态](docs/connectors/tavily.md)。
+在 **设置 → 连接器** 中填入 Tavily API key，助手即可使用 `web_search`、`web_fetch` 和 Tavily 深度研究。
 
 ## 本地运行
 
@@ -67,7 +67,7 @@ npx playwright test tests/e2e/packaged.spec.ts
 
 ## 源码结构
 
-办公服务按服务划分在 `src/main/connectors/` 下，并配套组织设置组件和测试。详见[连接器目录与接入约定](docs/connectors/README.md)。
+办公服务按服务划分在 `src/main/connectors/` 下，并配套组织设置组件和测试。
 
 ```text
 src/main/        应用生命周期、模型与认证、会话运行、调度、存储、输入校验

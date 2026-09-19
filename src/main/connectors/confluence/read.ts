@@ -26,7 +26,7 @@ export async function read(ctx: Execution, a: ReadRequest): Promise<Json> {
         discovery:
           "Use describe_operation with name to retrieve one exact input contract before execution.",
         limitations: [
-          "Cloud and Data Center API/permission coverage differs; see docs/connectors/confluence.md.",
+          "Cloud and Data Center API/permission coverage differs.",
           "Local exports preserve source but do not reproduce native macro rendering.",
           "Only exact storage-fragment edits are supported; section selection uses explicit fragment matching.",
           "Cloud archive is asynchronous; use read_long_task to check completion.",
