@@ -124,6 +124,11 @@ export async function mockWorklens(page, options = {}) {
       ],
       models: [],
     });
+    if (options.largeModelCatalog) {
+      data.providers[0].models = Array.from({ length: 120 }, (_, i) =>
+        model(`model-${i}`, `Catalog ${i < 60 ? "Alpha" : "Beta"} ${i}`, "deepseek"),
+      );
+    }
     data.settings =
       JSON.parse(localStorage.getItem("ui-fixture-settings") ?? "null") ??
       data.settings;
@@ -219,6 +224,10 @@ export async function mockWorklens(page, options = {}) {
           return `Fixture User · ${input.url}`;
         }
         if (name === "settings") {
+          if (input.backgroundIntensity && window.failNextBackgroundSave) {
+            window.failNextBackgroundSave = false;
+            throw Error("Could not save background appearance.");
+          }
           await new Promise((resolve) => setTimeout(resolve, 120));
           if (input.hiddenModels && window.failNextVisibilitySave) {
             window.failNextVisibilitySave = false;

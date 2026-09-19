@@ -16,6 +16,7 @@ import {
   Info,
   Globe,
   LoaderCircle,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Settings2,
@@ -50,6 +51,12 @@ import {
   AccordionContent,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { ProviderDialog } from "./ProviderDialog";
 
@@ -88,6 +95,9 @@ export function SettingsPage({
   onSuccess,
 }: Props) {
   const { t, i18n, language } = useAppTranslation();
+  const [backgroundPreview, setBackgroundPreview] = useState<number | null>(
+    null,
+  );
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [query, setQuery] = useState("");
   const [providerScope, setProviderScope] = useState("all");
@@ -107,6 +117,7 @@ export function SettingsPage({
   const confirmedHidden = useRef(hiddenModels);
   const visibilityQueue = useRef(Promise.resolve());
   const pendingRef = useRef(new Set<string>());
+  const visibilityEdits = useRef(new Map<string, Map<string, boolean>>());
   const [pendingVisibility, setPendingVisibility] = useState(new Set<string>());
   useEffect(() => {
     if (pendingRef.current.size) return;
@@ -160,30 +171,65 @@ export function SettingsPage({
       setRefreshing(undefined);
     }
   }
-  function toggleModel(key: string, visible: boolean) {
-    if (pendingRef.current.has(key)) return;
-    const optimistic = new Set(hiddenRef.current);
-    visible ? optimistic.delete(key) : optimistic.add(key);
-    hiddenRef.current = optimistic;
-    setHiddenModels(optimistic);
-    pendingRef.current.add(key);
+  function setModelVisibility(changes: Map<string, boolean>, bulk = false) {
+    if ([...changes.keys()].some((key) => pendingRef.current.has(key))) return;
+    const previous = new Map<string, boolean>();
+    for (const [key, visible] of changes) {
+      if (visible === !hiddenRef.current.has(key)) changes.delete(key);
+      else previous.set(key, !hiddenRef.current.has(key));
+    }
+    if (!changes.size) return;
+    const apply = (source: Set<string>, values: Map<string, boolean>) => {
+      const next = new Set(source);
+      for (const [key, visible] of values) {
+        visible ? next.delete(key) : next.add(key);
+      }
+      return next;
+    };
+    hiddenRef.current = apply(hiddenRef.current, changes);
+    setHiddenModels(hiddenRef.current);
+    for (const key of changes.keys()) {
+      pendingRef.current.add(key);
+      visibilityEdits.current.set(key, changes);
+    }
     setPendingVisibility(new Set(pendingRef.current));
-    // The API saves the whole array. Serialize writes to preserve independent
-    // clicks while allowing other model switches to remain interactive.
+    // Single and bulk actions share one queue: each write preserves the last
+    // confirmed values of models outside this operation, including other providers.
     visibilityQueue.current = visibilityQueue.current.then(async () => {
-      const next = new Set(confirmedHidden.current);
-      visible ? next.delete(key) : next.add(key);
+      const next = apply(confirmedHidden.current, changes);
       try {
         await save({ hiddenModels: [...next] });
         confirmedHidden.current = next;
-        onSuccess(t("settingsFeedback.visibilitySaved"));
+        if (bulk) {
+          const id = toast.add({
+            type: "success",
+            title: t("settings.visibilityBulkSaved", { count: changes.size }),
+            actionProps: {
+              children: t("settings.undoVisibility"),
+              onClick: () => {
+                // A later manual change takes precedence over an old Undo action.
+                const undo = new Map(
+                  [...previous].filter(
+                    ([key]) =>
+                      !pendingRef.current.has(key) &&
+                      visibilityEdits.current.get(key) === changes &&
+                      !hiddenRef.current.has(key) === changes.get(key),
+                  ),
+                );
+                setModelVisibility(undo);
+                toast.close(id);
+              },
+            },
+          });
+        } else onSuccess(t("settingsFeedback.visibilitySaved"));
       } catch (e) {
-        const rollback = new Set(hiddenRef.current);
-        confirmedHidden.current.has(key)
-          ? rollback.add(key)
-          : rollback.delete(key);
-        hiddenRef.current = rollback;
-        setHiddenModels(rollback);
+        const rollback = new Map(
+          [...changes.keys()].map(
+            (key) => [key, !confirmedHidden.current.has(key)] as const,
+          ),
+        );
+        hiddenRef.current = apply(hiddenRef.current, rollback);
+        setHiddenModels(hiddenRef.current);
         toast.add(
           settingsFailure(
             t("settingsFeedback.visibilityFailed"),
@@ -192,10 +238,13 @@ export function SettingsPage({
           ),
         );
       } finally {
-        pendingRef.current.delete(key);
+        for (const key of changes.keys()) pendingRef.current.delete(key);
         setPendingVisibility(new Set(pendingRef.current));
       }
     });
+  }
+  function toggleModel(key: string, visible: boolean) {
+    setModelVisibility(new Map([[key, visible]]));
   }
   async function testModel(
     provider: ProviderInfo,
@@ -322,7 +371,10 @@ export function SettingsPage({
   return (
     <div className="settings-workspace">
       <aside className="settings-navigation">
-        <BackgroundEffect settings={data.settings} />
+        <BackgroundEffect
+          intensity={backgroundPreview ?? undefined}
+          settings={data.settings}
+        />
         <Button variant="ghost" className="settings-back" onClick={onBack}>
           <ArrowLeft />
           {t("settings.backToApp")}
@@ -342,7 +394,11 @@ export function SettingsPage({
         </nav>
       </aside>
       <div className="settings-pane">
-        <BackgroundEffect settings={data.settings} edge />
+        <BackgroundEffect
+          intensity={backgroundPreview ?? undefined}
+          settings={data.settings}
+          edge
+        />
         <header className="settings-page-heading">
           <h1 data-slot="settings-page-title">
             {nav.find((n) => n.id === section)?.label}
@@ -481,7 +537,14 @@ export function SettingsPage({
                               {p.name}
                             </span>
                             <span className="settings-group-count">
-                              {p.models.length}
+                              {t("settings.modelsShownCount", {
+                                shown: p.models.filter(
+                                  (m) =>
+                                    m.available &&
+                                    !hiddenModels.has(p.id + "/" + m.id),
+                                ).length,
+                                total: p.models.length,
+                              })}
                             </span>
                           </span>
                         </AccordionTrigger>
@@ -497,6 +560,77 @@ export function SettingsPage({
                           >
                             {t("settings.goToProviders")}
                           </Button>
+                        )}
+                        {p.models.some((m) => m.available) && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="size-8 p-0"
+                                  aria-label={t(
+                                    "settings.manageModelVisibility",
+                                    { provider: p.name },
+                                  )}
+                                >
+                                  <MoreHorizontal />
+                                </Button>
+                              }
+                            />
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-auto min-w-56"
+                            >
+                              {[true, false].map((visible) => {
+                                const models = p.models.filter(
+                                  (m) => m.available,
+                                );
+                                const filtered =
+                                  !!modelQuery.trim() || scope === "visible";
+                                return (
+                                  <DropdownMenuItem
+                                    key={String(visible)}
+                                    disabled={
+                                      models.some((m) =>
+                                        pendingVisibility.has(
+                                          p.id + "/" + m.id,
+                                        ),
+                                      ) ||
+                                      models.every(
+                                        (m) =>
+                                          !hiddenModels.has(
+                                            p.id + "/" + m.id,
+                                          ) === visible,
+                                      )
+                                    }
+                                    onClick={() =>
+                                      setModelVisibility(
+                                        new Map(
+                                          models.map((m) => [
+                                            p.id + "/" + m.id,
+                                            visible,
+                                          ]),
+                                        ),
+                                        true,
+                                      )
+                                    }
+                                  >
+                                    {t(
+                                      visible
+                                        ? filtered
+                                          ? "settings.showMatchingModels"
+                                          : "settings.showAllModels"
+                                        : filtered
+                                          ? "settings.hideMatchingModels"
+                                          : "settings.hideAllModels",
+                                      { count: models.length },
+                                    )}
+                                  </DropdownMenuItem>
+                                );
+                              })}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                         <TooltipIconButton
                           variant="ghost"
@@ -593,7 +727,10 @@ export function SettingsPage({
                                               />
                                             }
                                           />
-                                          <TooltipContent side="bottom">
+                                          <TooltipContent
+                                            side="left"
+                                            sideOffset={12}
+                                          >
                                             {t("settings.showInChat")}
                                           </TooltipContent>
                                         </Tooltip>
@@ -734,6 +871,7 @@ export function SettingsPage({
                       </NativeSelect>
                     </Item>
                     <BackgroundPreferences
+                      onPreview={setBackgroundPreview}
                       settings={data.settings}
                       save={save}
                       onError={onError}

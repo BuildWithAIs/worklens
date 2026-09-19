@@ -16,6 +16,7 @@ test("background preferences preserve legacy settings and survive reload", async
       schemas.settings.parse({
         backgroundEffect: "fluid",
         backgroundTone: "ice",
+        backgroundIntensity: { fluid: 80, surface: 0, aurora: 100 },
       }),
     );
     const restored = new StateStore(join(root, "settings.json"));
@@ -23,6 +24,7 @@ test("background preferences preserve legacy settings and survive reload", async
     expect(restored.value).toMatchObject({
       backgroundEffect: "fluid",
       backgroundTone: "ice",
+      backgroundIntensity: { fluid: 80, surface: 0, aurora: 100 },
       theme: "dark",
       pinnedConversationIds: ["saved"],
     });
@@ -30,6 +32,11 @@ test("background preferences preserve legacy settings and survive reload", async
     await store.load();
     expect(store.value.backgroundEffect).toBe("none");
     expect(store.value.backgroundTone).toBe("ice");
+    expect(store.value.backgroundIntensity).toEqual({
+      fluid: 80,
+      surface: 0,
+      aurora: 100,
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -49,6 +56,11 @@ test("background input accepts only supported settings", () => {
     { backgroundTone: "red" },
     { backgroundEffect: null },
     { backgroundIntensity: 1 },
+    { backgroundIntensity: { fluid: -1 } },
+    { backgroundIntensity: { fluid: 101 } },
+    { backgroundIntensity: { fluid: 1.5 } },
+    { backgroundIntensity: { fluid: "50" } },
+    { backgroundIntensity: { none: 50 } },
   ]) {
     expect(schemas.settings.safeParse(patch).success).toBe(false);
   }
