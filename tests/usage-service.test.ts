@@ -180,8 +180,7 @@ test("pending-only crash recovery and materialized missing run-end remain incomp
   );
   const first = await send("materialize");
   await end(first.runId);
-  const file = (await SessionManager.list(paths.runtime, paths.sessions))[0]
-    .path;
+  const file = (await SessionManager.listAll(paths.sessions))[0].path;
   const lines = (await readFile(file, "utf8"))
     .trim()
     .split("\n")
@@ -204,7 +203,7 @@ test("interleaved sessions, failed delete and successful delete preserve global 
   });
   const revisions = events.map((e) => e.globalUsage!.revision);
   expect(revisions).toEqual([...revisions].sort((a, b) => a - b));
-  const file = (await SessionManager.list(paths.runtime, paths.sessions)).find(
+  const file = (await SessionManager.listAll(paths.sessions)).find(
     (s) => s.id === a.id,
   )!.path;
   const outside = join(root, "outside.jsonl");
@@ -248,8 +247,7 @@ test("a corrupt accounting line stays partial through reopen and does not duplic
   const { send, end, paths, restart } = await setup();
   const first = await send("corrupt tail");
   await end(first.runId);
-  const file = (await SessionManager.list(paths.runtime, paths.sessions))[0]
-    .path;
+  const file = (await SessionManager.listAll(paths.sessions))[0].path;
   await writeFile(
     file,
     (await readFile(file, "utf8")) + "{damaged-accounting\n",

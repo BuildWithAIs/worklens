@@ -159,7 +159,10 @@ export async function fileOperation(
     );
   }
   if (request.operation === "upload_release_asset") {
-    const file = await open(ctx.artifacts.resolvePath(request.path), "r");
+    const file = await open(
+      ctx.artifacts.resolvePath(request.path, ctx.sessionId),
+      "r",
+    );
     try {
       const before = await file.stat();
       if (!before.isFile() || before.size > MAX_FILE_BYTES)

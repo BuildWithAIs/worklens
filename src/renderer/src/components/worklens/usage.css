@@ -125,22 +125,28 @@
   font-size: 13px;
   font-weight: 500;
 }
-.usage-progress {
-  height: 6px;
-  border-radius: 3px;
-  margin: 9px 0 6px;
+.usage-progress,
+.usage-composition {
+  height: 8px;
+  margin-top: 10px;
   background: var(--soft);
   overflow: hidden;
+  /* Sixteen softly rounded segments keep both meters calm at every width. */
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 8' preserveAspectRatio='none'%3E%3Crect width='18' height='8' rx='1' fill='black'/%3E%3C/svg%3E");
+  mask-size: calc(100% / 16) 100%;
+  mask-repeat: repeat-x;
+}
+.usage-progress {
+  margin-bottom: 6px;
 }
 .usage-progress > span {
   display: block;
   height: 100%;
   background: var(--usage-blue);
-  border-radius: inherit;
 }
 .usage-summary {
   width: 100%;
-  margin: 18px 0 8px;
+  margin: 15px 0 8px;
   border-collapse: collapse;
 }
 .usage-summary th,
@@ -197,11 +203,7 @@
 }
 .usage-composition {
   display: flex;
-  height: 8px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--soft);
-  margin: 12px 0 16px;
+  margin-bottom: 16px;
 }
 .usage-popover [data-kind="input"] {
   background: var(--usage-blue);

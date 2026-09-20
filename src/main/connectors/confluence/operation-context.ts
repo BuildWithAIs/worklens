@@ -106,9 +106,10 @@ export class OperationSupport {
   }
   async prepareDestination(
     destination?: Destination,
+    sessionId?: string,
   ): Promise<Destination | undefined> {
     if (!destination?.overwrite || !destination.path) return destination;
-    const path = this.artifacts.resolvePath(destination.path);
+    const path = this.artifacts.resolvePath(destination.path, sessionId);
     const exists = await lstat(path).catch((e) => {
       if (e.code !== "ENOENT") throw e;
     });

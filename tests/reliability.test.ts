@@ -98,9 +98,7 @@ test("PRD 035: 20 concurrent session pairs have no cross-session contamination",
       );
     }
   }
-  expect(await SessionManager.list(paths.runtime, paths.sessions)).toHaveLength(
-    40,
-  );
+  expect(await SessionManager.listAll(paths.sessions)).toHaveLength(40);
 });
 test("PRD 033: 30 independent reopen cycles preserve tool history and model", async () => {
   const { service, runtime, paths, selection, events, root } = await setup();
@@ -288,7 +286,7 @@ test("PRD 046: Pi compaction persists a recoverable summary", async () => {
     .poll(() => events.some((e) => e.type === "run_end"), { timeout: 15000 })
     .toBe(true);
   await service.shutdown();
-  const info = (await SessionManager.list(paths.runtime, paths.sessions))[0];
+  const info = (await SessionManager.listAll(paths.sessions))[0];
   const manager = SessionManager.open(info.path, paths.sessions, paths.runtime);
   const local = await resources(paths.runtime, paths.userData);
   const { session } = await createAgentSession({

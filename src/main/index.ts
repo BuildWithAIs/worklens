@@ -89,6 +89,7 @@ else {
       const artifacts = new LocalArtifacts(
         join(root, "artifacts"),
         paths.runtime,
+        paths.sessions,
       );
       const connectors = createConnectors(
         paths.userData,
@@ -116,6 +117,7 @@ else {
         redact,
         connectors.registry,
         skills,
+        artifacts,
       );
       await agents.initialize();
       providers = new ProviderService(runtime, credentials, (event) =>

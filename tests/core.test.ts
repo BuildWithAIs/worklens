@@ -317,13 +317,11 @@ describe("PRD 030-056: real Pi agent sessions and local tools", () => {
         (m) => m.toolName === "write" && m.status === "success",
       ),
     ).toBe(true);
-    const managers = await SessionManager.list(paths.runtime, paths.sessions);
-    const saved = SessionManager.open(
-      managers[0].path,
-      paths.sessions,
-      paths.runtime,
+    const managers = await SessionManager.listAll(paths.sessions);
+    const saved = SessionManager.open(managers[0].path, paths.sessions);
+    expect(saved.getCwd()).toBe(
+      join(paths.sessions, conversation.id, "workspace"),
     );
-    expect(saved.getCwd()).toBe(paths.runtime);
     const messages = saved.buildSessionContext().messages;
     expect(messages.some((m) => m.role === "toolResult")).toBe(true);
     await service.shutdown();
@@ -349,7 +347,7 @@ describe("PRD 030-056: real Pi agent sessions and local tools", () => {
       ),
     ).toBe(true);
   });
-  test("platform shell really executes with shared cwd", async () => {
+  test("platform shell really executes in the conversation workspace", async () => {
     const { service, selection, events, paths } = await setup();
     const shellName = process.platform === "win32" ? "powershell" : "bash";
     const conversation = await service.send({
@@ -371,12 +369,14 @@ describe("PRD 030-056: real Pi agent sessions and local tools", () => {
     const result = end.view.messages.find((m) => m.toolName === shellName);
     expect(result?.status, result?.text).toBe("success");
     expect(result).toMatchObject({
-      shellCwd: paths.runtime,
+      shellCwd: join(paths.sessions, conversation.id, "workspace"),
       timeoutSeconds: 10,
       exitCode: 0,
     });
     expect(result?.text.toLowerCase()).toContain(
-      (await realpath(paths.runtime)).toLowerCase(),
+      (
+        await realpath(join(paths.sessions, conversation.id, "workspace"))
+      ).toLowerCase(),
     );
     for (const [command, timeout, status, exitCode] of [
       ["exit 7", 10, "error", 7],

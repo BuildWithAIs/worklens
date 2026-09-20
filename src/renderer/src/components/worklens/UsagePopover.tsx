@@ -293,7 +293,7 @@ export function UsagePopover({
                   {t("usage.allModelsTotal")}
                   <Hint content={totalTitle}>
                     <Button
-                      variant="ghost"
+                      variant="hint"
                       size="icon-xs"
                       className="size-5"
                       aria-label={t("usage.aboutTotalUsage")}

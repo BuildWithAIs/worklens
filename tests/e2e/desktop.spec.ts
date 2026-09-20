@@ -158,7 +158,7 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       })
       .click();
     await expect(
-      page.getByText("Connection successful", { exact: true }),
+      page.getByText("本地测试模型 connection successful", { exact: true }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "Back to app", exact: true })
@@ -220,6 +220,34 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     await expect(
       page.getByRole("heading", { name: "实际文件任务", exact: true }),
     ).toBeVisible();
+    const fileConversation = await page.evaluate(
+      async () =>
+        (
+          await window.worklens.invoke("bootstrap", undefined)
+        ).conversations.find((item) => item.title === "实际文件任务")!,
+    );
+    await page.getByRole("textbox", { name: "Message", exact: true }).fill(
+      "TOOL " +
+        JSON.stringify({
+          name: "write",
+          args: {
+            path: "session-output.txt",
+            content: "conversation-owned output",
+          },
+        }),
+    );
+    await page.getByRole("button", { name: "Send message" }).click();
+    await finished();
+    const ownedOutput = join(
+      directory,
+      "sessions",
+      fileConversation.id,
+      "workspace",
+      "session-output.txt",
+    );
+    expect(await readFile(ownedOutput, "utf8")).toBe(
+      "conversation-owned output",
+    );
     // Delay the first session's availability check to exercise pending-send isolation.
     await app.evaluate(async (_electron, mainUrl) => {
       const vm = process.getBuiltinModule("node:vm");
@@ -313,8 +341,11 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
       .first()
       .click();
     await expect(
-      second.window.locator('[data-slot="tool-fallback-root"]'),
+      second.window.locator('[data-slot="tool-fallback-root"]').first(),
     ).toContainText(target);
+    expect(await readFile(ownedOutput, "utf8")).toBe(
+      "conversation-owned output",
+    );
     await expect(
       second.window.getByRole("heading", { name: "实际文件任务", exact: true }),
     ).toBeVisible();
@@ -350,6 +381,27 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
     await expect(
       second.window.getByRole("heading", { name: "实际文件任务", exact: true }),
     ).toBeVisible();
+    await second.window
+      .getByRole("button", {
+        name: "Conversation options: 实际文件任务",
+        exact: true,
+      })
+      .click();
+    await second.window
+      .getByRole("menuitem", { name: "Delete", exact: true })
+      .click();
+    const deletion = second.window.getByRole("dialog", {
+      name: "Delete conversation?",
+    });
+    await expect(deletion).toContainText("Files saved elsewhere will be kept");
+    await deletion.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(
+      second.window
+        .locator(".conversation-open")
+        .filter({ hasText: "实际文件任务" }),
+    ).toHaveCount(0);
+    await expect(readFile(ownedOutput, "utf8")).rejects.toThrow();
+    expect(await readFile(target, "utf8")).toBe("WorkLens Electron 实测成功");
     expect(errors).toEqual([]);
   } finally {
     await app?.close();
