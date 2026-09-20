@@ -77,6 +77,8 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
 
 export const MarkdownText = memo(MarkdownTextImpl);
 
+const plainTextLanguages = new Set(["text", "plaintext", "txt", "plain"]);
+
 const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   const { t } = useAppTranslation();
   const { isCopied, copyToClipboard } = useCopyToClipboard();
@@ -92,11 +94,17 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   if (ready && isHtmlArtifact(language ?? "", code))
     return <HtmlArtifactCard code={code} />;
 
+  const showLanguage = Boolean(
+    language?.trim() && !plainTextLanguages.has(language.trim().toLowerCase()),
+  );
+
   return (
-    <div className="aui-code-header-root" data-language={Boolean(language)}>
-      <span className="aui-code-header-language text-muted-foreground font-medium lowercase">
-        {language}
-      </span>
+    <div className="aui-code-header-root" data-language={showLanguage}>
+      {showLanguage && (
+        <span className="aui-code-header-language text-muted-foreground font-medium lowercase">
+          {language}
+        </span>
+      )}
       <TooltipIconButton
         className="aui-code-copy"
         tooltip={t("common.copy")}
@@ -311,7 +319,7 @@ const defaultComponents = memoizeMarkdownComponents({
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "aui-md-pre border-border/50 bg-muted/30 my-3 overflow-x-auto rounded-xl border text-[13px] leading-relaxed",
+        "aui-md-pre border-border/30 bg-muted/30 my-3 overflow-x-auto rounded-md border text-[13px] leading-relaxed",
         className,
       )}
       {...props}

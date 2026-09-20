@@ -30,11 +30,11 @@ for (const language of ["en", "zh"]) {
     const input = page.locator(".aui-composer-input");
     await input.fill("/");
     const menu = page.getByRole("listbox", {
-      name: language === "en" ? "Choose a skill" : "选择技能",
+      name: language === "en" ? "Skills" : "技能",
     });
     await expect(menu.getByRole("option")).toHaveCount(2);
-    await expect(menu).toContainText("/skill:brave-search");
-    await expect(menu).toContainText("/skill:manual-report");
+    await expect(menu).toContainText("brave-search");
+    await expect(menu).toContainText("manual-report");
     await expect(menu).not.toContainText("example-guide");
     await expect(menu).not.toContainText("pdf-tools");
     await page.keyboard.press("ArrowDown");
@@ -118,7 +118,7 @@ test("skill command chooser refreshes settings on reopening and ignores late res
   await input.fill("ordinary message");
   await page.evaluate(() => window.releaseCommandSkills());
   await expect(
-    page.getByRole("listbox", { name: "Choose a skill" }),
+    page.getByRole("listbox", { name: "Skills" }),
   ).not.toBeVisible();
   await input.fill("/");
   await expect(page.getByText("Loading skills…")).toBeVisible();

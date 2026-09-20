@@ -248,7 +248,7 @@ const zhCN = {
     },
   },
   skills: {
-    chooseSkill: "选择技能",
+    chooseSkill: "技能",
     noEnabledSkillsMatch: "没有匹配的已启用技能，可前往设置管理。",
     messagePlaceholder: "想做什么？输入 / 选择技能",
     manualOnly: "此技能仅在你主动调用时使用。在对话框中输入：",
@@ -278,7 +278,9 @@ const zhCN = {
     refreshFailed: "未能刷新技能列表",
     loadFailed: "未能加载技能列表",
     revealFailed: "未能显示技能文件",
-    skillsRefreshed: "技能列表已刷新",
+    skillsRefreshed: "技能已刷新",
+    skillsAdded_one: "已刷新，新增 {{count}} 个技能",
+    skillsAdded_other: "已刷新，新增 {{count}} 个技能",
     searchSkills: "搜索技能",
     searchSkillsPlaceholder: "搜索技能…",
     filterSkills: "筛选技能",
@@ -357,6 +359,8 @@ const zhCN = {
   },
   settings: {
     modelsRefreshed: "模型已刷新",
+    modelsAdded_one: "已刷新，新增 {{count}} 个模型",
+    modelsAdded_other: "已刷新，新增 {{count}} 个模型",
     providersRefreshed: "供应商已刷新",
     connectionSuccessful: "连接成功",
     systemCredentials: "系统凭据",

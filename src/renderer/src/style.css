@@ -1184,13 +1184,13 @@ kbd {
 }
 .conversation-unread {
   position: absolute;
-  right: 12px;
+  right: 11.5px;
   top: 50%;
   transform: translateY(-50%);
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #a78bfa;
+  background: #9675ee;
   pointer-events: none;
 }
 .conversation-item:hover .conversation-unread,
@@ -1529,8 +1529,8 @@ kbd {
 }
 .aui-code-header-language {
   position: absolute;
-  top: 12px;
-  left: 16px;
+  top: 10px;
+  left: 14px;
   font-size: 11px;
   line-height: 20px;
 }
@@ -1543,8 +1543,12 @@ kbd {
   opacity: 0;
   pointer-events: none;
   color: var(--muted);
-  background: var(--bg);
+  background: transparent;
   transition: opacity 120ms ease;
+}
+.aui-code-header-root .aui-code-copy svg {
+  width: 14px;
+  height: 14px;
 }
 .aui-code-header-root:hover .aui-code-copy,
 .aui-code-header-root:focus-within .aui-code-copy,
@@ -1552,9 +1556,9 @@ kbd {
   opacity: 1;
   pointer-events: auto;
 }
-.aui-md-pre { padding: 16px 48px 16px 16px; }
+.aui-md-pre { padding: 12px 48px 12px 14px; }
 .aui-code-header-root + .aui-md-pre { margin-top: 0; }
-.aui-code-header-root[data-language="true"] + .aui-md-pre { padding-top: 40px; }
+.aui-code-header-root[data-language="true"] + .aui-md-pre { padding-top: 36px; }
 .aui-md-inline-code {
   font-family: var(--code-font-family);
   font-size: 0.88em;

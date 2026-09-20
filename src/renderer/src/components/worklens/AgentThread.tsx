@@ -1,5 +1,6 @@
 import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
+import { createThreadMessageCache } from "@/lib/thread-message-cache";
 import {
   toolProgress,
   toolActivityLabel,
@@ -18,7 +19,6 @@ import {
 } from "react";
 import {
   AssistantRuntimeProvider,
-  ExportedMessageRepository,
   type AppendMessage,
   type ThreadMessageLike,
   type ThreadMessage,
@@ -385,6 +385,13 @@ function WorkLensToolGroup({
   );
 }
 
+const threadComponents = {
+  ComposerInput: SkillComposerInput,
+  ToolFallback: WorkLensTool,
+  ProcessGroup: WorkLensToolGroup,
+  LiveStatus: WorkLensLiveStatus,
+};
+
 export function AgentThread({
   view,
   canSend,
@@ -632,9 +639,10 @@ export function AgentThread({
   }, [view, language, t]);
   // The projection is an authoritative linear snapshot, not a branch update.
   // Array mode retains removed live nodes as alternative branches on completion.
+  const messageCache = useMemo(() => createThreadMessageCache(), [view?.id]);
   const messageRepository = useMemo(
-    () => ExportedMessageRepository.fromArray(messages),
-    [messages],
+    () => messageCache(messages),
+    [messageCache, messages],
   );
   const runtime = useExternalStoreRuntime<ThreadMessage>({
     messageRepository,
@@ -661,14 +669,7 @@ export function AgentThread({
           running={!!view && activePhases.has(view.phase)}
         >
           <div className="agent-thread">
-            <Thread
-              components={{
-                ComposerInput: SkillComposerInput,
-                ToolFallback: WorkLensTool,
-                ProcessGroup: WorkLensToolGroup,
-                LiveStatus: WorkLensLiveStatus,
-              }}
-            />
+            <Thread components={threadComponents} />
           </div>
         </HtmlArtifactWorkspace>
       </ModelMenuContext.Provider>

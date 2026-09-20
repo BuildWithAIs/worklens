@@ -61,6 +61,7 @@ import { Switch } from "@/components/ui/switch";
 import { ProviderDialog } from "./ProviderDialog";
 
 import { systemText } from "@/lib/system-text";
+import { countNewItems } from "@/lib/count-new-items";
 import { languageTag, useAppTranslation } from "@/i18n";
 import type {
   Bootstrap,
@@ -152,10 +153,23 @@ export function SettingsPage({
     if (refreshing) return;
     setRefreshing(id ?? "all");
     try {
+      const previousModels = data.providers.find(
+        (provider) => provider.id === id,
+      )?.models;
       if (id) await api.invoke("refreshModels", { provider: id });
-      await refresh();
+      const next = await refresh();
+      const count = id
+        ? countNewItems(
+            previousModels,
+            next.providers.find((provider) => provider.id === id)?.models ?? [],
+          )
+        : 0;
       onSuccess(
-        id ? t("settings.modelsRefreshed") : t("settings.providersRefreshed"),
+        id
+          ? count > 0
+            ? t("settings.modelsAdded", { count })
+            : t("settings.modelsRefreshed")
+          : t("settings.providersRefreshed"),
       );
     } catch (e) {
       toast.add(
