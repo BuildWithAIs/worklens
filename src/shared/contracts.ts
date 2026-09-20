@@ -97,6 +97,7 @@ export interface Settings {
   version: 1;
   theme: "light" | "dark" | "system";
   backgroundEffect?: "none" | "surface" | "fluid" | "aurora";
+  backgroundIntensity?: Partial<Record<"surface" | "fluid" | "aurora", number>>;
   backgroundTone?: "violet" | "electric" | "ice" | "sunset";
   riskAccepted: boolean;
   defaults?: Selection;

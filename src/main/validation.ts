@@ -55,6 +55,14 @@ export const schemas = {
       backgroundEffect: z
         .enum(["none", "surface", "fluid", "aurora"])
         .optional(),
+      backgroundIntensity: z
+        .object({
+          surface: z.number().int().min(0).max(100).optional(),
+          fluid: z.number().int().min(0).max(100).optional(),
+          aurora: z.number().int().min(0).max(100).optional(),
+        })
+        .strict()
+        .optional(),
       backgroundTone: z
         .enum(["violet", "electric", "ice", "sunset"])
         .optional(),

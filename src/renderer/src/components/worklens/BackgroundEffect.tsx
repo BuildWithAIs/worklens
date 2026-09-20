@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { Settings } from "../../../../shared/contracts";
 import { backgroundShader } from "./background-shader";
 import "./background-effect.css";
@@ -21,15 +21,26 @@ export function useDarkAppearance(settings: Settings) {
 export function BackgroundEffect({
   settings,
   edge = false,
+  intensity,
 }: {
   settings: Settings;
   edge?: boolean;
+  intensity?: number;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
   const dark = useDarkAppearance(settings);
   const effect = settings.backgroundEffect ?? "none";
   const tone = settings.backgroundTone ?? "violet";
+  const amount =
+    intensity ??
+    (effect === "none" ? 50 : (settings.backgroundIntensity?.[effect] ?? 50));
+  const strength = useRef(amount / 50);
+  const redraw = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    strength.current = amount / 50;
+    redraw.current?.();
+  }, [amount]);
   useEffect(() => {
     const element = canvas.current;
     if (!element || effect === "none") return;
@@ -88,10 +99,9 @@ export function BackgroundEffect({
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
     const uniforms = Object.fromEntries(
-      ["resolution", "time", "tone", "shape", "edge", "dark"].map((key) => [
-        key,
-        gl.getUniformLocation(program, key),
-      ]),
+      ["resolution", "time", "tone", "shape", "edge", "dark", "strength"].map(
+        (key) => [key, gl.getUniformLocation(program, key)],
+      ),
     );
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0,
@@ -117,6 +127,7 @@ export function BackgroundEffect({
       );
       gl.uniform1f(uniforms.edge, Number(edge));
       gl.uniform1f(uniforms.dark, Number(dark));
+      gl.uniform1f(uniforms.strength, strength.current);
       if (edge) {
         gl.enable(gl.SCISSOR_TEST);
         gl.scissor(
@@ -131,6 +142,7 @@ export function BackgroundEffect({
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.disable(gl.SCISSOR_TEST);
     };
+    redraw.current = draw;
     const tick = (now: number) => {
       if (now - last >= 1000 / 24) {
         time += Math.min((now - last) / 1000, 0.1);
@@ -179,6 +191,7 @@ export function BackgroundEffect({
     sync();
     return () => {
       cancelAnimationFrame(frame);
+      redraw.current = null;
       resize.disconnect();
       intersection.disconnect();
       theme.disconnect();
@@ -193,6 +206,8 @@ export function BackgroundEffect({
   return (
     <div
       className="background-effect"
+      data-intensity={amount}
+      style={{ "--background-strength": amount / 50 } as CSSProperties}
       data-edge={edge || undefined}
       data-tone={tone}
       data-fallback={failed || undefined}

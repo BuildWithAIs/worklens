@@ -25,13 +25,13 @@
   mix-blend-mode: screen;
 }
 .background-effect[data-fallback] {
-  background: radial-gradient(ellipse at 0 85%, var(--background-fallback, #7182c21c), transparent 70%);
+  background: radial-gradient(ellipse at 0 85%, color-mix(in srgb, var(--background-pigment, #7182c2) calc(var(--background-strength, 1) * var(--background-alpha, 10.980392%)), transparent), transparent 70%);
 }
 .background-effect[data-fallback] canvas {
   visibility: hidden;
 }
 .background-effect[data-edge][data-fallback] {
-  background: linear-gradient(0deg, var(--background-fallback, #7182c212), transparent 24px);
+  background: linear-gradient(0deg, color-mix(in srgb, var(--background-pigment, #7182c2) calc(var(--background-strength, 1) * var(--background-alpha, 7.058824%)), transparent), transparent 24px);
 }
 .background-tones {
   width: auto;
@@ -70,9 +70,9 @@
 .background-tone [data-tone="sunset"] { background: linear-gradient(135deg, #a74c72, #dda275); }
 .background-tone[aria-checked="true"] { outline: 1px solid color-mix(in srgb, var(--text) 60%, var(--bg)); outline-offset: -4px; background: transparent; }
 .background-tone:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.background-effect[data-tone="electric"] { --background-fallback: #4aa58b22; }
-.background-effect[data-tone="ice"] { --background-fallback: #97aabd20; }
-.background-effect[data-tone="sunset"] { --background-fallback: #c47b8a22; }
+.background-effect[data-tone="electric"] { --background-pigment: #4aa58b; --background-alpha: 13.333333%; }
+.background-effect[data-tone="ice"] { --background-pigment: #97aabd; --background-alpha: 12.54902%; }
+.background-effect[data-tone="sunset"] { --background-pigment: #c47b8a; --background-alpha: 13.333333%; }
 
 .sidebar:has(> .background-effect),
 .settings-navigation:has(> .background-effect) {
@@ -83,3 +83,63 @@
 :root[data-theme="light"] .background-effect {
   opacity: .72;
 }
+
+.background-intensity-controls {
+  --intensity-color: #ad7ed3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(146px, 100%);
+  min-width: 0;
+}
+.background-intensity-slider {
+  flex: 1;
+  min-width: 80px;
+}
+.background-intensity-slider[data-disabled] { opacity: .5; }
+.background-intensity-control {
+  display: flex;
+  align-items: center;
+  position: relative;
+  height: 32px;
+  width: 100%;
+  touch-action: none;
+  user-select: none;
+}
+.background-intensity-track {
+  height: 3px;
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--intensity-color) 28%, transparent),
+    var(--intensity-color) 85%
+  );
+}
+.background-intensity-indicator {
+  height: 100%;
+  border-radius: inherit;
+  background: transparent;
+}
+.background-intensity-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+}
+.background-intensity-thumb:has(:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.background-intensity-value {
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.background-intensity-controls[data-tone="electric"] { --intensity-color: #167568; }
+.background-intensity-controls[data-tone="ice"] { --intensity-color: #778797; }
+.background-intensity-controls[data-tone="sunset"] { --intensity-color: #a74c72; }
+:root[data-theme="dark"] .background-intensity-controls[data-tone="electric"] { --intensity-color: #81cda0; }
+:root[data-theme="dark"] .background-intensity-controls[data-tone="ice"] { --intensity-color: #c0cbd3; }
+:root[data-theme="dark"] .background-intensity-controls[data-tone="sunset"] { --intensity-color: #dda275; }

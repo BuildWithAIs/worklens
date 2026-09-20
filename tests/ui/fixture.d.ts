@@ -5,5 +5,6 @@ export function mockWorklens(
   options?: {
     modelState?: "unconfigured" | "unavailable" | "hidden";
     unavailableSelection?: boolean;
+    largeModelCatalog?: boolean;
   },
 ): Promise<void>;

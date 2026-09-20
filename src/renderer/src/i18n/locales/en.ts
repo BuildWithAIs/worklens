@@ -120,6 +120,7 @@ const en = {
     saveAs: "Save as",
   },
   appearance: {
+    intensity: "Intensity",
     blueViolet: "Blue violet",
     jade: "Jade",
     silverMist: "Silver mist",
@@ -412,6 +413,14 @@ const en = {
     testConnectionFor: "Test connection: {{model}}",
     testConnectionSendsAShortRequest: "Test connection · sends a short request",
     showInChatFor: "Show in chat: {{model}}",
+    modelsShownCount: "{{shown}} / {{total}} shown",
+    manageModelVisibility: "Manage model visibility: {{provider}}",
+    showAllModels: "Show all {{count}} models in chat",
+    hideAllModels: "Hide all {{count}} models from chat",
+    showMatchingModels: "Show {{count}} matching models in chat",
+    hideMatchingModels: "Hide {{count}} matching models from chat",
+    visibilityBulkSaved: "Visibility updated for {{count}} models",
+    undoVisibility: "Undo",
     showInChat: "Show in chat",
     unavailableModelHint:
       "Not available with the current connection. Manage authentication in Providers.",
