@@ -262,10 +262,10 @@ const en = {
     },
   },
   skills: {
-    chooseSkill: "Choose a skill",
+    chooseSkill: "Skills",
     noEnabledSkillsMatch:
       "No matching enabled skills. Manage skills in Settings.",
-    messagePlaceholder: "What would you like to do? Type / to choose a skill",
+    messagePlaceholder: "Do anything. Type / for skills",
     manualOnly:
       "This skill is only used when you call it explicitly. In chat, type:",
     autoAndManual:
@@ -298,6 +298,8 @@ const en = {
     loadFailed: "Couldn’t load skills",
     revealFailed: "Couldn’t show the skill file",
     skillsRefreshed: "Skills refreshed",
+    skillsAdded_one: "Refreshed · {{count}} new skill",
+    skillsAdded_other: "Refreshed · {{count}} new skills",
     searchSkills: "Search skills",
     searchSkillsPlaceholder: "Search skills…",
     filterSkills: "Filter skills",
@@ -379,6 +381,8 @@ const en = {
   },
   settings: {
     modelsRefreshed: "Models refreshed",
+    modelsAdded_one: "Refreshed · {{count}} new model",
+    modelsAdded_other: "Refreshed · {{count}} new models",
     providersRefreshed: "Providers refreshed",
     connectionSuccessful: "Connection successful",
     systemCredentials: "System credentials",

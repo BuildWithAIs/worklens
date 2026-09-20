@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { countNewItems } from "@/lib/count-new-items";
 import { FileSearchCorner, Info, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
@@ -45,6 +46,8 @@ export function SkillsSettings({
 }) {
   const { t, language } = useAppTranslation();
   const [snapshot, setSnapshot] = useState<SkillsSnapshot>();
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -60,10 +63,23 @@ export function SkillsSettings({
       setBusy(true);
       setLoadError(undefined);
       try {
-        setSnapshot(
-          await api.invoke(rescan ? "skillsRefresh" : "skillsList", undefined),
+        const previous = snapshotRef.current;
+        const next = await api.invoke(
+          rescan ? "skillsRefresh" : "skillsList",
+          undefined,
         );
-        if (rescan) onSuccessRef.current(t("skills.skillsRefreshed"));
+        setSnapshot(next);
+        if (rescan) {
+          const count = countNewItems(
+            previous ? [...previous.builtin, ...previous.local] : undefined,
+            [...next.builtin, ...next.local],
+          );
+          onSuccessRef.current(
+            count > 0
+              ? t("skills.skillsAdded", { count })
+              : t("skills.skillsRefreshed"),
+          );
+        }
       } catch (e) {
         setLoadError(settingsErrorDescription(String(e), language));
       } finally {

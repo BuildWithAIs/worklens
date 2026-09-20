@@ -25,6 +25,7 @@ for (const theme of ["light", "dark"]) {
           },
         ],
       };
+      view.messages[1].text += "\n\n首页增加了独立区域，模拟：\n\n```text\nRecently Updated macro\n```\n\n```plaintext\nPlain text content\n```\n\n```txt\nAnother text snippet\n```\n\n```bash\nnpm run build\n```";
       window.worklens.invoke = async (name, input) => {
         if (name === "open") return view;
         const result = await invoke(name, input);
@@ -42,6 +43,11 @@ for (const theme of ["light", "dark"]) {
     );
     const pre = page.locator(".aui-md-pre").first();
     const copy = page.locator(".aui-code-copy").first();
+    await expect(page.locator(".aui-code-header-language")).toHaveText(["js", "bash"]);
+    const plain = page.locator(".aui-md-pre").filter({ hasText: "Recently Updated macro" });
+    await expect(plain).toHaveCSS("padding-top", "12px");
+    await expect(plain).toHaveCSS("border-radius", "11px");
+    await expect(page.locator(".aui-md-pre").filter({ hasText: "npm run build" })).toHaveCSS("padding-top", "36px");
     await page.locator(".chat-header").hover();
     await expect(copy).toHaveCSS("opacity", "0");
     const height = (await pre.boundingBox()).height;
@@ -98,5 +104,7 @@ for (const theme of ["light", "dark"]) {
     await page.screenshot({
       path: info.outputPath("markdown-narrow-" + theme + ".png"),
     });
+    await plain.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath(`plain-text-${theme}.png`) });
   });
 }
