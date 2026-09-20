@@ -60,7 +60,7 @@ const zhCN = {
     dismissRecoveryRecord: "已核对，清除此恢复记录",
     deleteConversationQuestion: "删除会话？",
     renameConversation: "重命名会话",
-    deleteConversationDescription: "这将永久删除此会话，且无法撤销。",
+    deleteConversationDescription: "这将永久删除此会话及其关联文件，且无法撤销。另存到其他位置的文件会保留。",
     conversationName: "会话名称",
     saveName: "保存名称",
     closeDialog: "关闭对话框",
@@ -250,7 +250,7 @@ const zhCN = {
   skills: {
     chooseSkill: "技能",
     noEnabledSkillsMatch: "没有匹配的已启用技能，可前往设置管理。",
-    messagePlaceholder: "想做什么？输入 / 选择技能",
+    messagePlaceholder: "输入你想做的事，或输入 / 选择技能",
     manualOnly: "此技能仅在你主动调用时使用。在对话框中输入：",
     autoAndManual: "助手可按需使用此技能。你也可以在对话框中输入：",
     unavailable: "该技能未启用或已不存在，请在设置中检查技能",

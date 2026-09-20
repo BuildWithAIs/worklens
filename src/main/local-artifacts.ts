@@ -9,6 +9,7 @@ import {
   stat,
   lstat,
   readFile,
+  readdir,
 } from "node:fs/promises";
 import {
   basename,
@@ -22,6 +23,12 @@ import { homedir } from "node:os";
 import { Readable } from "node:stream";
 import { atomicJson, SerialQueue } from "./storage";
 import type { LocalArtifact } from "../shared/contracts";
+import {
+  isWithin,
+  ownedDirectory,
+  removeOwnedDirectory,
+  sessionDirectory,
+} from "./session-files";
 
 export const MAX_FILE_BYTES = 100 * 1024 * 1024;
 export function safeFilename(name: string) {
@@ -57,11 +64,16 @@ export function fileIdentity(info: {
 }
 export class LocalArtifacts {
   private queue = new SerialQueue();
+  private sessionCwds = new Map<string, string>();
   constructor(
     readonly root: string,
     readonly cwd: string,
+    readonly sessions?: string,
   ) {}
-  resolvePath(path: string) {
+  useSession(sessionId: string, cwd: string) {
+    this.sessionCwds.set(sessionId, cwd);
+  }
+  resolvePath(path: string, sessionId?: string) {
     const expanded =
       path === "~"
         ? homedir()
@@ -70,21 +82,21 @@ export class LocalArtifacts {
           : path;
     return isAbsolute(expanded)
       ? resolve(expanded)
-      : resolve(this.cwd, expanded);
+      : resolve(
+          (sessionId && this.sessionCwds.get(sessionId)) || this.cwd,
+          expanded,
+        );
   }
   async directory(
     sessionId: string,
     connector: "confluence" | "jira" | "github" | "tavily" = "confluence",
   ) {
     if (!/^[\w-]+$/.test(sessionId)) throw new Error("Invalid session ID");
-    const directory = join(
-      this.root,
-      "files",
-      sessionId,
-      connector,
-      randomUUID(),
-    );
-    await mkdir(directory, { recursive: true });
+    const base = this.sessions
+      ? join(sessionDirectory(this.sessions, sessionId), "artifacts")
+      : join(this.root, "files", sessionId);
+    const directory = join(base, connector, randomUUID());
+    await ownedDirectory(this.sessions ?? this.root, directory, true);
     return directory;
   }
   async save(
@@ -98,12 +110,12 @@ export class LocalArtifacts {
     if (destination.path && destination.directory)
       throw new Error("只能指定文件路径或目录其中之一");
     const exact = destination.path
-      ? this.resolvePath(destination.path)
+      ? this.resolvePath(destination.path, sessionId)
       : undefined;
     const directory = exact
       ? dirname(exact)
       : destination.directory
-        ? this.resolvePath(destination.directory)
+        ? this.resolvePath(destination.directory, sessionId)
         : await this.directory(sessionId, connector);
     await mkdir(directory, { recursive: true });
     const temp = join(directory, `.worklens-${randomUUID()}.part`);
@@ -170,10 +182,10 @@ export class LocalArtifacts {
         path: target,
         size,
       };
-      await atomicJson(
-        join(this.root, "index", artifact.id + ".json"),
-        artifact,
-      );
+      await atomicJson(join(this.root, "index", artifact.id + ".json"), {
+        ...artifact,
+        sessionId,
+      });
       return artifact;
     } finally {
       await handle.close().catch(() => {});
@@ -188,7 +200,62 @@ export class LocalArtifacts {
     if (artifact.id !== id || !isAbsolute(artifact.path))
       throw new Error("文件记录无效");
     if (!(await stat(artifact.path)).isFile()) throw new Error("文件已不存在");
-    return artifact;
+    return {
+      id: artifact.id,
+      name: artifact.name,
+      path: artifact.path,
+      size: artifact.size,
+    };
+  }
+  async removeSession(sessionId: string) {
+    // Validate every cleanup target before removing any file. External exports
+    // only lose their conversation-owned index entry, never their actual file.
+    const legacy = join(this.root, "files", sessionId);
+    sessionDirectory(this.sessions ?? this.root, sessionId);
+    await ownedDirectory(this.root, legacy);
+    if (this.sessions)
+      await ownedDirectory(
+        this.sessions,
+        sessionDirectory(this.sessions, sessionId),
+      );
+    const index = join(this.root, "index");
+    await ownedDirectory(this.root, index);
+    const entries = await readdir(index).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+      return [] as string[];
+    });
+    const owned: string[] = [];
+    for (const name of entries.filter((name) =>
+      /^[a-f0-9-]{36}\.json$/.test(name),
+    )) {
+      const path = join(index, name);
+      const text = await readFile(path, "utf8").catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+      if (!text) continue;
+      let record;
+      try {
+        record = JSON.parse(text);
+      } catch {
+        continue;
+      }
+      if (
+        record?.sessionId === sessionId ||
+        (typeof record?.path === "string" && isWithin(legacy, record.path))
+      )
+        owned.push(path);
+    }
+    await removeOwnedDirectory(this.root, legacy);
+    if (this.sessions)
+      await removeOwnedDirectory(
+        this.sessions,
+        sessionDirectory(this.sessions, sessionId),
+      );
+    for (const path of owned)
+      await unlink(path).catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    this.sessionCwds.delete(sessionId);
   }
   copy(id: string, destination: string) {
     return this.queue.run("copy:" + destination, async () => {

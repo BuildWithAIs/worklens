@@ -4,7 +4,10 @@ import { ServiceError } from "./http";
 import { MAX_FILE_BYTES } from "../../local-artifacts";
 
 export async function uploadBytes(ctx: Execution, path: string) {
-  const handle = await open(ctx.artifacts.resolvePath(path), "r");
+  const handle = await open(
+    ctx.artifacts.resolvePath(path, ctx.sessionId),
+    "r",
+  );
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size > MAX_FILE_BYTES)

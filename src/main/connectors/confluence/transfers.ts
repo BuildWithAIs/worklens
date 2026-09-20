@@ -16,7 +16,10 @@ export async function uploadFile(
   ctx: Execution,
   path: string,
 ): Promise<{ blob: Blob; name: string }> {
-  const handle = await open(ctx.operations.artifacts.resolvePath(path), "r");
+  const handle = await open(
+    ctx.operations.artifacts.resolvePath(path, ctx.sessionId),
+    "r",
+  );
   try {
     const stats = await handle.stat();
     if (!stats.isFile() || stats.size > MAX_FILE_BYTES)
@@ -44,12 +47,20 @@ export async function exportPage(
   a: Extract<ReadRequest, { operation: "export_page" }>,
 ) {
   const p = await ctx.operations.page(ctx, a, true);
-  const destination = await ctx.operations.prepareDestination(a.destination);
+  const destination = await ctx.operations.prepareDestination(
+    a.destination,
+    ctx.sessionId,
+  );
   const directory = destination?.path
-    ? dirname(ctx.operations.artifacts.resolvePath(destination.path))
+    ? dirname(
+        ctx.operations.artifacts.resolvePath(destination.path, ctx.sessionId),
+      )
     : destination?.directory
       ? join(
-          ctx.operations.artifacts.resolvePath(destination.directory),
+          ctx.operations.artifacts.resolvePath(
+            destination.directory,
+            ctx.sessionId,
+          ),
           `${safeFilename(p.title)}-${randomUUID().slice(0, 8)}`,
         )
       : await ctx.operations.artifacts.directory(ctx.sessionId);

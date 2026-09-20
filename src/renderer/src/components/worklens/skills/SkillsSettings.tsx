@@ -216,7 +216,7 @@ export function SkillsSettings({
               </span>
               <Hint content={group.description}>
                 <Button
-                  variant="ghost"
+                  variant="hint"
                   size="icon-xs"
                   className="size-5"
                   aria-label={t("skills.about", { group: group.label })}

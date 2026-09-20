@@ -900,7 +900,7 @@ export function SettingsPage({
                     {t("settings.localData")}
                     <Hint content={t("settings.localDataDescription")}>
                       <Button
-                        variant="ghost"
+                        variant="hint"
                         size="icon-xs"
                         className="size-5"
                         aria-label={t("settings.aboutLocalData")}

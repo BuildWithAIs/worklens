@@ -273,7 +273,7 @@ export async function read(
       const destination = { ...a.destination };
       if (destination.path && destination.overwrite) {
         const info = await lstat(
-          ctx.artifacts.resolvePath(destination.path),
+          ctx.artifacts.resolvePath(destination.path, ctx.sessionId),
         ).catch((e) => {
           if (e.code !== "ENOENT") throw e;
         });

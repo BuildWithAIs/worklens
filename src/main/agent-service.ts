@@ -8,6 +8,13 @@ import {
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
+import { LocalArtifacts } from "./local-artifacts";
+import {
+  ownedDirectory,
+  sessionDirectory,
+  sessionWorkspace,
+  workingDirectory,
+} from "./session-files";
 import { dirname, join, resolve } from "node:path";
 import { mkdir, unlink, realpath, readFile, readdir } from "node:fs/promises";
 import { appendFileSync, existsSync } from "node:fs";
@@ -116,6 +123,11 @@ export class AgentService {
     private redact: (text: string) => string,
     private connectors = new ConnectorRegistry(),
     private skills?: SkillsService,
+    private artifacts = new LocalArtifacts(
+      join(dirname(paths.sessions), "artifacts"),
+      paths.runtime,
+      paths.sessions,
+    ),
   ) {}
   async initialize() {
     await Promise.all([
@@ -198,13 +210,14 @@ export class AgentService {
   }
   private view(id: string, runtime: Runtime): ConversationView {
     const branch = runtime.manager.getBranch();
-    const messages = projectMessages(withRunTiming(branch), this.paths.runtime);
+    const cwd = workingDirectory(this.paths, runtime.manager);
+    const messages = projectMessages(withRunTiming(branch), cwd);
     // During streaming the public agent state may not yet include the current assistant partial.
     if (runtime.session?.agent.state.streamingMessage)
       messages.push(
         ...projectMessages(
           [runtime.session.agent.state.streamingMessage],
-          this.paths.runtime,
+          cwd,
         ).map((m) => ({ ...m, id: m.role === "tool" ? m.id : "stream" })),
       );
     const timings = new Map<string, { startedAt: string; elapsed?: number }>();
@@ -276,10 +289,7 @@ export class AgentService {
     } else if (!runtime.timer) runtime.timer = setTimeout(dispatch, 40);
   }
   async list(): Promise<Conversation[]> {
-    const found = await SessionManager.list(
-      this.paths.runtime,
-      this.paths.sessions,
-    );
+    const found = await SessionManager.listAll(this.paths.sessions);
     const result = new Map<string, Conversation>();
     for (const info of found) {
       const cached = this.sessions.get(info.id);
@@ -288,11 +298,7 @@ export class AgentService {
         continue;
       }
       try {
-        const manager = SessionManager.open(
-          info.path,
-          this.paths.sessions,
-          this.paths.runtime,
-        );
+        const manager = SessionManager.open(info.path, this.paths.sessions);
         const context = manager.buildSessionContext();
         result.set(info.id, {
           id: info.id,
@@ -322,15 +328,11 @@ export class AgentService {
   private async get(id: string): Promise<Runtime> {
     const cached = this.sessions.get(id);
     if (cached) return cached;
-    const info = (
-      await SessionManager.list(this.paths.runtime, this.paths.sessions)
-    ).find((item) => item.id === id);
-    if (!info) throw new Error("会话不存在或 Pi 无法识别该文件");
-    const manager = SessionManager.open(
-      info.path,
-      this.paths.sessions,
-      this.paths.runtime,
+    const info = (await SessionManager.listAll(this.paths.sessions)).find(
+      (item) => item.id === id,
     );
+    if (!info) throw new Error("会话不存在或 Pi 无法识别该文件");
+    const manager = SessionManager.open(info.path, this.paths.sessions);
     if (manager.getSessionId() !== id) throw new Error("会话标识不匹配");
     const runtime: Runtime = {
       manager,
@@ -349,12 +351,42 @@ export class AgentService {
     );
   }
   async htmlActionFile(id: string, source: { path?: string; code?: string }) {
-    const view = await this.open(id);
-    return htmlActionFile(this.paths.runtime, source, view.messages);
+    return this.operations.run(id, async () => {
+      const runtime = await this.get(id);
+      const directory = join(
+        sessionDirectory(this.paths.sessions, id),
+        "previews",
+      );
+      await ownedDirectory(this.paths.sessions, directory, true);
+      return htmlActionFile(
+        await this.previewRoots(runtime),
+        source,
+        this.view(id, runtime).messages,
+        directory,
+      );
+    });
   }
   async previewHtml(id: string, path: string) {
-    const view = await this.open(id);
-    return readHtmlPreview(this.paths.runtime, path, view.messages);
+    return this.operations.run(id, async () => {
+      const runtime = await this.get(id);
+      return readHtmlPreview(
+        await this.previewRoots(runtime),
+        path,
+        this.view(id, runtime).messages,
+      );
+    });
+  }
+  private async previewRoots(runtime: Runtime) {
+    const id = runtime.manager.getSessionId();
+    const roots = [
+      sessionDirectory(this.paths.sessions, id),
+      join(this.artifacts.root, "files", id),
+    ];
+    await ownedDirectory(this.paths.sessions, roots[0]);
+    await ownedDirectory(this.artifacts.root, roots[1]);
+    if (workingDirectory(this.paths, runtime.manager) === this.paths.runtime)
+      roots.push(this.paths.runtime);
+    return roots;
   }
   private async ensureSession(
     runtime: Runtime,
@@ -390,8 +422,12 @@ export class AgentService {
       runtime.session = undefined;
     }
     if (!runtime.session) {
+      const cwd = workingDirectory(this.paths, runtime.manager);
+      if (cwd !== this.paths.runtime)
+        await ownedDirectory(this.paths.sessions, cwd, true);
+      this.artifacts.useSession(runtime.manager.getSessionId(), cwd);
       const local = await resources(
-        this.paths.runtime,
+        cwd,
         join(this.paths.userData, "pi"),
         {
           tools: this.connectors.names(),
@@ -399,20 +435,17 @@ export class AgentService {
         },
         skillConfiguration?.resources,
       );
-      const customTools = worklensTools(
-        this.paths.runtime,
-        (toolId, status) => {
-          runtime.toolUpdates.set(toolId, {
-            ...runtime.toolUpdates.get(toolId),
-            status,
-          });
-          this.publish(
-            runtime.manager.getSessionId(),
-            runtime,
-            "tool_resource_status",
-          );
-        },
-      );
+      const customTools = worklensTools(cwd, (toolId, status) => {
+        runtime.toolUpdates.set(toolId, {
+          ...runtime.toolUpdates.get(toolId),
+          status,
+        });
+        this.publish(
+          runtime.manager.getSessionId(),
+          runtime,
+          "tool_resource_status",
+        );
+      });
       const integrationTools = this.connectors.tools(
         runtime.manager.getSessionId(),
         () => runtime.active?.id ?? "idle",
@@ -420,7 +453,7 @@ export class AgentService {
       const previous = runtime.manager.buildSessionContext();
       runtime.session = (
         await createAgentSession({
-          cwd: this.paths.runtime,
+          cwd,
           agentDir: join(this.paths.userData, "pi"),
           modelRuntime: this.modelRuntime,
           model,
@@ -576,16 +609,22 @@ export class AgentService {
         let runtime: Runtime;
         if (input.conversationId)
           runtime = await this.get(input.conversationId);
-        else
+        else {
+          const id = randomUUID();
           runtime = {
             manager: SessionManager.create(
-              this.paths.runtime,
+              sessionWorkspace(this.paths.sessions, id),
               this.paths.sessions,
+              { id },
             ),
             phase: "idle",
             toolUpdates: new Map(),
             updated: new Date().toISOString(),
           };
+          runtime.manager.appendCustomEntry("worklens.workspace", {
+            version: 1,
+          });
+        }
         if (runtime.active) throw new Error("当前会话正在运行，请先停止");
         const skillCommand = /^\/skill:([^\s]+)(?:\s+([\s\S]*))?$/.exec(
           input.text,
@@ -760,6 +799,7 @@ export class AgentService {
       const runtime = await this.get(id);
       if (runtime.active) await this.cancel(id, runtime.active.id);
       const file = runtime.manager.getSessionFile();
+      let sessionFile: string | undefined;
       if (file) {
         const actual = await realpath(file).catch((error) => {
           if (error.code === "ENOENT") return undefined;
@@ -779,10 +819,13 @@ export class AgentService {
           );
           if (checked.getSessionId() !== id)
             throw new Error("会话文件标识不匹配");
-          await unlink(actual);
+          sessionFile = actual;
         }
       }
       runtime.session?.dispose();
+      runtime.session = undefined;
+      await this.artifacts.removeSession(id);
+      if (sessionFile) await unlink(sessionFile);
       this.sessions.delete(id);
       this.usage.remove(id);
     });

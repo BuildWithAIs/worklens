@@ -195,6 +195,7 @@ export async function read(ctx: Execution, a: ReadRequest): Promise<Json> {
       const raw = await d.attachment(a.attachmentId);
       const destination = await ctx.operations.prepareDestination(
         a.destination,
+        ctx.sessionId,
       );
       const artifact = await ctx.operations.artifacts.save(
         ctx.sessionId,

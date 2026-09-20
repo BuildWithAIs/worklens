@@ -70,7 +70,11 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
       text,
     );
     await expect.poll(() => server.requests.length).toBe(1);
-    expect((await readdir(join(root, "sessions"))).length).toBe(0);
+    expect(
+      (await readdir(join(root, "sessions"))).filter((file) =>
+        file.endsWith(".jsonl"),
+      ),
+    ).toHaveLength(0);
     const pending = JSON.parse(
       await readFile(
         join(root, "app", "runs", `${view.runId}.pending.json`),

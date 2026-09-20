@@ -61,7 +61,7 @@ const en = {
     deleteConversationQuestion: "Delete conversation?",
     renameConversation: "Rename conversation",
     deleteConversationDescription:
-      "This permanently deletes this conversation. This cannot be undone.",
+      "This will permanently delete this conversation and its files. Files saved elsewhere will be kept.",
     conversationName: "Conversation name",
     saveName: "Save name",
     closeDialog: "Close dialog",
@@ -266,7 +266,7 @@ const en = {
     chooseSkill: "Skills",
     noEnabledSkillsMatch:
       "No matching enabled skills. Manage skills in Settings.",
-    messagePlaceholder: "Do anything. Type / for skills",
+    messagePlaceholder: "Do anything, or type / for skills",
     manualOnly:
       "This skill is only used when you call it explicitly. In chat, type:",
     autoAndManual:
