@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
 for (const theme of ["light", "dark"]) {
-  test(`model names align with their provider label: ${theme}`, async ({ page }, info) => {
+  test(`model names align with their provider logo: ${theme}`, async ({ page }, info) => {
     await mockWorklens(page);
     await page.goto("/");
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
@@ -18,7 +18,7 @@ for (const theme of ["light", "dark"]) {
       await expect(row).toHaveCSS("padding-top", "10px");
       const parentBox = await page.locator('[data-slot="accordion-content"]').first().boundingBox();
       const rowBox = await row.boundingBox();
-      const brandBox = await page.locator('[data-slot="model-provider-name"]').first().boundingBox();
+      const brandBox = await page.locator('.settings-model-heading-copy [data-slot="provider-icon"]').first().boundingBox();
       const nameBox = await row.locator(".settings-entry-title").boundingBox();
       expect(nameBox.x).toBeCloseTo(brandBox.x, 0);
       expect(rowBox.x + rowBox.width).toBeCloseTo(parentBox.x + parentBox.width, 0);
