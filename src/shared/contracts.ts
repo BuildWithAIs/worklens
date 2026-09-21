@@ -102,6 +102,7 @@ export interface Settings {
   riskAccepted: boolean;
   defaults?: Selection;
   hiddenModels?: string[];
+  modelCatalogs?: Record<string, { known: string[]; new: string[] }>;
   lastConversation?: string;
   pinnedConversationIds?: string[];
   /** Legacy names, migrated by SkillsService when matching files are found. */
@@ -248,6 +249,10 @@ export interface Requests {
   };
   bootstrap: { input: undefined; output: Bootstrap };
   settings: { input: Partial<Settings>; output: Settings };
+  modelSelection: {
+    input: { provider: string; reviewed: string[]; selected: string[] };
+    output: Settings;
+  };
   providers: { input: undefined; output: ProviderInfo[] };
   login: {
     input: { provider: string; type: "api_key" | "oauth"; loginId: string };

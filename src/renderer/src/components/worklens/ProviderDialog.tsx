@@ -55,7 +55,7 @@ export function ProviderDialog({
   onDisconnect,
   disconnecting = false,
 }: {
-  onDisconnect?: () => void;
+  onDisconnect?: (disconnect: () => Promise<void>) => void;
   disconnecting?: boolean;
   provider: ProviderInfo;
   onClose: () => void;
@@ -84,6 +84,7 @@ export function ProviderDialog({
     if (error) onError(error.message, error.action);
   }, [error, onError]);
   const loginRef = useRef<string | undefined>(undefined);
+  const restoredAnswer = useRef<string | undefined>(undefined);
   const [credentialSaved, setCredentialSaved] = useState(false);
   const finishingRef = useRef(false);
   const fields =
@@ -113,17 +114,18 @@ export function ProviderDialog({
       await api.invoke("azure", extraRef.current.value);
     await onSaved();
   }
-  async function begin(next: Method) {
+  async function begin(next: Method, draft?: string) {
     if (
       loginRef.current ||
       !provider.methods.find((m) => m.type === next)?.interactive
     )
       return;
     const loginId = crypto.randomUUID();
+    restoredAnswer.current = draft;
     loginRef.current = loginId;
     setActive(true);
     setError(undefined);
-    setAnswer("");
+    setAnswer(draft ?? "");
     setSteps([]);
     setPrompt(undefined);
     try {
@@ -157,7 +159,8 @@ export function ProviderDialog({
       }
       if (step.promptId) {
         setPrompt(step);
-        setAnswer("");
+        setAnswer(restoredAnswer.current ?? "");
+        restoredAnswer.current = undefined;
       } else setSteps((prev) => [...prev.slice(-7), step]);
     });
     // API-key methods expose their actual SDK form immediately, without an
@@ -168,6 +171,18 @@ export function ProviderDialog({
       cancel();
     };
   }, []);
+  async function disconnect() {
+    const draft = answer;
+    // Invalidate the local login before aborting it, so intentional cancellation
+    // cannot surface as a login error while the confirmation is being saved.
+    cancel();
+    try {
+      await api.invoke("logout", { provider: provider.id });
+    } catch (error) {
+      if (method === "api_key") void begin(method, draft);
+      throw error;
+    }
+  }
   function changeMethod(next: Method) {
     cancel();
     setMethod(next);
@@ -416,7 +431,7 @@ export function ProviderDialog({
                 variant="ghost"
                 className="sm:mr-auto"
                 disabled={submitting || disconnecting}
-                onClick={onDisconnect}
+                onClick={() => onDisconnect(disconnect)}
               >
                 {t("common.disconnect")}
               </Button>

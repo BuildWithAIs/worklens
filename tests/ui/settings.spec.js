@@ -272,16 +272,9 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   await expect(
     page.getByRole("button", { name: "Models", exact: true }),
   ).toHaveAttribute("aria-current", "page");
-  const modelFilter = page.getByRole("combobox", { name: "Model filter" });
-  await expect(modelFilter).toHaveValue("connected");
-  const connectedGroupCount = await page
-    .locator('[data-slot="accordion-item"]')
-    .count();
-  await modelFilter.selectOption("all");
-  expect(
-    await page.locator('[data-slot="accordion-item"]').count(),
-  ).toBeGreaterThan(connectedGroupCount);
-  await modelFilter.selectOption("connected");
+  await expect(
+    page.getByRole("combobox", { name: "Model filter" }),
+  ).toHaveCount(0);
   await page.waitForTimeout(250);
   await page.screenshot({
     path: testInfo.outputPath("worklens-models-v2.png"),
@@ -292,6 +285,9 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     .fill("DeepSeek");
   await expect(page.locator(".settings-entry")).toHaveCount(2);
   await page
+    .getByRole("button", { name: "Select models: DeepSeek", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "Refresh models: DeepSeek", exact: true })
     .click();
   await expect(
@@ -301,6 +297,10 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   ).toContainText("Models refreshed");
   if ((await page.evaluate(() => window.calls)).some((x) => x.name === "test"))
     throw Error("Refresh unexpectedly tested");
+  await page
+    .getByRole("dialog", { name: "DeepSeek models", exact: true })
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
   await page
     .getByRole("button", {
       name: "Test connection: DeepSeek V4 Flash",
@@ -314,53 +314,34 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   ).toHaveText("DeepSeek V4 Flash connection successful");
   await expect(page.locator(".model-test-result")).toHaveCount(0);
   await page
-    .getByRole("switch", { name: "Show in chat: DeepSeek V4 Pro", exact: true })
-    .uncheck();
+    .getByRole("button", { name: "Select models: DeepSeek", exact: true })
+    .click();
+  await page
+    .getByRole("checkbox", { name: "DeepSeek V4 Pro", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
-    page.getByRole("switch", {
-      name: "Show in chat: DeepSeek V4 Pro",
-      exact: true,
-    }),
-  ).not.toBeChecked();
+    page.getByRole("dialog", { name: "DeepSeek models", exact: true }),
+  ).toBeHidden();
   await page
     .getByRole("textbox", { name: "Search models", exact: true })
     .fill("Copilot");
-  const sonnet = page.getByRole("switch", {
-    name: "Show in chat: Copilot Sonnet",
-    exact: true,
-  });
-  const gemini = page.getByRole("switch", {
-    name: "Show in chat: Copilot Gemini",
-    exact: true,
-  });
-  const gpt = page.getByRole("switch", {
-    name: "Show in chat: GPT-5",
-    exact: true,
-  });
-  await sonnet.uncheck();
-  await expect(gemini).toBeEnabled();
-  await gemini.uncheck();
-  await expect(sonnet).not.toBeChecked();
-  await expect(gemini).not.toBeChecked();
-  await expect(gpt).toBeChecked();
-  await expect(gemini).toBeEnabled();
-  await page.evaluate(() => {
-    window.failNextVisibilitySave = true;
-  });
-  await sonnet.check();
-  await gemini.check();
-  await expect(sonnet).toBeEnabled();
-  await expect(gemini).toBeEnabled();
-  await expect(sonnet).not.toBeChecked();
-  await expect(gemini).toBeChecked();
-  await expect(gpt).toBeChecked();
   await page
-    .locator('[data-slot="toast"]:not([data-ending-style])')
-    .filter({ hasText: "Couldn’t save model visibility" })
-    .locator('[data-slot="toast-close"]')
+    .getByRole("button", { name: "Select models: GitHub Copilot", exact: true })
     .click();
-  await gemini.uncheck();
-  await expect(gemini).toBeEnabled();
+  await page
+    .getByRole("checkbox", { name: "Copilot Sonnet", exact: true })
+    .click();
+  await page
+    .getByRole("checkbox", { name: "Copilot Gemini", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", {
+      name: "GitHub Copilot models",
+      exact: true,
+    }),
+  ).toBeHidden();
   await page.screenshot({
     path: testInfo.outputPath("worklens-copilot-independent.png"),
     animations: "disabled",
@@ -371,8 +352,10 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Providers", exact: true }).click();
   await page.getByRole("button", { name: "Models", exact: true }).click();
-  await expect(sonnet).not.toBeChecked();
-  await expect(gpt).toBeChecked();
+  await expect(page.getByText("Copilot Sonnet", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("GPT-5", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back to app", exact: true }).click();
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
   expect(
@@ -487,9 +470,23 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     exact: true,
   });
   await expect(confirmation).toContainText("Sign in with GitHub");
+  const providerForm = page.locator(".settings-dialog").filter({
+    has: page
+      .locator('[data-slot="dialog-title"]')
+      .filter({ hasText: /^GitHub Copilot$/ }),
+  });
+  await expect(providerForm).toHaveCSS("opacity", "1");
+  await expect(confirmation).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("disconnect-confirmation.png"),
+  });
   await confirmation
     .getByRole("button", { name: "Cancel", exact: true })
     .click();
+  await expect(providerForm).toHaveCSS("opacity", "1");
+  await expect(
+    providerForm.getByRole("button", { name: "Disconnect", exact: true }),
+  ).toBeFocused();
   await page
     .getByRole("dialog", { name: "GitHub Copilot", exact: true })
     .getByRole("button", { name: "Disconnect", exact: true })

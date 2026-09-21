@@ -44,7 +44,7 @@ export function DisconnectConfirmation({
     >
       {trigger && <DialogTrigger render={trigger} />}
       <DialogContent
-        className="settings-dialog"
+        className="settings-dialog settings-disconnect-dialog"
         aria-busy={busy}
         initialFocus={cancel}
         showCloseButton={!busy}

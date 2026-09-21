@@ -219,9 +219,15 @@ export class StateStore {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
-  update(patch: Partial<Settings>) {
+  update(
+    patch:
+      | Partial<Settings>
+      | ((current: Settings) => Partial<Settings> | undefined),
+  ) {
     return this.queue.run("state", async () => {
-      const next = { ...this.value, ...patch, version: 1 as const };
+      const changes = typeof patch === "function" ? patch(this.value) : patch;
+      if (!changes) return this.value;
+      const next = { ...this.value, ...changes, version: 1 as const };
       await atomicJson(this.path, next);
       this.value = next;
       return next;

@@ -1,15 +1,26 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
-test("Thinking returns to models and restores keyboard focus", async ({ page }, info) => {
+test("Thinking returns to models and restores keyboard focus", async ({
+  page,
+}, info) => {
   await mockWorklens(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
-  const trigger = page.getByRole("button", { name: "Thinking level", exact: true });
+  const trigger = page.getByRole("button", {
+    name: "Thinking level",
+    exact: true,
+  });
   await trigger.click();
-  await expect(page.getByRole("radio", { name: "Medium", exact: true })).toBeFocused();
-  await expect(page.getByRole("textbox", { name: "Search models", exact: true })).toBeHidden();
-  await expect(page.getByRole("radio", { name: "High", exact: true })).toHaveCSS("font-size", "14px");
+  await expect(
+    page.getByRole("radio", { name: "Medium", exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("textbox", { name: "Search models", exact: true }),
+  ).toBeHidden();
+  await expect(
+    page.getByRole("radio", { name: "High", exact: true }),
+  ).toHaveCSS("font-size", "14px");
   await page.screenshot({ path: info.outputPath("thinking-options.png") });
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
@@ -18,8 +29,12 @@ test("Thinking returns to models and restores keyboard focus", async ({ page }, 
   await expect(trigger).toContainText("High");
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await expect(page.getByRole("radio", { name: "High", exact: true })).toBeChecked();
-  await page.getByRole("button", { name: "Back to models", exact: true }).click();
+  await expect(
+    page.getByRole("radio", { name: "High", exact: true }),
+  ).toBeChecked();
+  await page
+    .getByRole("button", { name: "Back to models", exact: true })
+    .click();
   await expect(trigger).toBeFocused();
   await page.screenshot({ path: info.outputPath("thinking-entry.png") });
 });
@@ -80,61 +95,30 @@ test("first launch stays in chat and both connection shortcuts open Providers", 
     page.getByRole("button", { name: "Go to Providers", exact: true }),
   ).toHaveCount(0);
   await search.clear();
-  await page
-    .getByRole("combobox", { name: "Model filter" })
-    .selectOption("visible");
   await expect(
     page.getByRole("button", { name: "Go to Providers", exact: true }),
-  ).toHaveCount(0);
-  await page
-    .getByRole("combobox", { name: "Model filter" })
-    .selectOption("all");
-  await expect(
-    page.locator('[data-slot="accordion-item"]').first(),
   ).toBeVisible();
+  await expect(page.locator('[data-slot="accordion-item"]')).toHaveCount(0);
 });
 
-test("model groups link to their provider without opening authentication in Models", async ({
+test("Models excludes unconnected providers while Providers retains connection management", async ({
   page,
-}, info) => {
+}) => {
   await mockWorklens(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  await expect(
+    page.locator(".settings-model-groups").getByRole("heading", { level: 2 }),
+  ).toHaveCount(3);
+  await expect(page.getByText("Claude Sonnet", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Select models: DeepSeek", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Providers", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Search providers", exact: true })
-    .fill("DeepSeek");
-  await page
-    .getByRole("combobox", { name: "Filter providers", exact: true })
-    .selectOption("connected");
-  await page.getByRole("button", { name: "Models", exact: true }).click();
-  await page
-    .getByRole("combobox", { name: "Model filter" })
-    .selectOption("all");
-  await page
-    .getByRole("textbox", { name: "Search models", exact: true })
     .fill("Anthropic");
-  await expect(page.getByText("Claude Sonnet", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Connect", exact: true }),
-  ).toHaveCount(0);
-  await page.screenshot({
-    path: info.outputPath("models-provider-shortcut.png"),
-  });
-  await page
-    .getByRole("button", { name: "Go to Providers: Anthropic", exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "Providers", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("textbox", { name: "Search providers", exact: true }),
-  ).toHaveValue("Anthropic");
-  await expect(
-    page.getByRole("combobox", { name: "Filter providers", exact: true }),
-  ).toHaveValue("all");
-  await expect(page.locator(".settings-entry")).toHaveCount(1);
-  await expect(page.locator("input[type=password]")).toHaveCount(0);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.locator("input[type=password]")).toBeVisible();
 });
@@ -227,21 +211,34 @@ for (const allUnavailable of [true, false]) {
   });
 }
 
-
-test("ordinary Settings always opens General after provider and model navigation", async ({ page }) => {
+test("ordinary Settings always opens General after provider and model navigation", async ({
+  page,
+}) => {
   await mockWorklens(page);
   await page.goto("/");
   for (const section of ["Providers", "Models"]) {
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "General", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(
+      page.getByRole("heading", { name: "General", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "General", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
     await page.getByRole("button", { name: section, exact: true }).click();
-    await page.getByRole("button", { name: "Back to app", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Back to app", exact: true })
+      .click();
   }
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
-  await page.getByRole("button", { name: "Manage models", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Manage models", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Models", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Back to app", exact: true }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "General", exact: true }),
+  ).toBeVisible();
 });

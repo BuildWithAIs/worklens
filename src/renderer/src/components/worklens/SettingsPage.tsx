@@ -7,7 +7,7 @@ import { ConnectionsSettings } from "./connectors/ConnectionsSettings";
 import { SkillsSettings } from "./skills/SkillsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ArrowLeft,
   Plug,
@@ -16,20 +16,14 @@ import {
   Info,
   Globe,
   LoaderCircle,
-  MoreHorizontal,
   Plus,
+  ListChecks,
   RefreshCw,
   Settings2,
   Sparkles,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import {
   Item,
@@ -51,17 +45,10 @@ import {
   AccordionContent,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import { Switch } from "@/components/ui/switch";
 import { ProviderDialog } from "./ProviderDialog";
+import { ModelManagementDialog } from "./ModelManagementDialog";
 
 import { systemText } from "@/lib/system-text";
-import { countNewItems } from "@/lib/count-new-items";
 import { languageTag, useAppTranslation } from "@/i18n";
 import type {
   Bootstrap,
@@ -103,30 +90,17 @@ export function SettingsPage({
   const [query, setQuery] = useState("");
   const [providerScope, setProviderScope] = useState("all");
   const [modelQuery, setModelQuery] = useState("");
-  const [scope, setScope] = useState("connected");
+  const [manageModels, setManageModels] = useState<ProviderInfo>();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [limits, setLimits] = useState<Record<string, number>>({});
   const [connect, setConnect] = useState<ProviderInfo>();
-  const [remove, setRemove] = useState<ProviderInfo>();
+  const [remove, setRemove] = useState<
+    ProviderInfo & { disconnect: () => Promise<void> }
+  >();
   const [removing, setRemoving] = useState(false);
   const [refreshing, setRefreshing] = useState<string>();
   const [testing, setTesting] = useState<Set<string>>(new Set());
-  const [hiddenModels, setHiddenModels] = useState(
-    () => new Set(data.settings.hiddenModels ?? []),
-  );
-  const hiddenRef = useRef(hiddenModels);
-  const confirmedHidden = useRef(hiddenModels);
-  const visibilityQueue = useRef(Promise.resolve());
-  const pendingRef = useRef(new Set<string>());
-  const visibilityEdits = useRef(new Map<string, Map<string, boolean>>());
-  const [pendingVisibility, setPendingVisibility] = useState(new Set<string>());
-  useEffect(() => {
-    if (pendingRef.current.size) return;
-    const next = new Set(data.settings.hiddenModels ?? []);
-    confirmedHidden.current = next;
-    hiddenRef.current = next;
-    setHiddenModels(next);
-  }, [data.settings.hiddenModels]);
+  const hiddenModels = new Set(data.settings.hiddenModels ?? []);
   const providerFailure = useCallback(
     (message: string, action: "login" | "save" | "browser") => {
       toast.add(
@@ -149,116 +123,25 @@ export function SettingsPage({
     setProviderScope("all");
     setSection("providers");
   }
-  async function refreshProvider(id?: string) {
+  async function refreshProvider() {
     if (refreshing) return;
-    setRefreshing(id ?? "all");
+    setRefreshing("all");
     try {
-      const previousModels = data.providers.find(
-        (provider) => provider.id === id,
-      )?.models;
-      if (id) await api.invoke("refreshModels", { provider: id });
-      const next = await refresh();
-      const count = id
-        ? countNewItems(
-            previousModels,
-            next.providers.find((provider) => provider.id === id)?.models ?? [],
-          )
-        : 0;
-      onSuccess(
-        id
-          ? count > 0
-            ? t("settings.modelsAdded", { count })
-            : t("settings.modelsRefreshed")
-          : t("settings.providersRefreshed"),
-      );
-    } catch (e) {
+      await refresh();
+      onSuccess(t("settings.providersRefreshed"));
+    } catch (error) {
       toast.add(
         settingsFailure(
           t("settingsFeedback.refreshFailed", {
-            service: t(id ? "settings.models" : "settings.providers"),
+            service: t("settings.providers"),
           }),
-          String(e),
+          String(error),
           language,
         ),
       );
     } finally {
       setRefreshing(undefined);
     }
-  }
-  function setModelVisibility(changes: Map<string, boolean>, bulk = false) {
-    if ([...changes.keys()].some((key) => pendingRef.current.has(key))) return;
-    const previous = new Map<string, boolean>();
-    for (const [key, visible] of changes) {
-      if (visible === !hiddenRef.current.has(key)) changes.delete(key);
-      else previous.set(key, !hiddenRef.current.has(key));
-    }
-    if (!changes.size) return;
-    const apply = (source: Set<string>, values: Map<string, boolean>) => {
-      const next = new Set(source);
-      for (const [key, visible] of values) {
-        visible ? next.delete(key) : next.add(key);
-      }
-      return next;
-    };
-    hiddenRef.current = apply(hiddenRef.current, changes);
-    setHiddenModels(hiddenRef.current);
-    for (const key of changes.keys()) {
-      pendingRef.current.add(key);
-      visibilityEdits.current.set(key, changes);
-    }
-    setPendingVisibility(new Set(pendingRef.current));
-    // Single and bulk actions share one queue: each write preserves the last
-    // confirmed values of models outside this operation, including other providers.
-    visibilityQueue.current = visibilityQueue.current.then(async () => {
-      const next = apply(confirmedHidden.current, changes);
-      try {
-        await save({ hiddenModels: [...next] });
-        confirmedHidden.current = next;
-        if (bulk) {
-          const id = toast.add({
-            type: "success",
-            title: t("settings.visibilityBulkSaved", { count: changes.size }),
-            actionProps: {
-              children: t("settings.undoVisibility"),
-              onClick: () => {
-                // A later manual change takes precedence over an old Undo action.
-                const undo = new Map(
-                  [...previous].filter(
-                    ([key]) =>
-                      !pendingRef.current.has(key) &&
-                      visibilityEdits.current.get(key) === changes &&
-                      !hiddenRef.current.has(key) === changes.get(key),
-                  ),
-                );
-                setModelVisibility(undo);
-                toast.close(id);
-              },
-            },
-          });
-        } else onSuccess(t("settingsFeedback.visibilitySaved"));
-      } catch (e) {
-        const rollback = new Map(
-          [...changes.keys()].map(
-            (key) => [key, !confirmedHidden.current.has(key)] as const,
-          ),
-        );
-        hiddenRef.current = apply(hiddenRef.current, rollback);
-        setHiddenModels(hiddenRef.current);
-        toast.add(
-          settingsFailure(
-            t("settingsFeedback.visibilityFailed"),
-            String(e),
-            language,
-          ),
-        );
-      } finally {
-        for (const key of changes.keys()) pendingRef.current.delete(key);
-        setPendingVisibility(new Set(pendingRef.current));
-      }
-    });
-  }
-  function toggleModel(key: string, visible: boolean) {
-    setModelVisibility(new Map([[key, visible]]));
   }
   async function testModel(
     provider: ProviderInfo,
@@ -303,22 +186,30 @@ export function SettingsPage({
     (p) => p.configured || p.credentialType || p.credentialError,
   );
   const others = filtered.filter((p) => !connected.includes(p));
-  const modelGroups = [...data.providers]
-    .sort((a, b) => Number(b.configured) - Number(a.configured))
+  const modelGroups = data.providers
+    .filter((p) => p.configured || p.credentialType || p.credentialError)
     .map((p) => ({
       ...p,
-      models: p.models.filter((m) => {
-        const key = p.id + "/" + m.id;
-        return (
-          (scope !== "connected" || p.configured) &&
-          (scope !== "visible" || (m.available && !hiddenModels.has(key))) &&
+      totalCount: p.models.length,
+      selectedCount: p.models.filter(
+        (m) => !hiddenModels.has(p.id + "/" + m.id),
+      ).length,
+      models: p.models.filter(
+        (m) =>
+          !hiddenModels.has(p.id + "/" + m.id) &&
           (p.name + " " + m.name + " " + m.id)
             .toLowerCase()
-            .includes(modelQuery.toLowerCase())
-        );
-      }),
+            .includes(modelQuery.trim().toLowerCase()),
+      ),
     }))
-    .filter((p) => p.models.length);
+    .filter(
+      (p) =>
+        !modelQuery.trim() ||
+        p.models.length ||
+        (p.name + " " + p.id)
+          .toLowerCase()
+          .includes(modelQuery.trim().toLowerCase()),
+    );
   const methodName = (p: ProviderInfo) =>
     p.methods.find((m) => m.type === p.credentialType)?.name ??
     (p.configured
@@ -508,289 +399,193 @@ export function SettingsPage({
                       setLimits({});
                     }}
                   />
-                  <NativeSelect
-                    aria-label={t("settings.modelFilter")}
-                    value={scope}
-                    onChange={(e) => setScope(e.target.value)}
-                  >
-                    <NativeSelectOption value="all">
-                      {t("settings.allModels")}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="connected">
-                      {t("common.connected")}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="visible">
-                      {t("settings.shownInChat")}
-                    </NativeSelectOption>
-                  </NativeSelect>
                 </div>
-                <Accordion
-                  multiple
-                  value={modelGroups
-                    .filter(
-                      (p) =>
-                        expanded[p.id] ?? (!!modelQuery.trim() || p.configured),
-                    )
-                    .map((p) => p.id)}
-                  onValueChange={(values) =>
-                    setExpanded((prev) => ({
-                      ...prev,
-                      ...Object.fromEntries(
-                        modelGroups.map((p) => [p.id, values.includes(p.id)]),
-                      ),
-                    }))
-                  }
-                >
-                  {modelGroups.map((p) => (
-                    <AccordionItem value={p.id} key={p.id}>
-                      <div className="settings-accordion-heading settings-group-bar">
-                        <AccordionTrigger>
-                          <span className="flex items-center gap-2">
-                            <ProviderIcon provider={p.id} />
-                            <span data-slot="model-provider-name">
-                              {p.name}
+                {!!modelGroups.length && (
+                  <Accordion
+                    className="settings-model-groups"
+                    multiple
+                    value={modelGroups
+                      .filter(
+                        (p) =>
+                          expanded[p.id] ??
+                          (!!modelQuery.trim() || p.configured),
+                      )
+                      .map((p) => p.id)}
+                    onValueChange={(values) =>
+                      setExpanded((prev) => ({
+                        ...prev,
+                        ...Object.fromEntries(
+                          modelGroups.map((p) => [p.id, values.includes(p.id)]),
+                        ),
+                      }))
+                    }
+                  >
+                    {modelGroups.map((p) => (
+                      <AccordionItem
+                        className="settings-list"
+                        value={p.id}
+                        key={p.id}
+                      >
+                        <div className="settings-accordion-heading">
+                          <AccordionTrigger
+                            headingLevel={2}
+                            iconPosition="start"
+                            className="settings-model-disclosure min-w-0 items-center justify-start gap-2 border-0 hover:no-underline"
+                          >
+                            <span className="settings-model-heading-copy">
+                              <span className="flex min-w-0 items-center gap-2">
+                                <ProviderIcon provider={p.id} />
+                                <span
+                                  className="break-words"
+                                  data-slot="model-provider-name"
+                                >
+                                  {p.name}
+                                </span>
+                              </span>
+                              <span className="settings-group-count">
+                                {t("settings.modelsSelectedCount", {
+                                  count: p.selectedCount,
+                                  total: p.totalCount,
+                                })}
+                                {modelQuery.trim() && (
+                                  <>
+                                    {" "}
+                                    ·{" "}
+                                    {t("settings.modelsMatchedCount", {
+                                      count: p.models.length,
+                                    })}
+                                  </>
+                                )}
+                              </span>
                             </span>
-                            <span className="settings-group-count">
-                              {t("settings.modelsShownCount", {
-                                shown: p.models.filter(
-                                  (m) =>
-                                    m.available &&
-                                    !hiddenModels.has(p.id + "/" + m.id),
-                                ).length,
-                                total: p.models.length,
-                              })}
-                            </span>
-                          </span>
-                        </AccordionTrigger>
-                        {!p.configured && (
+                          </AccordionTrigger>
                           <Button
                             variant="outline"
                             size="sm"
-                            className="shrink-0"
-                            aria-label={t("settings.goToProvidersFor", {
+                            className="settings-model-select"
+                            aria-label={t("settings.manageModelsFor", {
                               provider: p.name,
                             })}
-                            onClick={() => goToProviders(p)}
-                          >
-                            {t("settings.goToProviders")}
-                          </Button>
-                        )}
-                        {p.models.some((m) => m.available) && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  className="size-8 p-0"
-                                  aria-label={t(
-                                    "settings.manageModelVisibility",
-                                    { provider: p.name },
-                                  )}
-                                >
-                                  <MoreHorizontal />
-                                </Button>
-                              }
-                            />
-                            <DropdownMenuContent
-                              align="end"
-                              className="w-auto min-w-56"
-                            >
-                              {[true, false].map((visible) => {
-                                const models = p.models.filter(
-                                  (m) => m.available,
-                                );
-                                const filtered =
-                                  !!modelQuery.trim() || scope === "visible";
-                                return (
-                                  <DropdownMenuItem
-                                    key={String(visible)}
-                                    disabled={
-                                      models.some((m) =>
-                                        pendingVisibility.has(
-                                          p.id + "/" + m.id,
-                                        ),
-                                      ) ||
-                                      models.every(
-                                        (m) =>
-                                          !hiddenModels.has(
-                                            p.id + "/" + m.id,
-                                          ) === visible,
-                                      )
-                                    }
-                                    onClick={() =>
-                                      setModelVisibility(
-                                        new Map(
-                                          models.map((m) => [
-                                            p.id + "/" + m.id,
-                                            visible,
-                                          ]),
-                                        ),
-                                        true,
-                                      )
-                                    }
-                                  >
-                                    {t(
-                                      visible
-                                        ? filtered
-                                          ? "settings.showMatchingModels"
-                                          : "settings.showAllModels"
-                                        : filtered
-                                          ? "settings.hideMatchingModels"
-                                          : "settings.hideAllModels",
-                                      { count: models.length },
-                                    )}
-                                  </DropdownMenuItem>
-                                );
-                              })}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                        <TooltipIconButton
-                          variant="ghost"
-                          className="size-8 p-0"
-                          size="icon-sm"
-                          aria-label={t("settings.refreshModelsFor", {
-                            provider: p.name,
-                          })}
-                          tooltip={t("settings.refreshModels")}
-                          disabled={!!refreshing}
-                          onClick={() => void refreshProvider(p.id)}
-                        >
-                          <RefreshCw
-                            className={refreshing === p.id ? "spin" : undefined}
-                          />
-                        </TooltipIconButton>
-                      </div>
-                      <AccordionContent className="settings-model-panel">
-                        <div className="settings-list">
-                          {p.models.slice(0, limits[p.id] ?? 50).map((m) => {
-                            const key = p.id + "/" + m.id;
-                            return (
-                              <div className="settings-entry" key={key}>
-                                <div className="settings-entry-copy settings-model-copy">
-                                  <div className="settings-entry-title">
-                                    {m.name}
-                                  </div>
-                                  <Hint
-                                    content={t(
-                                      "settings.contextWindowAndCapabilities",
-                                    )}
-                                  >
-                                    <div
-                                      className="settings-entry-description"
-                                      tabIndex={0}
-                                    >
-                                      {Intl.NumberFormat(
-                                        languageTag(language),
-                                        {
-                                          notation: "compact",
-                                          maximumFractionDigits: 1,
-                                        },
-                                      ).format(m.contextWindow)}
-                                      {m.reasoning
-                                        ? t("settings.thinkingSuffix")
-                                        : ""}
-                                      {m.image
-                                        ? t("settings.visionSuffix")
-                                        : ""}
-                                    </div>
-                                  </Hint>
-                                </div>
-                                <div className="settings-entry-actions">
-                                  {m.available ? (
-                                    <>
-                                      <TooltipIconButton
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        disabled={testing.has(key)}
-                                        aria-label={t(
-                                          "settings.testConnectionFor",
-                                          { model: m.name },
-                                        )}
-                                        tooltip={t(
-                                          "settings.testConnectionSendsAShortRequest",
-                                        )}
-                                        onClick={() => void testModel(p, m)}
-                                      >
-                                        {testing.has(key) ? (
-                                          <LoaderCircle className="spin" />
-                                        ) : (
-                                          <Zap />
-                                        )}
-                                      </TooltipIconButton>
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger
-                                            render={
-                                              <Switch
-                                                size="sm"
-                                                aria-label={t(
-                                                  "settings.showInChatFor",
-                                                  {
-                                                    model: m.name,
-                                                  },
-                                                )}
-                                                checked={!hiddenModels.has(key)}
-                                                disabled={pendingVisibility.has(
-                                                  key,
-                                                )}
-                                                onCheckedChange={(checked) =>
-                                                  void toggleModel(key, checked)
-                                                }
-                                              />
-                                            }
-                                          />
-                                          <TooltipContent
-                                            side="left"
-                                            sideOffset={12}
-                                          >
-                                            {t("settings.showInChat")}
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    </>
-                                  ) : p.configured ? (
-                                    <Hint
-                                      content={t(
-                                        "settings.unavailableModelHint",
-                                      )}
-                                    >
-                                      <span
-                                        className="text-xs text-muted-foreground"
-                                        tabIndex={0}
-                                      >
-                                        {t("common.unavailable")}
-                                      </span>
-                                    </Hint>
-                                  ) : null}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {p.models.length > (limits[p.id] ?? 50) && (
-                          <Button
-                            variant="ghost"
-                            className="mt-3"
                             onClick={() =>
-                              setLimits((prev) => ({
-                                ...prev,
-                                [p.id]: (prev[p.id] ?? 50) + 50,
-                              }))
+                              setManageModels(
+                                data.providers.find(
+                                  (provider) => provider.id === p.id,
+                                ),
+                              )
                             }
                           >
-                            {t("settings.showMoreModels")}
+                            <ListChecks
+                              data-icon="inline-start"
+                              aria-hidden="true"
+                            />
+                            {t("settings.chooseModels")}
                           </Button>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+                        </div>
+                        <AccordionContent className="settings-model-panel">
+                          <div className="settings-model-list">
+                            {p.models.slice(0, limits[p.id] ?? 50).map((m) => {
+                              const key = p.id + "/" + m.id;
+                              return (
+                                <div className="settings-entry" key={key}>
+                                  <div className="settings-entry-copy settings-model-copy">
+                                    <div className="settings-entry-title">
+                                      {m.name}
+                                    </div>
+                                    <Hint
+                                      content={t(
+                                        "settings.contextWindowAndCapabilities",
+                                      )}
+                                    >
+                                      <div
+                                        className="settings-entry-description"
+                                        tabIndex={0}
+                                      >
+                                        {Intl.NumberFormat(
+                                          languageTag(language),
+                                          {
+                                            notation: "compact",
+                                            maximumFractionDigits: 1,
+                                          },
+                                        ).format(m.contextWindow)}
+                                        {m.reasoning
+                                          ? t("settings.thinkingSuffix")
+                                          : ""}
+                                        {m.image
+                                          ? t("settings.visionSuffix")
+                                          : ""}
+                                      </div>
+                                    </Hint>
+                                  </div>
+                                  <div className="settings-entry-actions">
+                                    {m.available ? (
+                                      <>
+                                        <TooltipIconButton
+                                          variant="ghost"
+                                          size="icon-xs"
+                                          disabled={testing.has(key)}
+                                          aria-label={t(
+                                            "settings.testConnectionFor",
+                                            { model: m.name },
+                                          )}
+                                          tooltip={t(
+                                            "settings.testConnectionSendsAShortRequest",
+                                          )}
+                                          onClick={() => void testModel(p, m)}
+                                        >
+                                          {testing.has(key) ? (
+                                            <LoaderCircle className="spin" />
+                                          ) : (
+                                            <Zap />
+                                          )}
+                                        </TooltipIconButton>
+                                      </>
+                                    ) : p.configured ? (
+                                      <Hint
+                                        content={t(
+                                          "settings.unavailableModelHint",
+                                        )}
+                                      >
+                                        <Badge variant="outline" tabIndex={0}>
+                                          {t("common.unavailable")}
+                                        </Badge>
+                                      </Hint>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {!p.models.length && (
+                              <p className="settings-empty">
+                                {t(
+                                  modelQuery.trim()
+                                    ? "settings.noModelsMatchSearch"
+                                    : "settings.noModelsSelected",
+                                )}
+                              </p>
+                            )}
+                          </div>
+                          {p.models.length > (limits[p.id] ?? 50) && (
+                            <Button
+                              variant="ghost"
+                              className="mt-3"
+                              onClick={() =>
+                                setLimits((prev) => ({
+                                  ...prev,
+                                  [p.id]: (prev[p.id] ?? 50) + 50,
+                                }))
+                              }
+                            >
+                              {t("settings.showMoreModels")}
+                            </Button>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                )}
                 {!modelGroups.length && (
                   <div className="settings-empty">
-                    {scope === "connected" &&
-                    !modelQuery.trim() &&
+                    {!modelQuery.trim() &&
                     !data.providers.some((p) => p.configured) ? (
                       <>
                         <p className="font-medium text-foreground">
@@ -977,13 +772,37 @@ export function SettingsPage({
           </div>
         </div>
       </div>
+      {manageModels && (
+        <ModelManagementDialog
+          key={manageModels.id}
+          provider={manageModels}
+          settings={data.settings}
+          onRefresh={async () => {
+            await api.invoke("refreshModels", { provider: manageModels.id });
+            return refresh();
+          }}
+          onRefreshed={(count) =>
+            onSuccess(
+              t(count ? "settings.modelsAdded" : "settings.modelsRefreshed", {
+                count,
+              }),
+            )
+          }
+          onClose={() => setManageModels(undefined)}
+          onSaved={async () => {
+            await refresh();
+            setManageModels(undefined);
+            onSuccess(t("settings.modelsSaved"));
+          }}
+        />
+      )}
       {connect && (
         <ProviderDialog
           key={connect.id}
           provider={connect}
           onDisconnect={
             connect.credentialType || connect.credentialError
-              ? () => setRemove(connect)
+              ? (disconnect) => setRemove({ ...connect, disconnect })
               : undefined
           }
           disconnecting={removing}
@@ -1023,7 +842,7 @@ export function SettingsPage({
           if (!remove) return;
           setRemoving(true);
           try {
-            await api.invoke("logout", { provider: remove.id });
+            await remove.disconnect();
             await refresh();
             setRemove(undefined);
             setConnect(undefined);

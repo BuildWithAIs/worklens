@@ -303,7 +303,8 @@
   line-height: 1.5;
 }
 .settings-model-panel {
-  margin-inline: 0;
+  margin-inline: 48px 0;
+  padding-bottom: 8px;
 }
 .settings-model-copy {
   display: flex;
@@ -326,7 +327,8 @@
   text-align: center;
   padding: 56px 20px;
 }
-.settings-list > .settings-empty {
+.settings-list > .settings-empty,
+.settings-model-list > .settings-empty {
   margin: 0;
   padding: 28px 20px;
 }
@@ -340,6 +342,76 @@
 .settings-dialog.settings-connector-dialog {
   width: min(420px, calc(100vw - 32px));
   max-width: calc(100vw - 32px);
+}
+/* Keep the inactive surface solid while its content recedes behind confirmation. */
+body:has(.settings-disconnect-dialog[data-open])
+  .settings-dialog:not(.settings-disconnect-dialog) {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent);
+}
+body:has(.settings-disconnect-dialog[data-open])
+  .settings-dialog:not(.settings-disconnect-dialog)
+  > * {
+  opacity: 0.45;
+}
+/* Preserve the existing pointer barrier without painting a dark panel. */
+body:has(.settings-disconnect-dialog[data-open])
+  .settings-dialog:not(.settings-disconnect-dialog)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: auto;
+}
+.settings-disconnect-dialog,
+.settings-model-dialog {
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 8px 24px var(--shadow),
+    0 24px 64px var(--shadow);
+}
+.settings-dialog.settings-model-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  gap: 12px;
+}
+.settings-dialog.settings-model-dialog [data-slot="dialog-header"] {
+  gap: 8px;
+}
+.settings-model-catalog {
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+}
+.settings-model-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.settings-model-options {
+  height: min(var(--model-list-height), 54dvh);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 4px;
+}
+.settings-model-option {
+  min-width: 0;
+}
+.settings-model-option > [data-slot="field"] {
+  min-height: 56px;
+  padding: 8px 10px;
+}
+.settings-model-option [data-slot="field-content"] > [data-slot="field-label"] {
+  font-weight: 400;
+}
+.settings-model-option [data-slot="field-description"] {
+  font-size: 12px;
+  line-height: 16px;
 }
 .settings-dialog [data-slot="dialog-header"] {
   gap: 12px;
@@ -512,10 +584,46 @@
 }
 
 .settings-accordion-heading {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding-block: 8px;
+  min-height: 48px;
+  margin-inline: -24px;
+  padding-inline: 24px;
+  border-radius: 15px;
+}
+.settings-model-disclosure {
+  position: static;
+  min-height: 48px;
+  cursor: pointer;
+}
+.settings-model-disclosure::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.settings-model-disclosure:focus-visible {
+  box-shadow: none;
+}
+.settings-model-disclosure:focus-visible::after {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.settings-model-select {
+  position: relative;
+  z-index: 1;
+}
+.settings-model-heading-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
 }
 .settings-accordion-heading [data-slot="accordion-header"] {
   flex: 1;
@@ -526,6 +634,10 @@
 }
 
 @media (max-width: 580px) {
+  .settings-model-heading-copy > .settings-group-count {
+    flex-basis: 100%;
+    padding-inline-start: 24px;
+  }
   .settings-page-heading {
     padding: 12px 16px;
     gap: 12px;
@@ -565,11 +677,6 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
-.settings-accordion-heading.settings-group-bar {
-  padding-block: 0;
-  margin-top: 16px;
-  gap: 16px;
-}
 .settings-page-content .settings-section + .settings-section {
   margin-top: 32px;
 }
@@ -577,6 +684,6 @@
   font-weight: 400;
 }
 
-.settings-page-content[data-section="models"] [data-slot="accordion-item"] {
-  border: 0;
+.settings-model-groups {
+  gap: 12px;
 }

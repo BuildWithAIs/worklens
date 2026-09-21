@@ -137,6 +137,9 @@ test("failed and pre-response cancelled runs have terminal attribution, without 
     state: "failed",
     status: "unavailable",
   });
+  const restoredFailure = await (await failed.restart()).open(f.id);
+  expect(restoredFailure.messages.findLast((message) => message.role === "assistant"))
+    .toMatchObject({ status: "error", error: expect.any(String) });
   const cancelled = await setup();
   const c = await cancelled.send("SLOW " + "wait ".repeat(80));
   await cancelled.service.cancel(c.id, c.runId!);

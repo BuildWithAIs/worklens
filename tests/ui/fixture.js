@@ -129,6 +129,7 @@ export async function mockWorklens(page, options = {}) {
         model(`model-${i}`, `Catalog ${i < 60 ? "Alpha" : "Beta"} ${i}`, "deepseek"),
       );
     }
+    Object.assign(data.settings, options.initialSettings ?? {});
     data.settings =
       JSON.parse(localStorage.getItem("ui-fixture-settings") ?? "null") ??
       data.settings;
@@ -171,7 +172,37 @@ export async function mockWorklens(page, options = {}) {
       },
       invoke: async (name, input) => {
         window.calls.push({ name, input });
-        if (name === "bootstrap") return structuredClone(data);
+        if (name === "bootstrap") {
+          data.settings.modelCatalogs ??= {};
+          for (const provider of data.providers.filter((p) => p.configured)) {
+            const previous = data.settings.modelCatalogs[provider.id];
+            const ids = provider.models.map((m) => m.id);
+            if (!previous) data.settings.modelCatalogs[provider.id] = { known: ids, new: [] };
+            else for (const id of ids.filter((id) => !previous.known.includes(id))) {
+              previous.known.push(id);
+              previous.new.push(id);
+              data.settings.hiddenModels.push(`${provider.id}/${id}`);
+            }
+          }
+          return structuredClone(data);
+        }
+        if (name === "modelSelection") {
+          if (window.failNextVisibilitySave) {
+            window.failNextVisibilitySave = false;
+            throw Error("Could not save model selection");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          const hidden = new Set(data.settings.hiddenModels);
+          for (const id of input.reviewed) {
+            const key = `${input.provider}/${id}`;
+            input.selected.includes(id) ? hidden.delete(key) : hidden.add(key);
+          }
+          data.settings.hiddenModels = [...hidden];
+          const catalog = data.settings.modelCatalogs[input.provider];
+          catalog.new = catalog.new.filter((id) => !input.reviewed.includes(id));
+          localStorage.setItem("ui-fixture-settings", JSON.stringify(data.settings));
+          return structuredClone(data.settings);
+        }
         if (name === "confluenceSave") {
           const { token, ...settings } = input;
           data.confluence = { ...settings, configured: true };

@@ -22,6 +22,7 @@ import {
 } from "./storage";
 import { AgentService } from "./agent-service";
 import { ProviderService } from "./providers";
+import { discoverModels, selectModels } from "./model-selection";
 import { schemas, externalUrl } from "./validation";
 import { toolNames } from "./resources";
 import type { Requests } from "../shared/contracts";
@@ -160,11 +161,15 @@ else {
                   }
                   break;
                 }
-                case "bootstrap":
+                case "bootstrap": {
+                  const catalog = await providers!.list();
+                  await state.update((current) =>
+                    discoverModels(current, catalog),
+                  );
                   value = {
                     settings: state.value,
                     ...connectors.bootstrap(),
-                    providers: await providers!.list(),
+                    providers: catalog,
                     conversations: await agents!.list(),
                     globalUsage: agents!.getGlobalUsage(),
                     paths,
@@ -173,6 +178,12 @@ else {
                     diagnostics: agents!.diagnostics,
                     recoveries: agents!.recoveries,
                   };
+                  break;
+                }
+                case "modelSelection":
+                  value = await state.update((current) =>
+                    selectModels(current, input),
+                  );
                   break;
                 case "settings":
                   value = await state.update(input);
@@ -195,10 +206,7 @@ else {
                   providers!.cancel(input.loginId);
                   break;
                 case "logout":
-                  await runtime.logout(input.provider, {
-                    signal: AbortSignal.timeout(15000),
-                  });
-                  providers!.clearConnection(input.provider);
+                  await providers!.logout(input.provider);
                   break;
                 case "azure":
                   await providers!.azure(input);

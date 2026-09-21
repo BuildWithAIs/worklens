@@ -13,6 +13,7 @@
   --color-popover-foreground: var(--text);
   --color-primary: var(--accent);
   --color-primary-foreground: var(--accent-text);
+  --color-checkbox-checked: color-mix(in srgb, var(--accent) 80%, var(--bg));
   --color-secondary: var(--soft);
   --color-secondary-foreground: var(--text);
   --color-muted: var(--hover);

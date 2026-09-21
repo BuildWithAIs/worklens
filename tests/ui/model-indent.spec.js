@@ -21,7 +21,7 @@ for (const theme of ["light", "dark"]) {
       const brandBox = await page.locator('[data-slot="model-provider-name"]').first().boundingBox();
       const nameBox = await row.locator(".settings-entry-title").boundingBox();
       expect(nameBox.x).toBeCloseTo(brandBox.x, 0);
-      expect(rowBox.x + rowBox.width).toBeCloseTo(parentBox.x + parentBox.width - 25, 0);
+      expect(rowBox.x + rowBox.width).toBeCloseTo(parentBox.x + parentBox.width, 0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: info.outputPath(`models-${width}.png`) });
     }
