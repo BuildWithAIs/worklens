@@ -24,7 +24,7 @@ for (const theme of ["light", "dark"]) {
     await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
     const deletion = page.getByRole("dialog", { name: "Delete conversation?" });
     await expect(deletion).not.toContainText("Existing conversation");
-    await expect(deletion).toContainText("This permanently deletes this conversation. This cannot be undone.");
+    await expect(deletion).toContainText("This will permanently delete this conversation and its files. Files saved elsewhere will be kept.");
     await page.screenshot({ path: info.outputPath(`delete-${theme}.png`) });
     await deletion.getByRole("button", { name: "Cancel", exact: true }).click();
     expect(await page.evaluate(() => window.calls.filter(call => call.name === "delete"))).toHaveLength(0);
