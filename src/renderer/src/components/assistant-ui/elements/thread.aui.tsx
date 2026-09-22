@@ -546,7 +546,19 @@ const MessageCopy: FC = () => {
   return (
     <TooltipIconButton
       tooltip={isCopied ? t("common.copied") : t("common.copy")}
-      onClick={() => copyToClipboard(aui.message().getCopyText())}
+      onClick={() => {
+        const message = aui.message();
+        const text = message.getCopyText();
+        const state = message.getState();
+        const status = state.role === "assistant" ? state.status : undefined;
+        const error =
+          status?.type === "incomplete" && status.reason === "error"
+            ? status.error
+            : undefined;
+        copyToClipboard(
+          text.trim() || error === undefined ? text : String(error),
+        );
+      }}
     >
       {isCopied ? <CheckIcon /> : <CopyIcon />}
     </TooltipIconButton>

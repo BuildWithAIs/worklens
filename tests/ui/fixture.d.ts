@@ -6,5 +6,6 @@ export function mockWorklens(
     modelState?: "unconfigured" | "unavailable" | "hidden";
     unavailableSelection?: boolean;
     largeModelCatalog?: boolean;
+    initialSettings?: Partial<import("../../src/shared/contracts").Settings>;
   },
 ): Promise<void>;

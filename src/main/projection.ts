@@ -43,13 +43,25 @@ export function projectMessages(
             .join("\n")
         : "";
       const text = textContent(message.content);
-      if (text || thinking || message.errorMessage)
+      if (
+        text ||
+        thinking ||
+        message.errorMessage ||
+        message.stopReason === "error" ||
+        message.stopReason === "aborted"
+      )
         result.push({
           id,
           role: "assistant",
           text,
           thinking: thinking || undefined,
           error: message.errorMessage,
+          status:
+            message.stopReason === "error"
+              ? "error"
+              : message.stopReason === "aborted"
+                ? "cancelled"
+                : undefined,
         });
       for (const block of Array.isArray(message.content)
         ? message.content

@@ -70,15 +70,31 @@ function messageStatus(
   language: "en" | "zh",
 ) {
   const isLast = index === (view?.messages.length ?? 0) - 1;
+  const message = view?.messages[index];
   if (isLast && view && activePhases.has(view.phase))
     return { type: "running" as const };
   if (isLast && view?.phase === "cancelled")
     return { type: "incomplete" as const, reason: "cancelled" as const };
+  // Persisted assistant outcomes outlive the current run's phase. Tool failures
+  // remain tool-local and must not turn an otherwise successful reply into an error.
+  if (message?.role === "assistant" && message.status === "cancelled")
+    return { type: "incomplete" as const, reason: "cancelled" as const };
+  if (message?.role === "assistant" && message.status === "error")
+    return {
+      type: "incomplete" as const,
+      reason: "error" as const,
+      error: systemText(message.error?.trim() || "模型请求失败", language),
+    };
   if (isLast && view?.phase === "failed")
     return {
       type: "incomplete" as const,
       reason: "error" as const,
-      error: view.error ? systemText(view.error, language) : undefined,
+      error: systemText(
+        view.error?.trim() ||
+          view.messages[index]?.error?.trim() ||
+          "模型请求失败",
+        language,
+      ),
     };
   return { type: "complete" as const, reason: "stop" as const };
 }
@@ -546,7 +562,14 @@ export function AgentThread({
           id: `${id}-activity`,
           role: "assistant",
           content: visibleActivity,
-          status,
+          // A turn's error belongs below its answer when there is one. The
+          // activity retains its own tool outcomes without repeating the error.
+          status:
+            answer.length &&
+            status.type === "incomplete" &&
+            status.reason === "error"
+              ? { type: "complete", reason: "stop" }
+              : status,
           metadata: {
             custom: {
               progress: prefixTool
@@ -613,7 +636,12 @@ export function AgentThread({
             },
           });
         }
-      } else if (answer.length) {
+      } else if (
+        answer.length ||
+        (!visibleActivity.length &&
+          status.type === "incomplete" &&
+          status.reason === "error")
+      ) {
         displayed.push({
           id: `${id}-answer`,
           role: "assistant",
@@ -635,6 +663,21 @@ export function AgentThread({
       }
     }
     flush();
+    // A request can fail before an assistant message exists. Display the
+    // reported failure without inventing a response or changing stored history.
+    if (
+      view?.phase === "failed" &&
+      (!source.length ||
+        source.at(-1)?.role === "user" ||
+        source.at(-1)?.role === "summary")
+    ) {
+      displayed.push({
+        id: `${view.id}-request-error`,
+        role: "assistant",
+        content: [],
+        status: messageStatus(view, source.length - 1, language),
+      });
+    }
     return displayed;
   }, [view, language, t]);
   // The projection is an authoritative linear snapshot, not a branch update.

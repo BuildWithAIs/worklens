@@ -16,6 +16,7 @@ export class ProviderService {
   private logins = new Map<
     string,
     {
+      provider: string;
       controller: AbortController;
       pending: Map<
         string,
@@ -101,6 +102,7 @@ export class ProviderService {
     if (this.logins.has(loginId)) throw new Error("认证已在进行");
     if (!this.runtime.getProvider(provider)) throw new Error("未知供应商");
     const login = {
+      provider,
       controller: new AbortController(),
       pending: new Map<
         string,
@@ -192,6 +194,17 @@ export class ProviderService {
   }
   cancel(loginId: string) {
     this.logins.get(loginId)?.controller.abort();
+  }
+  async logout(provider: string) {
+    // Runtime auth mutations are serialized per provider. An unanswered login
+    // must release that queue before logout can delete the saved credential.
+    for (const login of this.logins.values()) {
+      if (login.provider === provider) login.controller.abort();
+    }
+    await this.runtime.logout(provider, {
+      signal: AbortSignal.timeout(15000),
+    });
+    this.clearConnection(provider);
   }
   clearConnection(provider: string) {
     this.connections.delete(provider);

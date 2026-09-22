@@ -51,17 +51,25 @@ for (const language of ["en", "zh"]) {
     await nav
       .getByRole("button", { name: t("Models", "模型"), exact: true })
       .click();
-    const refreshModels = page.getByRole("button", {
+    await page
+      .getByRole("button", {
+        name: t("Select models: DeepSeek", "选择模型：DeepSeek"),
+        exact: true,
+      })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: t("DeepSeek models", "DeepSeek 模型"),
+      exact: true,
+    });
+    const refreshModels = dialog.getByRole("button", {
       name: t("Refresh models: DeepSeek", "刷新模型：DeepSeek"),
       exact: true,
     });
     await refreshModels.click();
     await expect(
-      page
-        .locator('[data-slot="toast-title"]')
-        .filter({
-          hasText: t("Refreshed · 2 new models", "已刷新，新增 2 个模型"),
-        }),
+      page.locator('[data-slot="toast-title"]').filter({
+        hasText: t("Refreshed · 2 new models", "已刷新，新增 2 个模型"),
+      }),
     ).toBeVisible();
     await refreshModels.click();
     await expect(
@@ -69,6 +77,9 @@ for (const language of ["en", "zh"]) {
         .locator('[data-slot="toast-title"]')
         .filter({ hasText: t("Models refreshed", "模型已刷新") }),
     ).toBeVisible();
+    await dialog
+      .getByRole("button", { name: t("Cancel", "取消"), exact: true })
+      .click();
     await nav
       .getByRole("button", { name: t("Skills", "技能"), exact: true })
       .click();
@@ -81,19 +92,15 @@ for (const language of ["en", "zh"]) {
     ).toHaveCount(3);
     await refreshSkills.click();
     await expect(
-      page
-        .locator('[data-slot="toast-title"]')
-        .filter({
-          hasText: t("Refreshed · 1 new skill", "已刷新，新增 1 个技能"),
-        }),
+      page.locator('[data-slot="toast-title"]').filter({
+        hasText: t("Refreshed · 1 new skill", "已刷新，新增 1 个技能"),
+      }),
     ).toBeVisible();
     await refreshSkills.click();
     await expect(
-      page
-        .locator('[data-slot="toast-title"]')
-        .filter({
-          hasText: t("Refreshed · 2 new skills", "已刷新，新增 2 个技能"),
-        }),
+      page.locator('[data-slot="toast-title"]').filter({
+        hasText: t("Refreshed · 2 new skills", "已刷新，新增 2 个技能"),
+      }),
     ).toBeVisible();
     await refreshSkills.click();
     await expect(

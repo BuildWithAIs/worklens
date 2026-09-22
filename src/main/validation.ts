@@ -48,6 +48,13 @@ export const schemas = {
   refreshModels: z.object({ provider: z.string().min(1).max(200) }).strict(),
   bootstrap: z.undefined(),
   providers: z.undefined(),
+  modelSelection: z
+    .object({
+      provider: z.string().min(1).max(200),
+      reviewed: z.array(z.string().min(1).max(400)).max(10000),
+      selected: z.array(z.string().min(1).max(400)).max(10000),
+    })
+    .strict(),
   dismissRecovery: z.object({ runId: id }).strict(),
   settings: z
     .object({
