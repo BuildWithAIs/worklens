@@ -1,5 +1,9 @@
 import { readHtmlPreview, htmlActionFile } from "./html-preview";
 import {
+  inspectConversationFile,
+  previewConversationFile,
+} from "./conversation-files";
+import {
   createAgentSession,
   SessionManager,
   type AgentSession,
@@ -349,6 +353,20 @@ export class AgentService {
     return this.operations.run(id, async () =>
       this.view(id, await this.get(id)),
     );
+  }
+  async conversationFile(id: string, path: string, preview = false) {
+    return this.operations.run(id, async () => {
+      const runtime = await this.get(id);
+      const file = await inspectConversationFile(
+        {
+          cwd: workingDirectory(this.paths, runtime.manager),
+          roots: await this.previewRoots(runtime),
+          messages: this.view(id, runtime).messages,
+        },
+        path,
+      );
+      return preview ? previewConversationFile(file) : file;
+    });
   }
   async htmlActionFile(id: string, source: { path?: string; code?: string }) {
     return this.operations.run(id, async () => {

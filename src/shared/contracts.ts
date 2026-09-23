@@ -217,7 +217,22 @@ export interface Bootstrap {
   diagnostics: string[];
   recoveries: Recovery[];
 }
+export interface ConversationFile {
+  path: string;
+  kind: "html" | "image" | "file" | "directory";
+  issue?: "missing" | "unassociated" | "tooLarge" | "unavailable";
+  content?: string;
+}
+
 export interface Requests {
+  conversationFile: {
+    input: {
+      id: string;
+      path: string;
+      action: "inspect" | "preview" | "open" | "reveal" | "chrome";
+    };
+    output: ConversationFile;
+  };
   jiraSave: { input: JiraSettingsInput; output: JiraConnection };
   jiraTest: { input: JiraSettingsInput; output: string };
   jiraRemove: { input: undefined; output: void };

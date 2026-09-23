@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
 import {
@@ -28,9 +29,10 @@ import {
   EyeIcon,
   CodeIcon,
   ChevronDownIcon,
-  FolderIcon,
+  FolderSearch,
   ChromeIcon,
 } from "lucide-react";
+import { Hint } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { useAppTranslation } from "@/i18n";
@@ -53,6 +55,10 @@ const Context = createContext<{
   open: (artifact: Artifact) => void;
   register: (id: string, preview: () => void) => () => void;
 } | null>(null);
+
+export function useArtifactWorkspace() {
+  return useContext(Context);
+}
 
 export function isHtmlArtifact(language: string, code: string) {
   return (
@@ -101,18 +107,45 @@ function downloadHtml(code: string, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function ArtifactCard({ code, path }: { code?: string; path?: string }) {
+function ArtifactCard({
+  code,
+  path,
+  label,
+}: {
+  code?: string;
+  path?: string;
+  label?: string;
+}) {
   const context = useContext(Context);
   const { t } = useAppTranslation();
   const id = useId();
   const filename = path?.split(/[\\/]/).pop() || "web-preview.html";
+  const [resolvedPath, setResolvedPath] = useState(path);
+  useEffect(() => {
+    let active = true;
+    if (path && context?.conversationId)
+      void window.worklens
+        .invoke("conversationFile", {
+          id: context.conversationId,
+          path,
+          action: "inspect",
+        })
+        .then((file) => {
+          if (active && file) setResolvedPath(file.path);
+        })
+        .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [path, context?.conversationId]);
   const title = useMemo(
     () =>
-      code
+      label ||
+      (code
         ? new DOMParser().parseFromString(code, "text/html").title.trim() ||
           t("htmlArtifact.webPreview")
-        : filename.replace(/\.html?$/i, ""),
-    [code, filename, t],
+        : filename),
+    [code, label, filename, t],
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -132,12 +165,20 @@ function ArtifactCard({ code, path }: { code?: string; path?: string }) {
     setLoading(true);
     setError(false);
     try {
-      const html =
-        code ??
-        (await window.worklens.invoke("previewHtml", {
-          id: context.conversationId!,
-          path: path!,
-        }));
+      const file = path
+        ? await window.worklens.invoke("conversationFile", {
+            id: context.conversationId!,
+            path,
+            action: "preview",
+          })
+        : undefined;
+      if (file?.issue) {
+        if (current === generation.current)
+          toast.add({ type: "error", title: t(`localFiles.${file.issue}`) });
+        return;
+      }
+      const html = code ?? file?.content;
+      if (html === undefined) throw new Error("HTML unavailable");
       if (current !== generation.current || !button.current) return;
       if (download) downloadHtml(html, filename);
       else
@@ -173,23 +214,28 @@ function ArtifactCard({ code, path }: { code?: string; path?: string }) {
         className="html-artifact-card"
         aria-busy={loading}
       >
-        <Button
-          ref={button}
-          variant="ghost"
-          className="artifact-card-open"
-          aria-label={t("htmlArtifact.openPreview") + ": " + title}
-          onClick={() => void action()}
+        <Hint
+          disabled={!path}
+          content={<span className="link-target-hint">{resolvedPath}</span>}
         >
-          <span className="artifact-card-icon">
-            <GlobeIcon aria-hidden="true" className="size-5" />
-          </span>
-          <span className="min-w-0 flex-1 text-left">
-            <span className="block truncate font-medium">{title}</span>
-            <span className="block text-sm text-muted-foreground">
-              Code · HTML
+          <Button
+            ref={button}
+            variant="ghost"
+            className="artifact-card-open"
+            aria-label={t("htmlArtifact.openPreview") + ": " + title}
+            onClick={() => void action()}
+          >
+            <span className="artifact-card-icon">
+              <GlobeIcon aria-hidden="true" className="size-5" />
             </span>
-          </span>
-        </Button>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate font-medium">{title}</span>
+              <span className="block text-sm text-muted-foreground">
+                Code · HTML
+              </span>
+            </span>
+          </Button>
+        </Hint>
         <span className="artifact-split-button">
           <Button
             variant="outline"
@@ -202,7 +248,7 @@ function ArtifactCard({ code, path }: { code?: string; path?: string }) {
               ? t("htmlArtifact.loadingPlaceholder")
               : t("htmlArtifact.download")}
           </Button>
-          <ArtifactActions source={{ path, code }} />
+          <ArtifactActions source={path ? { path } : { code }} />
         </span>
       </span>
       {error && (
@@ -216,8 +262,14 @@ function ArtifactCard({ code, path }: { code?: string; path?: string }) {
 export function HtmlArtifactCard({ code }: { code: string }) {
   return <ArtifactCard code={code} />;
 }
-export function HtmlFileCard({ path }: { path: string }) {
-  return <ArtifactCard path={path} />;
+export function HtmlFileCard({
+  path,
+  label,
+}: {
+  path: string;
+  label?: string;
+}) {
+  return <ArtifactCard path={path} label={label} />;
 }
 
 export function HtmlArtifactWorkspace({
@@ -387,6 +439,15 @@ function ArtifactActions({
   const perform = async (action: "chrome" | "reveal") => {
     if (!context?.conversationId) return;
     try {
+      if (source.path) {
+        const result = await window.worklens.invoke("conversationFile", {
+          id: context.conversationId,
+          path: source.path,
+          action,
+        });
+        if (result.issue) throw new Error(result.issue);
+        return;
+      }
       await window.worklens.invoke("htmlFileAction", {
         id: context.conversationId,
         ...(source.path ? { path: source.path } : { code: source.code }),
@@ -417,29 +478,31 @@ function ArtifactActions({
         <ChevronDownIcon className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
-        {download && (
-          <DropdownMenuItem onClick={download}>
-            <DownloadIcon />
-            {t("htmlArtifact.downloadAsHTML")}
-          </DropdownMenuItem>
-        )}
-        {nativeActions && (
-          <DropdownMenuItem
-            disabled={!mac}
-            onClick={() => void perform("chrome")}
-          >
-            <ChromeIcon />
-            {t("htmlArtifact.openInGoogleChrome")}
-          </DropdownMenuItem>
-        )}
-        {nativeActions && (
-          <DropdownMenuItem onClick={() => void perform("reveal")}>
-            <FolderIcon />
-            {mac
-              ? t("htmlArtifact.showInFinder")
-              : t("htmlArtifact.showInFolder")}
-          </DropdownMenuItem>
-        )}
+        <DropdownMenuGroup>
+          {download && (
+            <DropdownMenuItem onClick={download}>
+              <DownloadIcon />
+              {t("htmlArtifact.downloadAsHTML")}
+            </DropdownMenuItem>
+          )}
+          {nativeActions && (
+            <DropdownMenuItem
+              disabled={!mac}
+              onClick={() => void perform("chrome")}
+            >
+              <ChromeIcon />
+              {t("htmlArtifact.openInGoogleChrome")}
+            </DropdownMenuItem>
+          )}
+          {nativeActions && (
+            <DropdownMenuItem onClick={() => void perform("reveal")}>
+              <FolderSearch />
+              {mac
+                ? t("htmlArtifact.showInFinder")
+                : t("htmlArtifact.showInFolder")}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

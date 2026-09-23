@@ -96,3 +96,28 @@ for (const language of ["en", "zh"]) {
     await expect(page).toHaveURL(initialUrl);
   });
 }
+
+test("long URL labels shorten without changing navigation or descriptive labels", async ({ page }) => {
+  await mockWorklens(page);
+  const url = "https://example.com/" + "long-path/".repeat(12) + "report.html?version=complete";
+  await page.addInitScript((url) => {
+    const invoke = window.worklens.invoke;
+    const view = { id: "long-url", title: "Links", phase: "completed", updatedAt: new Date().toISOString(), messages: [{ id: "a", role: "assistant", text: url + "\n\n[Read the report](" + url + ")\n\n`" + url + "`" }] };
+    window.worklens.invoke = async (name, input) => {
+      if (name === "external") { window.openedUrl = input.url; return; }
+      if (name === "open") return view;
+      const result = await invoke(name, input);
+      if (name === "bootstrap") { result.conversations = [view]; result.settings.lastConversation = view.id; }
+      return result;
+    };
+  }, url);
+  await page.goto("/");
+  const shortened = page.getByRole("link", { name: "example.com/…/report.html?…", exact: true });
+  await expect(shortened).toHaveCount(2);
+  await expect(shortened.first()).toHaveAttribute("href", url);
+  await shortened.first().hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toContainText(url);
+  await shortened.first().click();
+  expect(await page.evaluate(() => window.openedUrl)).toBe(url);
+  await expect(page.getByRole("link", { name: "Read the report", exact: true })).toHaveAttribute("href", url);
+});

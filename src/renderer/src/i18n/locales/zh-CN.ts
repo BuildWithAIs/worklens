@@ -291,13 +291,21 @@ const zhCN = {
     skillEnabled: "已启用 {{skill}}",
     skillDisabled: "已禁用 {{skill}}",
   },
+  localFiles: {
+    actions: "文件操作",
+    copyPath: "复制路径",
+    pathCopied: "路径已复制",
+    missing: "文件不存在，可能已被移动或删除。",
+    unassociated: "此文件尚未与当前任务关联。",
+    tooLarge: "文件过大，无法预览。仍可打开文件或在文件夹中定位。",
+    unavailable: "无法访问或预览文件，可重试或使用文件菜单。",
+  },
   htmlArtifact: {
     webPreview: "网页预览",
     openPreview: "打开预览",
     loadingPlaceholder: "加载中…",
     download: "下载",
-    unavailableDescription:
-      "无法预览：文件可能已丢失、超过大小限制或不在运行目录内。",
+    unavailableDescription: "无法预览此 HTML。",
     displayMode: "展示方式",
     preview: "预览",
     code: "代码",

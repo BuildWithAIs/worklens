@@ -13,6 +13,10 @@ import {
 } from "@/components/worklens/HtmlArtifact";
 import remarkGfm from "remark-gfm";
 import { remarkCjkAutolinks } from "@/lib/remark-cjk-autolinks";
+import { remarkLocalFiles } from "@/lib/remark-local-files";
+import { LocalFileLink } from "@/components/worklens/LocalFileLink";
+import { shortUrl } from "@/lib/link-label";
+import { Hint } from "@/components/ui/tooltip";
 import {
   type ComponentPropsWithoutRef,
   type FC,
@@ -21,6 +25,9 @@ import {
   useContext,
   useMemo,
   useRef,
+  Children,
+  isValidElement,
+  type ReactNode,
 } from "react";
 import { useAuiState, type TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
@@ -53,6 +60,7 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
 };
 
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
+  const assistant = useAuiState((s) => s.message.role === "assistant");
   const stableComponents = useShallowStable(components);
   const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents;
@@ -64,7 +72,11 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
 
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm, remarkCjkAutolinks]}
+      remarkPlugins={[
+        remarkGfm,
+        remarkCjkAutolinks,
+        [remarkLocalFiles, { enabled: assistant }],
+      ]}
       className={cn(
         "aui-md font-normal antialiased",
         compact ? "text-sm leading-6" : "text-[14px] leading-[1.7]",
@@ -136,34 +148,76 @@ function ChatLink({
   className,
   href,
   onClick,
+  "data-local-path": localPath,
+  "data-local-label": localLabel,
+  "data-local-description": localDescription,
   ...props
-}: ComponentPropsWithoutRef<"a">) {
+}: ComponentPropsWithoutRef<"a"> & {
+  "data-local-path"?: string;
+  "data-local-label"?: string;
+  "data-local-description"?: string;
+}) {
   const { t } = useAppTranslation();
+  if (localPath)
+    return /\.html?$/i.test(localPath) ? (
+      <HtmlFileCard path={localPath} label={localLabel} />
+    ) : (
+      <LocalFileLink path={localPath} label={localLabel}>
+        {localDescription ? props.children : undefined}
+      </LocalFileLink>
+    );
+  const textOf = (node: ReactNode): string =>
+    Children.toArray(node)
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : isValidElement<{ children?: ReactNode }>(item)
+            ? textOf(item.props.children)
+            : "",
+      )
+      .join("");
+  const text = textOf(props.children);
+  const shortened =
+    href &&
+    isInlineWebUrl(text) &&
+    text.replace(/\/$/, "") === href.replace(/\/$/, "")
+      ? shortUrl(text)
+      : text;
+  const link = (
+    <a
+      {...props}
+      children={shortened !== text ? shortened : props.children}
+      href={href}
+      className={cn(
+        "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+        className,
+      )}
+      onClick={(event) => {
+        if (!href || !/^https?:\/\//i.test(href)) {
+          onClick?.(event);
+          return;
+        }
+        event.preventDefault();
+        void window.worklens.invoke("external", { url: href }).catch(() => {
+          toast.add({
+            type: "error",
+            title: t("chatLinks.openFailed"),
+            timeout: 0,
+            priority: "high",
+          });
+        });
+      }}
+    />
+  );
   return (
     <InsideChatLink.Provider value={true}>
-      <a
-        {...props}
-        href={href}
-        className={cn(
-          "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
-          className,
-        )}
-        onClick={(event) => {
-          if (!href || !/^https?:\/\//i.test(href)) {
-            onClick?.(event);
-            return;
-          }
-          event.preventDefault();
-          void window.worklens.invoke("external", { url: href }).catch(() => {
-            toast.add({
-              type: "error",
-              title: t("chatLinks.openFailed"),
-              timeout: 0,
-              priority: "high",
-            });
-          });
-        }}
-      />
+      {href && /^https?:\/\//i.test(href) ? (
+        <Hint content={<span className="link-target-hint">{href}</span>}>
+          {link}
+        </Hint>
+      ) : (
+        link
+      )}
     </InsideChatLink.Provider>
   );
 }
@@ -328,15 +382,8 @@ const defaultComponents = memoizeMarkdownComponents({
   code: function Code({ className, ...props }) {
     const isCodeBlock = useIsMarkdownCodeBlock();
     const insideLink = useContext(InsideChatLink);
-    const assistant = useAuiState((s) => s.message.role === "assistant");
     const path =
       typeof props.children === "string" ? props.children.trim() : "";
-    if (
-      assistant &&
-      !isCodeBlock &&
-      /^(?:\/|[A-Za-z]:[\\/]).*\.html?$/i.test(path)
-    )
-      return <HtmlFileCard path={path} />;
     if (!isCodeBlock && !insideLink && isInlineWebUrl(path))
       return (
         <ChatLink href={path} className="aui-md-code-link">

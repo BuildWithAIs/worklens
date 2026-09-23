@@ -1,5 +1,14 @@
 import { useState } from "react";
 import type { LocalArtifact } from "../../../../shared/contracts";
+import { ChevronDownIcon, FolderSearch, DownloadIcon } from "lucide-react";
+import { Hint } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useAppTranslation } from "@/i18n";
 export function ArtifactFiles({ result }: { result: unknown }) {
@@ -27,46 +36,75 @@ export function ArtifactFiles({ result }: { result: unknown }) {
   }
   return (
     <div
-      className="my-2 flex flex-col gap-2"
+      className="artifact-file-list flex flex-col gap-2"
       aria-label={t("artifacts.savedFiles")}
     >
       {files.map((file) => (
         <div
           key={file.id}
-          className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+          data-slot="artifact-file-card"
+          aria-busy={busy}
+          className="html-artifact-card"
         >
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium" title={file.path}>
-              {file.name}
-            </p>
+            <Hint
+              content={<span className="link-target-hint">{file.path}</span>}
+            >
+              <p className="truncate font-medium" tabIndex={0}>
+                {file.name}
+              </p>
+            </Hint>
             <p className="text-xs text-muted-foreground">
               {(file.size / 1024).toFixed(1)} KB
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() => void act(file.id, "open")}
-          >
-            {t("common.open")}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => void act(file.id, "show")}
-          >
-            {t("artifacts.showInFolder")}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => void act(file.id, "saveAs")}
-          >
-            {t("artifacts.saveAs")}
-          </Button>
+          <span className="artifact-split-button">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void act(file.id, "open")}
+            >
+              {t("common.open")}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                disabled={busy}
+                render={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="artifact-menu-trigger"
+                    aria-label={t("localFiles.actions") + ": " + file.name}
+                  />
+                }
+              >
+                <ChevronDownIcon className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-56">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    disabled={busy}
+                    onClick={() => void act(file.id, "show")}
+                  >
+                    <FolderSearch />
+                    {t(
+                      navigator.platform.startsWith("Mac")
+                        ? "htmlArtifact.showInFinder"
+                        : "artifacts.showInFolder",
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={busy}
+                    onClick={() => void act(file.id, "saveAs")}
+                  >
+                    <DownloadIcon />
+                    {t("artifacts.saveAs")}
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
         </div>
       ))}
       {error && (

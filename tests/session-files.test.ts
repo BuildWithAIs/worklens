@@ -205,6 +205,45 @@ test("HTML preview and native action copies belong to the conversation and rejec
   expect(await readFile(bFile, "utf8")).toBe("<html>B</html>");
 });
 
+test("conversation file links resolve workspace and external output across restart", async () => {
+  const f = await setup();
+  const a = await f.write("<html>Local</html>");
+  await f.end(a.runId);
+  const external = join(f.root, "external report.html");
+  const edited = await f.send(
+    "TOOL " +
+      JSON.stringify({
+        name: "write",
+        args: { path: external, content: "<html>External</html>" },
+      }),
+    a.id,
+  );
+  await f.end(edited.runId);
+  const delivered = await f.send(
+    `Files: \`workspace/report.html\` and [external](<${external}>)`,
+    a.id,
+  );
+  await f.end(delivered.runId);
+  for (let pass = 0; pass < 2; pass++) {
+    expect(
+      await f.service.conversationFile(a.id, "workspace/report.html", true),
+    ).toMatchObject({
+      path: join(sessionWorkspace(f.paths.sessions, a.id), "report.html"),
+      kind: "html",
+      content: "<html>Local</html>",
+    });
+    expect(await f.service.conversationFile(a.id, external, true)).toEqual({
+      path: external,
+      kind: "html",
+      content: "<html>External</html>",
+    });
+    await expect(
+      f.service.conversationFile(a.id, join(f.root, "unmentioned.txt")),
+    ).rejects.toThrow("Unreferenced");
+    if (!pass) await f.restart();
+  }
+});
+
 test("legacy conversations keep their shared runtime while owned legacy downloads are cleaned", async () => {
   const f = await setup();
   const legacyFile = join(f.paths.runtime, "legacy.html");

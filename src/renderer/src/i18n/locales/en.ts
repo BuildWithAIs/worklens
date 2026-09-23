@@ -310,13 +310,23 @@ const en = {
     skillEnabled: "{{skill}} enabled",
     skillDisabled: "{{skill}} disabled",
   },
+  localFiles: {
+    actions: "File actions",
+    copyPath: "Copy path",
+    pathCopied: "Path copied",
+    missing: "File not found. It may have been moved or deleted.",
+    unassociated: "This file has not been associated with the current task.",
+    tooLarge:
+      "This file is too large to preview. You can still open it or show it in its folder.",
+    unavailable:
+      "Couldn’t access or preview the file. You can retry or use the file menu.",
+  },
   htmlArtifact: {
     webPreview: "Web preview",
     openPreview: "Open preview",
     loadingPlaceholder: "Loading…",
     download: "Download",
-    unavailableDescription:
-      "Unable to preview. The file may be missing, too large, or outside the runtime folder.",
+    unavailableDescription: "Unable to preview this HTML.",
     displayMode: "Display mode",
     preview: "Preview",
     code: "Code",

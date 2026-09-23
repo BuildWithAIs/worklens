@@ -7,10 +7,12 @@ import { useEffect, useRef, useState } from "react";
 
 export type UseCopyToClipboardOptions = {
   copiedDuration?: number;
+  successMessage?: string;
 };
 
 export const useCopyToClipboard = ({
   copiedDuration = 3000,
+  successMessage,
 }: UseCopyToClipboardOptions = {}) => {
   const { t } = useAppTranslation();
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -24,6 +26,8 @@ export const useCopyToClipboard = ({
 
     copyText(value).then(
       () => {
+        if (successMessage)
+          toast.add({ type: "success", title: successMessage });
         setIsCopied(true);
         clearTimeout(timer.current);
         timer.current = setTimeout(() => setIsCopied(false), copiedDuration);

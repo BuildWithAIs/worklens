@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { countNewItems } from "@/lib/count-new-items";
-import { FileSearchCorner, Info, RefreshCw } from "lucide-react";
+import { FolderSearch, Info, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
@@ -275,7 +275,7 @@ export function SkillsSettings({
                           })}
                           onClick={() => void reveal(skill)}
                         >
-                          <FileSearchCorner strokeWidth={1.75} />
+                          <FolderSearch strokeWidth={1.75} />
                         </Button>
                       </Hint>
                       <Hint
