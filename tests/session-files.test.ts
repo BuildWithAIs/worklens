@@ -230,11 +230,13 @@ test("conversation file links resolve workspace and external output across resta
     ).toMatchObject({
       path: join(sessionWorkspace(f.paths.sessions, a.id), "report.html"),
       kind: "html",
+      produced: true,
       content: "<html>Local</html>",
     });
     expect(await f.service.conversationFile(a.id, external, true)).toEqual({
       path: external,
       kind: "html",
+      produced: true,
       content: "<html>External</html>",
     });
     await expect(

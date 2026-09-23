@@ -10,12 +10,14 @@ import {
   HtmlArtifactCard,
   HtmlFileCard,
   isHtmlArtifact,
+  useArtifactWorkspace,
 } from "@/components/worklens/HtmlArtifact";
 import remarkGfm from "remark-gfm";
 import { remarkCjkAutolinks } from "@/lib/remark-cjk-autolinks";
 import { remarkLocalFiles } from "@/lib/remark-local-files";
 import { LocalFileLink } from "@/components/worklens/LocalFileLink";
 import { shortUrl } from "@/lib/link-label";
+import { localReferences } from "../../../../../shared/file-references";
 import { Hint } from "@/components/ui/tooltip";
 import {
   type ComponentPropsWithoutRef,
@@ -24,12 +26,18 @@ import {
   createContext,
   useContext,
   useMemo,
+  useEffect,
+  useState,
   useRef,
   Children,
   isValidElement,
   type ReactNode,
 } from "react";
-import { useAuiState, type TextMessagePartProps } from "@assistant-ui/react";
+import {
+  useAuiState,
+  useMessagePartText,
+  type TextMessagePartProps,
+} from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
@@ -61,6 +69,50 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
 
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
   const assistant = useAuiState((s) => s.message.role === "assistant");
+  const running = useAuiState((s) => s.thread.isRunning);
+  const { text } = useMessagePartText();
+  const conversationId = useArtifactWorkspace()?.conversationId;
+  const candidates = JSON.stringify(
+    assistant ? localReferences(text).sort() : [],
+  );
+  const [verification, setVerification] = useState<{
+    conversationId: string;
+    paths: ReadonlySet<string>;
+  }>();
+  useEffect(() => {
+    let active = true;
+    if (!conversationId || !assistant) return;
+    const paths: string[] = JSON.parse(candidates);
+    void Promise.all(
+      paths.map(async (path) => {
+        try {
+          const file = await window.worklens.invoke("conversationFile", {
+            id: conversationId,
+            path,
+            action: "inspect",
+          });
+          return file?.produced && !file.issue ? path : undefined;
+        } catch {
+          return undefined;
+        }
+      }),
+    ).then((results) => {
+      if (active)
+        setVerification({
+          conversationId,
+          paths: new Set(
+            results.filter((path): path is string => path !== undefined),
+          ),
+        });
+    });
+    return () => {
+      active = false;
+    };
+  }, [assistant, conversationId, candidates, running]);
+  const producedPaths =
+    verification?.conversationId === conversationId
+      ? (verification?.paths ?? new Set<string>())
+      : new Set<string>();
   const stableComponents = useShallowStable(components);
   const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents;
@@ -75,7 +127,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
       remarkPlugins={[
         remarkGfm,
         remarkCjkAutolinks,
-        [remarkLocalFiles, { enabled: assistant }],
+        [remarkLocalFiles, { enabled: assistant, producedPaths }],
       ]}
       className={cn(
         "aui-md font-normal antialiased",

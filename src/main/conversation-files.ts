@@ -63,6 +63,32 @@ function evidence(context: FileContext) {
   });
 }
 
+/** Output provenance is distinct from permission to inspect/read a file. */
+async function wasProduced(context: FileContext, actual: string) {
+  const outputs = context.messages.flatMap((message) => {
+    if (message.role !== "tool" || message.status !== "success") return [];
+    const paths = message.artifacts?.map((file) => file.path) ?? [];
+    if (["write", "edit"].includes(message.toolName ?? "")) {
+      if (message.targetPath) paths.push(message.targetPath);
+      else {
+        try {
+          const args = JSON.parse(message.args ?? "{}");
+          if (typeof args.path === "string") paths.push(args.path);
+        } catch {
+          /* Incomplete arguments are not output evidence. */
+        }
+      }
+    }
+    return paths;
+  });
+  for (const output of new Set(outputs)) {
+    const resolved = await resolveReference(context.cwd, output);
+    if ((await realpath(resolved).catch(() => resolved)) === actual)
+      return true;
+  }
+  return false;
+}
+
 const imageTypes: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -118,7 +144,11 @@ export async function inspectConversationFile(
     const info = await stat(actual);
     if (!info.isFile() && !info.isDirectory())
       return { ...file, issue: "unavailable" };
-    return { path: actual, kind: info.isDirectory() ? "directory" : kind };
+    return {
+      path: actual,
+      kind: info.isDirectory() ? "directory" : kind,
+      ...((await wasProduced(context, actual)) ? { produced: true } : {}),
+    };
   } catch (error) {
     return {
       ...file,

@@ -89,7 +89,7 @@ test("external files require specific task evidence, not merely an assistant men
   );
   f.context.messages.at(-1)!.status = "success";
   const file = await inspectConversationFile(f.context, external);
-  expect(file).toEqual({ path: external, kind: "html" });
+  expect(file).toEqual({ path: external, kind: "html", produced: true });
   expect((await previewConversationFile(file)).content).toBe(
     "<html>draft</html>",
   );
@@ -150,6 +150,72 @@ test("oversized previews do not disable native actions; deleted files and escapi
     "directory",
   );
 });
+
+test.each(["html", "png", "txt", "sh", "toml"])(
+  "only successful output records mark existing %s files as produced",
+  async (extension) => {
+    const f = await fixture();
+    const path = join(f.cwd, `result.${extension}`);
+    await writeFile(path, "output");
+    const ref = `workspace/result.${extension}`;
+    f.mention(ref);
+    f.context.messages.push({ id: "u", role: "user", text: `Read ${path}` });
+    expect(
+      (await inspectConversationFile(f.context, ref)).produced,
+    ).toBeUndefined();
+    const tool = {
+      id: "t",
+      role: "tool" as const,
+      toolName: "read",
+      status: "success" as const,
+      targetPath: path,
+      text: "Read",
+    };
+    f.context.messages.push(tool);
+    expect(
+      (await inspectConversationFile(f.context, ref)).produced,
+    ).toBeUndefined();
+    for (const toolName of ["write", "edit"]) {
+      f.context.messages[f.context.messages.length - 1] = {
+        ...tool,
+        toolName,
+        status: "error",
+      };
+      expect(
+        (await inspectConversationFile(f.context, ref)).produced,
+      ).toBeUndefined();
+      f.context.messages[f.context.messages.length - 1] = { ...tool, toolName };
+      expect((await inspectConversationFile(f.context, ref)).produced).toBe(
+        true,
+      );
+      f.context.messages[f.context.messages.length - 1] = {
+        ...tool,
+        toolName,
+        targetPath: undefined,
+        args: JSON.stringify({ path: `result.${extension}` }),
+      };
+      expect((await inspectConversationFile(f.context, ref)).produced).toBe(
+        true,
+      );
+    }
+    f.context.messages[f.context.messages.length - 1] = {
+      ...tool,
+      toolName: "export",
+      targetPath: undefined,
+      artifacts: [{ id: "out", name: `result.${extension}`, path, size: 6 }],
+    };
+    expect((await inspectConversationFile(f.context, ref)).produced).toBe(true);
+    f.context.messages.at(-1)!.status = "error";
+    expect(
+      (await inspectConversationFile(f.context, ref)).produced,
+    ).toBeUndefined();
+    f.context.messages.at(-1)!.status = "success";
+    await rm(path);
+    expect(await inspectConversationFile(f.context, ref)).toMatchObject({
+      issue: "missing",
+    });
+  },
+);
 
 test("reference parsing keeps URLs distinct and supports spaces, Unicode and Windows paths", () => {
   for (const url of [

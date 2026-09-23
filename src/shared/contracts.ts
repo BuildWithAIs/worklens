@@ -220,6 +220,8 @@ export interface Bootstrap {
 export interface ConversationFile {
   path: string;
   kind: "html" | "image" | "file" | "directory";
+  /** A successful write/edit or explicit tool artifact identifies this as output. */
+  produced?: boolean;
   issue?: "missing" | "unassociated" | "tooLarge" | "unavailable";
   content?: string;
 }

@@ -97,6 +97,55 @@ for (const language of ["en", "zh"]) {
   });
 }
 
+for (const theme of ["light", "dark"]) {
+  test(`www links stop before Chinese prose and restore inline code (${theme})`, async ({ page }, info) => {
+    await mockWorklens(page);
+    await page.addInitScript(() => {
+      const invoke = window.worklens.invoke;
+      const view = {
+        id: "cjk-links",
+        title: "信息来源",
+        phase: "completed",
+        updatedAt: new Date().toISOString(),
+        messages: [{
+          id: "a", role: "assistant",
+          text: "## 信息来源\n\n- 南京图书馆官网 www.jslib.org.cn（首页开馆时间、`/gk/xdnt/` 南图简介，均返回 200 且内容正常）\n- 参考 www.example.com（`opening hours`，**开放时间**）",
+        }],
+      };
+      window.externalLinks = [];
+      window.worklens.invoke = async (method, input) => {
+        if (method === "external") { window.externalLinks.push(input.url); return; }
+        if (method === "open") return view;
+        const result = await invoke(method, input);
+        if (method === "bootstrap") {
+          result.conversations = [view];
+          result.settings.lastConversation = view.id;
+        }
+        return result;
+      };
+    });
+    await page.goto("/");
+    await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
+    const link = page.getByRole("link", { name: "www.jslib.org.cn", exact: true });
+    await expect(link).toHaveAttribute("href", "http://www.jslib.org.cn");
+    await expect(page.locator("a").filter({ hasText: "首页开馆时间" })).toHaveCount(0);
+    await expect(page.locator("code").filter({ hasText: /^\/gk\/xdnt\/$/ })).toBeVisible();
+    await expect(page.locator('[data-slot="local-file-reference"]')).toHaveCount(0);
+    await expect(page.locator("code").filter({ hasText: /^opening hours$/ })).toBeVisible();
+    await expect(page.locator("strong").filter({ hasText: "开放时间" })).toBeVisible();
+    await link.hover();
+    await expect(page.locator('[data-slot="tooltip-content"]')).toContainText("http://www.jslib.org.cn");
+    await link.click();
+    await link.focus();
+    await page.keyboard.press("Enter");
+    expect(await page.evaluate(() => window.externalLinks)).toEqual([
+      "http://www.jslib.org.cn", "http://www.jslib.org.cn",
+    ]);
+    await page.locator(".chat-header").hover();
+    await page.screenshot({ path: info.outputPath(`cjk-links-${theme}.png`) });
+  });
+}
+
 test("long URL labels shorten without changing navigation or descriptive labels", async ({ page }) => {
   await mockWorklens(page);
   const url = "https://example.com/" + "long-path/".repeat(12) + "report.html?version=complete";

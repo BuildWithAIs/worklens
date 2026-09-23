@@ -19,9 +19,14 @@ function fileLink(path: string, label?: string): Link {
   };
 }
 
-export function remarkLocalFiles({ enabled = true } = {}) {
+export function remarkLocalFiles({
+  enabled = true,
+  producedPaths = new Set<string>(),
+}: { enabled?: boolean; producedPaths?: ReadonlySet<string> } = {}) {
   return (tree: Root) => {
     if (!enabled) return;
+    const actionable = (path: string) =>
+      isLocalReference(path) && producedPaths.has(path);
     function walk(parent: Parent) {
       for (let index = 0; index < parent.children.length; index++) {
         const child = parent.children[index];
@@ -33,6 +38,17 @@ export function remarkLocalFiles({ enabled = true } = {}) {
             /* literal path */
           }
           if (isLocalReference(path)) {
+            if (!actionable(path)) {
+              // A suggested or unavailable file is ordinary content, not an
+              // actionable deliverable. Preserve inline formatting and labels.
+              const fallback =
+                child.type === "link"
+                  ? child.children
+                  : [{ type: "text" as const, value: child.alt || path }];
+              parent.children.splice(index, 1, ...fallback);
+              index += fallback.length - 1;
+              continue;
+            }
             const labelText = (node: {
               value?: string;
               children?: unknown[];
@@ -55,15 +71,14 @@ export function remarkLocalFiles({ enabled = true } = {}) {
           }
           continue;
         }
-        if (
-          child.type === "inlineCode" &&
-          isLocalReference(child.value.trim())
-        ) {
+        if (child.type === "inlineCode" && actionable(child.value.trim())) {
           parent.children[index] = fileLink(child.value.trim());
           continue;
         }
         if (child.type === "text") {
-          const spans = localPathSpans(child.value);
+          const spans = localPathSpans(child.value).filter((span) =>
+            actionable(span.value),
+          );
           if (!spans.length) continue;
           const nodes: (Link | { type: "text"; value: string })[] = [];
           let offset = 0;

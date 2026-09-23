@@ -285,32 +285,54 @@ export function HtmlArtifactWorkspace({
   const registry = useRef(new Map<string, () => void>());
   const baseline = useRef(new Set<string>());
   const wasRunning = useRef(running);
-  const register = useCallback((id: string, preview: () => void) => {
-    registry.current.set(id, preview);
-    return () => {
-      registry.current.delete(id);
-    };
+  const autoPending = useRef(false);
+  const previewFresh = useCallback(() => {
+    if (!autoPending.current) return;
+    if (!window.matchMedia("(min-width: 1101px)").matches) {
+      autoPending.current = false;
+      return;
+    }
+    const fresh = [...registry.current].filter(
+      ([id]) => !baseline.current.has(id),
+    );
+    if (!fresh.length) return;
+    autoPending.current = false;
+    fresh.at(-1)?.[1]();
   }, []);
+  const register = useCallback(
+    (id: string, preview: () => void) => {
+      registry.current.set(id, preview);
+      // File inspection may finish after the run-end frame. Wait for the verified
+      // card to register before consuming this run's automatic preview.
+      const frame = requestAnimationFrame(previewFresh);
+      return () => {
+        cancelAnimationFrame(frame);
+        registry.current.delete(id);
+      };
+    },
+    [previewFresh],
+  );
   useEffect(() => {
-    if (running && !wasRunning.current)
+    autoPending.current = false;
+  }, [conversationId]);
+  useEffect(() => {
+    if (running && !wasRunning.current) {
+      autoPending.current = false;
       baseline.current = new Set(registry.current.keys());
+    }
     const completed = wasRunning.current && !running;
     wasRunning.current = running;
     if (!completed) return;
-    const frame = requestAnimationFrame(() => {
-      if (!window.matchMedia("(min-width: 1101px)").matches) return;
-      const fresh = [...registry.current].filter(
-        ([id]) => !baseline.current.has(id),
-      );
-      fresh.at(-1)?.[1]();
-    });
+    autoPending.current = true;
+    const frame = requestAnimationFrame(previewFresh);
     return () => cancelAnimationFrame(frame);
-  }, [running]);
+  }, [running, previewFresh]);
   const document = useMemo(
     () => (artifact ? staticHtml(artifact.code) : ""),
     [artifact],
   );
   const close = () => {
+    autoPending.current = false;
     const trigger = artifact?.trigger;
     setArtifact(null);
     requestAnimationFrame(() => trigger?.isConnected && trigger.focus());
@@ -324,6 +346,7 @@ export function HtmlArtifactWorkspace({
         conversationId,
         register,
         open: (item) => {
+          autoPending.current = false;
           setArtifact(item);
           setMode("preview");
         },

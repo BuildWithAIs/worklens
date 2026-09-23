@@ -58,7 +58,7 @@ async function setup(page, language = "en") {
             : /\.(png|jpg)$/.test(path)
               ? "image"
               : "file";
-        const file = { path, kind };
+        const file = { path, kind, produced: true };
         if (path.includes("deleted")) return { ...file, issue: "missing" };
         if (input.action === "preview" && path.includes("large"))
           return { ...file, issue: "tooLarge" };
@@ -103,7 +103,7 @@ for (const theme of ["light", "dark"]) {
       theme,
     );
     const links = page.locator('[data-slot="local-file-link"]');
-    await expect(links).toHaveCount(5);
+    await expect(links).toHaveCount(4);
     const image = links.filter({ hasText: "sample-layout-wide.png" });
     await expect(image).toHaveText("sample-layout-wide.png");
     await expect(image).toHaveCSS("white-space", "normal");
@@ -252,39 +252,9 @@ for (const language of ["en", "zh"]) {
       "chrome",
     );
     await expect(page.getByRole("menu")).toHaveCount(0);
-    const deleted = links.filter({ hasText: "deleted.png" });
-    await deleted.click();
-    expect(
-      (await page.evaluate(() => window.fileActions)).at(-1),
-    ).toMatchObject({ action: "preview", path: "workspace/deleted.png" });
+    await expect(links.filter({ hasText: "deleted.png" })).toHaveCount(0);
     await expect(
-      page.locator('[data-slot="toast-title"]').filter({
-        hasText: language === "en" ? "File not found" : "文件不存在",
-      }),
-    ).toBeVisible();
-    await page.mouse.move(0, 0);
-    await deleted.hover();
-    await deleted.locator("..").getByRole("button").click();
-    await expect(
-      page.getByRole("menuitem", {
-        name: language === "en" ? "Copy path" : "复制路径",
-      }),
-    ).toBeEnabled();
-    await expect(
-      page.getByRole("menuitem", {
-        name: language === "en" ? "Show in Finder" : "在 Finder 中显示",
-        exact: true,
-      }),
-    ).toHaveAttribute("aria-disabled", "true");
-    await page
-      .getByRole("menuitem", {
-        name: language === "en" ? "Copy path" : "复制路径",
-      })
-      .click();
-    await expect(
-      page
-        .locator('[data-slot="toast-title"]')
-        .filter({ hasText: language === "en" ? "Path copied" : "路径已复制" }),
+      page.locator("code").filter({ hasText: /^workspace\/deleted\.png$/ }),
     ).toBeVisible();
   });
 }
@@ -316,6 +286,7 @@ for (const theme of ["light", "dark"]) {
               "/Users/example/Library/Application Support/WorkLens/sessions/current/workspace/" +
               input.path.split("/").pop(),
             kind: input.path.endsWith(".html") ? "html" : "file",
+            produced: true,
           };
         if (name === "open") return view;
         const result = await invoke(name, input);
@@ -432,6 +403,7 @@ test("changing a file target clears pending state and ignores its old response",
         return {
           path: "/tmp/" + input.path.split("/").pop(),
           kind: input.path.endsWith("png") ? "image" : "file",
+          produced: true,
         };
       }
       if (name === "open") return structuredClone(view);
@@ -457,3 +429,198 @@ test("changing a file target clears pending state and ignores its old response",
     .poll(() => page.evaluate(() => window.fileCalls.at(-1)))
     .toMatchObject({ path: "workspace/new.txt", action: "open" });
 });
+
+for (const theme of ["light", "dark"]) {
+  test(`file suggestions and existing prose references stay text (${theme})`, async ({
+    page,
+  }, info) => {
+    await mockWorklens(page);
+    await page.addInitScript(() => {
+      const invoke = window.worklens.invoke;
+      const view = {
+        id: "file-suggestions",
+        title: "Files",
+        phase: "generating",
+        updatedAt: new Date().toISOString(),
+        messages: [
+          {
+            id: "a",
+            role: "assistant",
+            text: "我可以帮你写成文件，比如：\n\n- `国学入门计划.md`：12 周读什么\n- `workspace/关系表.html`：关系速查\n- [参考表](参考表.md)：还没输出\n\n你的 `statusline-command.sh` 已经在读取配置。\n\n网页路径 `/gk/xdnt/` 保持原样。",
+          },
+        ],
+      };
+      window.fileChecks = [];
+      window.worklens.onChat = (listener) => {
+        window.finishSuggestedFile = () => {
+          window.suggestionExists = true;
+          view.phase = "completed";
+          listener({
+            conversationId: view.id,
+            runId: "files",
+            sequence: 1,
+            type: "run_end",
+            view: structuredClone(view),
+          });
+        };
+        return () => {};
+      };
+      window.worklens.invoke = async (name, input) => {
+        if (name === "conversationFile") {
+          window.fileChecks.push(input);
+          if (input.path === "statusline-command.sh") {
+            if (input.action === "inspect" && !window.scriptInspected) {
+              return new Promise((resolve) => {
+                window.confirmScript = () => {
+                  window.scriptInspected = true;
+                  resolve({ path: "/tmp/statusline-command.sh", kind: "file" });
+                };
+              });
+            }
+            return { path: "/tmp/statusline-command.sh", kind: "file" };
+          }
+          return {
+            path: "/tmp/" + input.path,
+            kind: input.path.endsWith("html") ? "html" : "file",
+            ...(window.suggestionExists && input.path === "国学入门计划.md"
+              ? { produced: true }
+              : { issue: "missing" }),
+          };
+        }
+        if (name === "open") return structuredClone(view);
+        const result = await invoke(name, input);
+        if (name === "bootstrap") {
+          result.conversations = [view];
+          result.settings.lastConversation = view.id;
+        }
+        return result;
+      };
+    });
+    await page.goto("/");
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    await expect
+      .poll(() => page.evaluate(() => typeof window.confirmScript))
+      .toBe("function");
+    await expect(
+      page.locator('[data-slot="local-file-reference"]'),
+    ).toHaveCount(0);
+    await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(0);
+    await expect(
+      page.locator("code").filter({ hasText: /^statusline-command\.sh$/ }),
+    ).toBeVisible();
+    await page.evaluate(() => window.confirmScript());
+    await expect(
+      page.getByRole("link", { name: "statusline-command.sh", exact: true }),
+    ).toHaveCount(0);
+    const script = page
+      .locator("code")
+      .filter({ hasText: /^statusline-command\.sh$/ });
+    await expect(script).toBeVisible();
+    await expect(
+      page.locator('[data-slot="local-file-reference"]'),
+    ).toHaveCount(0);
+    await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(0);
+    await expect(page.locator("li")).toHaveCount(3);
+    await expect(
+      page.locator("code").filter({ hasText: /^国学入门计划\.md$/ }),
+    ).toBeVisible();
+    await expect(
+      page.locator("code").filter({ hasText: /^workspace\/关系表\.html$/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "参考表", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.locator("code").filter({ hasText: /^\/gk\/xdnt\/$/ }),
+    ).toBeVisible();
+    await script.hover();
+    await expect(page.locator(".local-file-menu")).toHaveCount(0);
+    await page.screenshot({
+      path: info.outputPath(`file-suggestions-${theme}.png`),
+    });
+    await page.evaluate(() => window.finishSuggestedFile());
+    await expect(
+      page.getByRole("link", { name: "国学入门计划.md", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(0);
+  });
+}
+
+for (const theme of ["light", "dark"]) {
+  test(`output records distinguish deliverables from existing references (${theme})`, async ({
+    page,
+  }) => {
+    await mockWorklens(page);
+    await page.addInitScript(() => {
+      const invoke = window.worklens.invoke;
+      const view = {
+        id: "output-provenance",
+        title: "Output provenance",
+        phase: "completed",
+        updatedAt: new Date().toISOString(),
+        messages: [
+          {
+            id: "a",
+            role: "assistant",
+            text: "现有配置 `workspace/config.toml`，脚本 `workspace/existing.sh`，图片 `workspace/existing.png`，说明 `workspace/existing.txt`，页面 `workspace/existing.html`。\n\n已生成 `workspace/result.png` 和 `workspace/result.txt`，脚本 `workspace/result.sh`。\n\n[官网](https://example.com/page.html)",
+          },
+        ],
+      };
+      window.worklens.invoke = async (name, input) => {
+        if (name === "conversationFile")
+          return {
+            path: "/tmp/" + input.path,
+            kind: input.path.endsWith("html")
+              ? "html"
+              : input.path.endsWith("png")
+                ? "image"
+                : "file",
+            produced: input.path.includes("result."),
+          };
+        if (name === "external") {
+          window.externalUrl = input.url;
+          return;
+        }
+        if (name === "open") return view;
+        const result = await invoke(name, input);
+        if (name === "bootstrap") {
+          result.conversations = [view];
+          result.settings.lastConversation = view.id;
+        }
+        return result;
+      };
+    });
+    await page.goto("/");
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    await expect(page.locator('[data-slot="local-file-link"]')).toHaveText([
+      "result.png",
+      "result.txt",
+      "result.sh",
+    ]);
+    await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(0);
+    for (const name of [
+      "config.toml",
+      "existing.sh",
+      "existing.png",
+      "existing.txt",
+      "existing.html",
+    ]) {
+      await expect(
+        page.locator("code").filter({ hasText: `workspace/${name}` }),
+      ).toBeVisible();
+      await expect(page.getByRole("link", { name, exact: true })).toHaveCount(
+        0,
+      );
+    }
+    const web = page.getByRole("link", { name: "官网", exact: true });
+    await expect(web).toHaveCSS("text-decoration-line", "underline");
+    await web.click();
+    await expect
+      .poll(() => page.evaluate(() => window.externalUrl))
+      .toBe("https://example.com/page.html");
+  });
+}
