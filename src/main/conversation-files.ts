@@ -116,6 +116,31 @@ export async function inspectConversationFile(
         ),
       ),
     ];
+    // A prose filename can refer to a sibling of another file used in this
+    // task. Resolve only inside managed roots, and never choose among duplicates.
+    // This establishes a link target, not evidence that the file was produced.
+    if (!resolved.length && basename(reference) === reference) {
+      const known = await Promise.all(
+        evidence(context).map((value) => resolveReference(context.cwd, value)),
+      );
+      const directories = new Set<string>();
+      for (const candidate of known) {
+        if (
+          !context.roots.some(
+            (root) => candidate === resolve(root) || isWithin(root, candidate),
+          )
+        )
+          continue;
+        const info = await stat(candidate).catch(() => undefined);
+        if (info)
+          directories.add(info.isDirectory() ? candidate : dirname(candidate));
+      }
+      for (const directory of directories) {
+        const candidate = resolve(directory, reference);
+        if (await stat(candidate).catch(() => undefined))
+          resolved.push(candidate);
+      }
+    }
     if (resolved.length > 1)
       return { path, kind: "file", issue: "unavailable" };
     if (resolved.length === 1) path = resolved[0];

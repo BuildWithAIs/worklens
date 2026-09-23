@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CopyIcon, FolderSearch, MoreHorizontalIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CopyIcon, FolderSearch } from "lucide-react";
 import type { ConversationFile, Requests } from "../../../../shared/contracts";
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
+  ContextMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { ContextMenu } from "@base-ui/react/context-menu";
 import { Hint } from "@/components/ui/tooltip";
-import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
+
 import { fileName } from "@/lib/link-label";
 import { ImageZoom } from "@/components/assistant-ui/elements/image";
 import { toast } from "@/components/ui/toast";
@@ -22,13 +21,9 @@ type Action = Requests["conversationFile"]["input"]["action"];
 export function LocalFileLink({
   path,
   label: displayLabel,
-  children,
-  actions = true,
 }: {
   path: string;
   label?: string;
-  children?: ReactNode;
-  actions?: boolean;
 }) {
   const context = useArtifactWorkspace();
   const id = context?.conversationId;
@@ -40,6 +35,8 @@ export function LocalFileLink({
   const [image, setImage] = useState<ConversationFile>();
   const [busy, setBusy] = useState(false);
   const anchor = useRef<HTMLAnchorElement>(null);
+  const firstAction = useRef<HTMLDivElement>(null);
+  const keyboardMenu = useRef(false);
   const generation = useRef(0);
   const acting = useRef(false);
   useEffect(() => {
@@ -142,74 +139,89 @@ export function LocalFileLink({
 
   return (
     <>
-      <span className="local-file-reference" data-slot="local-file-reference">
-        <Hint
-          content={
-            <span className="link-target-hint">{file?.path ?? path}</span>
+      <ContextMenu.Root
+        onOpenChangeComplete={(open) => {
+          if (open && keyboardMenu.current) firstAction.current?.focus();
+          if (!open) keyboardMenu.current = false;
+        }}
+      >
+        <ContextMenu.Trigger
+          render={
+            <span
+              className="local-file-reference"
+              data-slot="local-file-reference"
+            />
           }
         >
-          <a
-            ref={anchor}
-            href="#"
-            data-slot="local-file-link"
-            className="aui-md-a local-file-link text-primary hover:text-primary/80 underline underline-offset-2"
-            aria-busy={busy}
-            onClick={(event) => {
-              event.preventDefault();
-              const selection = window.getSelection();
-              if (
-                event.detail > 0 &&
-                selection &&
-                !selection.isCollapsed &&
-                selection.containsNode(event.currentTarget, true)
-              )
-                return;
-              void perform("preview");
-            }}
+          <Hint
+            content={
+              <span className="link-target-hint">{file?.path ?? path}</span>
+            }
           >
-            {displayLabel || fileName(file?.path ?? path)}
-          </a>
-        </Hint>
-        {children}
-        {actions && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <TooltipIconButton
-                  tooltip={t("localFiles.actions")}
-                  aria-label={
-                    t("localFiles.actions") +
-                    ": " +
-                    (displayLabel || fileName(file?.path ?? path))
-                  }
-                  className="local-file-menu"
-                />
-              }
+            <a
+              ref={anchor}
+              href="#"
+              data-slot="local-file-link"
+              className="aui-md-a local-file-link text-primary hover:text-primary/80 underline underline-offset-2"
+              aria-busy={busy}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "ContextMenu" ||
+                  (event.shiftKey && event.key === "F10")
+                ) {
+                  event.preventDefault();
+                  keyboardMenu.current = true;
+                  const box = event.currentTarget.getBoundingClientRect();
+                  event.currentTarget.dispatchEvent(
+                    new MouseEvent("contextmenu", {
+                      bubbles: true,
+                      clientX: box.left,
+                      clientY: box.bottom,
+                    }),
+                  );
+                }
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                const selection = window.getSelection();
+                if (
+                  event.detail > 0 &&
+                  selection &&
+                  !selection.isCollapsed &&
+                  selection.containsNode(event.currentTarget, true)
+                )
+                  return;
+                void perform("preview");
+              }}
             >
-              <MoreHorizontalIcon />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-max min-w-45">
-              <DropdownMenuGroup>
-                <DropdownMenuItem
-                  onClick={() => void perform("reveal")}
-                  disabled={busy || !!unavailable}
-                >
-                  <FolderSearch />
-                  {t(
-                    navigator.platform.startsWith("Mac")
-                      ? "htmlArtifact.showInFinder"
-                      : "htmlArtifact.showInFolder",
-                  )}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => void copyPath()}>
-                  <CopyIcon />
-                  {t("localFiles.copyPath")}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </span>
+              {displayLabel || fileName(file?.path ?? path)}
+            </a>
+          </Hint>
+        </ContextMenu.Trigger>
+        <ContextMenuContent className="w-max min-w-45" finalFocus={anchor}>
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              ref={unavailable ? undefined : firstAction}
+              onClick={() => void perform("reveal")}
+              disabled={busy || !!unavailable}
+            >
+              <FolderSearch />
+              {t(
+                navigator.platform.startsWith("Mac")
+                  ? "htmlArtifact.showInFinder"
+                  : "htmlArtifact.showInFolder",
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              ref={unavailable ? firstAction : undefined}
+              onClick={() => void copyPath()}
+            >
+              <CopyIcon />
+              {t("localFiles.copyPath")}
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </ContextMenuContent>
+      </ContextMenu.Root>
       {image?.content && (
         <ImageZoom
           src={image.content}

@@ -1419,13 +1419,6 @@ kbd {
 
 .local-file-link { overflow-wrap: anywhere; white-space: normal; user-select: text; }
 .local-file-reference { display: inline; }
-.local-file-menu { display: inline-flex; margin-inline-start: 4px; vertical-align: middle; }
-@media (hover: hover) and (pointer: fine) {
-  .local-file-menu { opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
-  .local-file-reference:hover .local-file-menu,
-  .local-file-reference:focus-within .local-file-menu,
-  .local-file-menu[data-popup-open] { opacity: 1; pointer-events: auto; }
-}
 .link-target-hint { overflow-wrap: anywhere; white-space: normal; }
 .local-file-link:focus-visible { outline: 2px solid var(--border); outline-offset: 3px; border-radius: 2px; }
 .local-file-link[aria-busy="true"] { cursor: progress; }

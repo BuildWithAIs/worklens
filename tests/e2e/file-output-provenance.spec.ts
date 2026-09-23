@@ -16,6 +16,14 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
     "<!doctype html><html><body><h1>Generated legacy page</h1></body></html>";
   await writeFile(output, html);
   await writeFile(reference, "<html>Existing source page</html>");
+  const reportDir = join(runtime, "bili_luming");
+  await mkdir(reportDir);
+  const report = join(reportDir, "REPORT.md");
+  await writeFile(report, "Report");
+  await writeFile(
+    join(reportDir, "report.html"),
+    "<html><body><h1>Sibling report preview</h1></body></html>",
+  );
   const id = randomUUID();
   const timestamp = new Date().toISOString();
   const assistant = (content: unknown[], stopReason = "stop") => ({
@@ -56,10 +64,29 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
       isError: false,
       timestamp: Date.now(),
     },
+    assistant(
+      [
+        {
+          type: "toolCall",
+          id: "edit-report",
+          name: "edit",
+          arguments: { path: report, oldText: "Old", newText: "Report" },
+        },
+      ],
+      "toolUse",
+    ),
+    {
+      role: "toolResult",
+      toolCallId: "edit-report",
+      toolName: "edit",
+      content: [{ type: "text", text: "Updated" }],
+      isError: false,
+      timestamp: Date.now(),
+    },
     assistant([
       {
         type: "text",
-        text: `已创建 \`${output}\`。\n\n内容很简单：一个页面。\n\n打开方式：\n\n\`\`\`bash\nopen ${output}\n\`\`\`\n\n现有参考 \`${reference}\`。`,
+        text: `报告文件（REPORT.md / report.html）里现在还有受这个错误影响的表述。\n\n已创建 \`${output}\`。\n\n内容很简单：一个页面。\n\n打开方式：\n\n\`\`\`bash\nopen ${output}\n\`\`\`\n\n现有参考 \`${reference}\`。`,
       },
     ]),
   ];
@@ -75,7 +102,7 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
     {
       type: "session_info",
       id: "title",
-      parentId: "entry-3",
+      parentId: `entry-${messages.length - 1}`,
       timestamp,
       name: "Legacy HTML output",
     },
@@ -103,7 +130,7 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
     await expect(card).toHaveCount(1);
     await expect(card).toContainText("index.html");
     await expect(
-      page.locator("code").filter({ hasText: reference }),
+      page.getByRole("link", { name: "existing.html", exact: true }),
     ).toBeVisible();
     expect(
       await page.evaluate(
@@ -116,6 +143,51 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
         { id, path: output },
       ),
     ).toMatchObject({ kind: "html", produced: true });
+    const reportLink = page.getByRole("link", {
+      name: "REPORT.md",
+      exact: true,
+    });
+    const htmlLink = page.getByRole("link", {
+      name: "report.html",
+      exact: true,
+    });
+    await expect(reportLink).toBeVisible();
+    await expect(htmlLink).toBeVisible();
+    const paragraph = page
+      .locator(".aui-md-p")
+      .filter({ hasText: "报告文件（" });
+    await expect(paragraph).toHaveText(
+      "报告文件（REPORT.md / report.html）里现在还有受这个错误影响的表述。",
+    );
+    await expect(paragraph.locator("button")).toHaveCount(0);
+    await expect(paragraph.locator('[data-slot="html-file-card"]')).toHaveCount(
+      0,
+    );
+    const spacing = await paragraph.evaluate((node) => {
+      const links = node.querySelectorAll("a");
+      const canvas = document.createElement("canvas").getContext("2d")!;
+      canvas.font = getComputedStyle(node).font;
+      return {
+        actual:
+          links[1].getBoundingClientRect().left -
+          links[0].getBoundingClientRect().right,
+        expected: canvas.measureText(" / ").width,
+      };
+    });
+    expect(Math.abs(spacing.actual - spacing.expected)).toBeLessThan(1);
+    const bounds = await htmlLink.boundingBox();
+    await reportLink.hover();
+    await reportLink.focus();
+    expect(await htmlLink.boundingBox()).toEqual(bounds);
+    await page.screenshot({
+      path: test.info().outputPath("report-inline-links.png"),
+    });
+    await htmlLink.click();
+    await expect(
+      page
+        .frameLocator("iframe")
+        .getByRole("heading", { name: "Sibling report preview" }),
+    ).toBeVisible();
     await card.locator(".artifact-card-open").click();
     await expect(
       page
@@ -270,7 +342,7 @@ for (const legacy of [true, false]) {
           page.getByRole("link", { name, exact: true }),
         ).toBeVisible();
       await expect(
-        page.locator("code").filter({ hasText: /^existing\.sh$/ }),
+        page.getByRole("link", { name: "existing.sh", exact: true }),
       ).toBeVisible();
       const reference = page.getByRole("link", {
         name: "普通引用",
@@ -280,9 +352,7 @@ for (const legacy of [true, false]) {
       await expect(
         reference.locator("..").locator("..").locator(".local-file-menu"),
       ).toHaveCount(0);
-      await expect(page.locator(".local-file-menu")).toHaveCount(
-        legacy ? 0 : names.length,
-      );
+      await expect(page.locator(".local-file-menu")).toHaveCount(0);
       await page
         .getByRole("link", { name: "bmw-logo-white.svg", exact: true })
         .click();
@@ -314,13 +384,14 @@ for (const legacy of [true, false]) {
         })
         .click();
       await page.getByRole("link", { name: "README", exact: true }).click();
-      const opened = await app.evaluate(
-        () => (globalThis as any).openedOutputPaths,
-      );
-      expect(opened.map((path: string) => path.split("/").pop())).toEqual([
-        "result.uninventedformat123456789",
-        "README",
-      ]);
+      await expect
+        .poll(async () => {
+          const opened = await app.evaluate(
+            () => (globalThis as any).openedOutputPaths,
+          );
+          return opened.map((path: string) => path.split("/").pop());
+        })
+        .toEqual(["result.uninventedformat123456789", "README"]);
       await page.reload();
       for (const name of names)
         await expect(

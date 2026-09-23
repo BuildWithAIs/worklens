@@ -84,12 +84,21 @@ async function setup(page, language = "en") {
 
 test.describe("touch file actions", () => {
   test.use({ hasTouch: true });
-  test("menu stays visible without hover", async ({ page }) => {
+  test("long press opens actions without inline controls", async ({ page }) => {
     await setup(page);
-    const more = page.locator(".local-file-menu").first();
-    await expect(more).toHaveCSS("opacity", "1");
-    await more.tap();
+    await expect(page.locator(".local-file-menu")).toHaveCount(0);
+    const link = page.locator('[data-slot="local-file-link"]').first();
+    const box = await link.boundingBox();
+    const client = await page.context().newCDPSession(page);
+    await client.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: box.x + 5, y: box.y + 5 }],
+    });
     await expect(page.getByRole("menu")).toBeVisible();
+    await client.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
   });
 });
 
@@ -108,25 +117,19 @@ for (const theme of ["light", "dark"]) {
     await expect(image).toHaveText("sample-layout-wide.png");
     await expect(image).toHaveCSS("white-space", "normal");
     await expect(image).toHaveCSS("overflow-wrap", "anywhere");
-    const more = image.locator("..").getByRole("button");
-    await page.mouse.move(0, 0);
-    await expect(more).toHaveCSS("opacity", "0");
+    await expect(image.locator("..").getByRole("button")).toHaveCount(0);
+    await expect(page.locator(".local-file-menu")).toHaveCount(0);
     const restingBounds = await image.boundingBox();
     await image.hover();
-    await expect(more).toHaveCSS("opacity", "1");
     expect(await image.boundingBox()).toEqual(restingBounds);
-    await page.mouse.move(0, 0);
-    await expect(more).toHaveCSS("opacity", "0");
     await image.focus();
-    await page.keyboard.press("Tab");
-    await expect(more).toBeFocused();
-    await page.keyboard.press("Enter");
+    await page.keyboard.press("Shift+F10");
     await expect(page.getByRole("menuitem").first()).toBeFocused();
     await page
       .getByRole("menu")
       .screenshot({ path: info.outputPath(`file-menu-${theme}.png`) });
     await page.keyboard.press("Escape");
-    await expect(more).toBeFocused();
+    await expect(image).toBeFocused();
     const web = page.getByRole("link", { name: "Website", exact: true });
     const typography = (node) => ({
       size: getComputedStyle(node).fontSize,
@@ -156,7 +159,7 @@ for (const theme of ["light", "dark"]) {
     await expect(image).toBeFocused();
     await page.mouse.move(0, 0);
     await image.hover();
-    await more.click();
+    await image.click({ button: "right" });
     await expect(page.getByRole("menuitem")).toHaveCount(2);
     await page.getByRole("menuitem", { name: "Copy path" }).click();
     await expect
@@ -307,6 +310,7 @@ for (const theme of ["light", "dark"]) {
       "sample-captions.srt",
       "sample-log.txt",
       "sample-summary.md",
+      "sample-page.html",
       "sample-sound.mp3",
       "records.js",
       "controller.js",
@@ -314,18 +318,13 @@ for (const theme of ["light", "dark"]) {
     for (const link of await links.all()) {
       expect(
         await link.evaluate((node) =>
-          node.nextSibling?.textContent?.startsWith("："),
+          node
+            .closest('[data-slot="local-file-reference"]')
+            .nextSibling?.textContent?.startsWith("："),
         ),
       ).toBe(true);
-      const row = link.locator("..");
-      await row.hover();
-      const more = row.getByRole("button");
-      await expect(more).toHaveCSS("opacity", "1");
-      expect(
-        await more.evaluate(
-          (node) => node.previousSibling?.textContent?.length,
-        ),
-      ).toBeGreaterThan(1);
+      await link.hover();
+      await expect(link.locator("..").getByRole("button")).toHaveCount(0);
     }
     await page.mouse.move(0, 0);
     const card = page.locator('[data-slot="html-file-card"]');
@@ -334,11 +333,9 @@ for (const theme of ["light", "dark"]) {
     await expect(page.locator('li [data-slot="html-file-card"]')).toHaveCount(
       0,
     );
-    const description = page
-      .locator(".aui-md-p")
-      .filter({ hasText: /^示例交互页面$/ });
+    const description = page.locator("li").filter({ hasText: "示例交互页面" });
     await expect(description).toBeVisible();
-    expect((await description.boundingBox()).y).toBeGreaterThan(
+    expect((await description.boundingBox()).y).toBeLessThan(
       (await card.boundingBox()).y,
     );
     await expect(page.locator(".aui-md")).not.toContainText("workspace/");
@@ -431,7 +428,7 @@ test("changing a file target clears pending state and ignores its old response",
 });
 
 for (const theme of ["light", "dark"]) {
-  test(`file suggestions and existing prose references stay text (${theme})`, async ({
+  test(`missing suggestions stay text and available prose references become links (${theme})`, async ({
     page,
   }, info) => {
     await mockWorklens(page);
@@ -511,16 +508,14 @@ for (const theme of ["light", "dark"]) {
       page.locator("code").filter({ hasText: /^statusline-command\.sh$/ }),
     ).toBeVisible();
     await page.evaluate(() => window.confirmScript());
-    await expect(
-      page.getByRole("link", { name: "statusline-command.sh", exact: true }),
-    ).toHaveCount(0);
-    const script = page
-      .locator("code")
-      .filter({ hasText: /^statusline-command\.sh$/ });
+    const script = page.getByRole("link", {
+      name: "statusline-command.sh",
+      exact: true,
+    });
     await expect(script).toBeVisible();
     await expect(
       page.locator('[data-slot="local-file-reference"]'),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
     await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(0);
     await expect(page.locator("li")).toHaveCount(3);
     await expect(
@@ -597,6 +592,11 @@ for (const theme of ["light", "dark"]) {
       document.documentElement.dataset.theme = theme;
     }, theme);
     await expect(page.locator('[data-slot="local-file-link"]')).toHaveText([
+      "config.toml",
+      "existing.sh",
+      "existing.png",
+      "existing.txt",
+      "existing.html",
       "result.png",
       "result.txt",
       "result.sh",
@@ -611,10 +611,8 @@ for (const theme of ["light", "dark"]) {
     ]) {
       await expect(
         page.locator("code").filter({ hasText: `workspace/${name}` }),
-      ).toBeVisible();
-      await expect(page.getByRole("link", { name, exact: true })).toHaveCount(
-        0,
-      );
+      ).toHaveCount(0);
+      await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
     }
     const web = page.getByRole("link", { name: "官网", exact: true });
     await expect(web).toHaveCSS("text-decoration-line", "underline");

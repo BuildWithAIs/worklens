@@ -276,3 +276,84 @@ test("duplicate basenames never select an arbitrary output; SVG preview uses the
     /^data:image\/svg\+xml;base64,/,
   );
 });
+
+test("prose resolves managed task siblings independently of output provenance", async () => {
+  const f = await fixture();
+  const directory = join(f.cwd, "bili_luming");
+  await mkdir(directory);
+  const report = join(directory, "REPORT.md");
+  const page = join(directory, "report.html");
+  await writeFile(report, "Report");
+  await writeFile(page, "<html>Report preview</html>");
+  f.context.messages.push(
+    {
+      id: "edit",
+      role: "tool",
+      toolName: "edit",
+      status: "success",
+      targetPath: report,
+      text: "Updated",
+    },
+    {
+      id: "answer",
+      role: "assistant",
+      text: "报告文件（REPORT.md / report.html）里现在还有受这个错误影响的表述。",
+    },
+  );
+  expect(await inspectConversationFile(f.context, "REPORT.md")).toEqual({
+    path: report,
+    kind: "file",
+    produced: true,
+  });
+  const file = await inspectConversationFile(f.context, "report.html");
+  expect(file).toEqual({ path: page, kind: "html" });
+  expect((await previewConversationFile(file)).content).toBe(
+    "<html>Report preview</html>",
+  );
+  const other = join(f.cwd, "other");
+  await mkdir(other);
+  await writeFile(join(other, "report.html"), "Other");
+  f.context.messages.push({
+    id: "read",
+    role: "tool",
+    toolName: "read",
+    status: "success",
+    targetPath: join(other, "report.html"),
+    text: "Read",
+  });
+  expect((await inspectConversationFile(f.context, "report.html")).issue).toBe(
+    "unavailable",
+  );
+});
+
+test("sibling resolution does not expand external evidence or follow escaping symlinks", async () => {
+  const f = await fixture();
+  const known = join(f.root, "known.md");
+  const sibling = join(f.root, "report.html");
+  await writeFile(known, "known");
+  await writeFile(sibling, "private");
+  f.context.messages.push({
+    id: "read",
+    role: "tool",
+    toolName: "read",
+    status: "success",
+    targetPath: known,
+    text: "Read",
+  });
+  f.mention("report.html");
+  expect((await inspectConversationFile(f.context, "report.html")).issue).toBe(
+    "missing",
+  );
+  await symlink(f.root, join(f.cwd, "linked"));
+  f.context.messages.push({
+    id: "linked",
+    role: "tool",
+    toolName: "read",
+    status: "success",
+    targetPath: join(f.cwd, "linked", "known.md"),
+    text: "Read",
+  });
+  expect((await inspectConversationFile(f.context, "report.html")).issue).toBe(
+    "unassociated",
+  );
+});

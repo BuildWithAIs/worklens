@@ -225,24 +225,19 @@ function ChatLink({
   onClick,
   "data-local-path": localPath,
   "data-local-label": localLabel,
-  "data-local-description": localDescription,
-  "data-local-actions": localActionMode,
+  "data-local-display": localDisplay,
   ...props
 }: ComponentPropsWithoutRef<"a"> & {
   "data-local-path"?: string;
   "data-local-label"?: string;
-  "data-local-description"?: string;
-  "data-local-actions"?: string;
+  "data-local-display"?: string;
 }) {
   const { t } = useAppTranslation();
-  const localActions = localActionMode !== "false";
   if (localPath)
-    return localActions && /\.html?$/i.test(localPath) ? (
+    return localDisplay === "card" ? (
       <HtmlFileCard path={localPath} label={localLabel} />
     ) : (
-      <LocalFileLink path={localPath} label={localLabel} actions={localActions}>
-        {localDescription ? props.children : undefined}
-      </LocalFileLink>
+      <LocalFileLink path={localPath} label={localLabel} />
     );
   const textOf = (node: ReactNode): string =>
     Children.toArray(node)

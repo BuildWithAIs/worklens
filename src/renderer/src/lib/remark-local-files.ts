@@ -1,11 +1,11 @@
-import type { Link, List, Paragraph, Parent, Root, RootContent } from "mdast";
+import type { Link, Parent, Root } from "mdast";
 import { fileName } from "./link-label";
 import {
   isLocalReference,
   localPathSpans,
 } from "../../../shared/file-references";
 
-function fileLink(path: string, label?: string, actions = true): Link {
+function fileLink(path: string, label?: string): Link {
   return {
     type: "link",
     url: path,
@@ -13,7 +13,6 @@ function fileLink(path: string, label?: string, actions = true): Link {
     data: {
       hProperties: {
         "data-local-path": path,
-        ...(!actions ? { "data-local-actions": "false" } : {}),
         ...(label ? { "data-local-label": label } : {}),
       },
     },
@@ -32,7 +31,7 @@ export function remarkLocalFiles({
   return (tree: Root) => {
     if (!enabled) return;
     const actionable = (path: string) =>
-      isLocalReference(path) && producedPaths.has(path);
+      isLocalReference(path) && availablePaths.has(path);
     function walk(parent: Parent) {
       for (let index = 0; index < parent.children.length; index++) {
         const child = parent.children[index];
@@ -73,7 +72,6 @@ export function remarkLocalFiles({
                 label !== fileName(path)
                 ? label
                 : undefined,
-              producedPaths.has(path),
             );
           }
           continue;
@@ -83,7 +81,7 @@ export function remarkLocalFiles({
           continue;
         }
         if (child.type === "text") {
-          const spans = localPathSpans(child.value, [...producedPaths]).filter(
+          const spans = localPathSpans(child.value, [...availablePaths]).filter(
             (span) => actionable(span.value),
           );
           if (!spans.length) continue;
@@ -144,100 +142,43 @@ export function remarkLocalFiles({
         .join("/");
     }
 
-    const artifactParagraphs = (
-      paragraph: Paragraph,
-    ): Paragraph[] | undefined => {
-      const children = [...paragraph.children];
-      while (children[0]?.type === "text" && !children[0].value.trim())
-        children.shift();
-      const first = children[0];
+    // Keep all inline references in place. HTML cards are independent blocks;
+    // a lone HTML link can itself be a card, otherwise append it after the text.
+    const cards = new Map<string, Link>();
+    for (const link of links) {
+      if (producedPaths.has(link.url) && /\.html?$/i.test(link.url))
+        cards.set(link.url, link);
+    }
+    for (const child of tree.children) {
+      if (child.type !== "paragraph") continue;
+      const content = child.children.filter(
+        (node) => node.type !== "text" || node.value.trim(),
+      );
       if (
-        first?.type !== "link" ||
-        !first.data?.hProperties?.["data-local-path"] ||
-        first.data.hProperties["data-local-actions"] === "false" ||
-        !/\.html?$/i.test(first.url)
-      )
-        return;
-      const rest = children.slice(1);
-      if (rest[0]?.type === "text")
-        rest[0] = {
-          ...rest[0],
-          value: rest[0].value.replace(/^\s*[:：–—-]?\s*/, ""),
-        };
-      const description = rest;
-      while (description[0]?.type === "text" && !description[0].value.trim())
-        description.shift();
-      return [
-        { type: "paragraph", children: [first] },
-        ...(description.length
-          ? [{ type: "paragraph" as const, children: description }]
-          : []),
-      ];
-    };
-    // HTML deliverables are block content. Split simple unordered file lists
-    // around them, retaining the original order and accompanying description.
-    function layout(parent: Root | import("mdast").Blockquote) {
-      const output: RootContent[] = [];
-      for (const child of parent.children) {
-        if (child.type === "blockquote") layout(child);
-        if (child.type !== "list" || child.ordered) {
-          output.push(
-            ...(child.type === "paragraph"
-              ? (artifactParagraphs(child) ?? [child])
-              : [child]),
-          );
-          continue;
-        }
-        let items: List["children"] = [];
-        const flush = () => {
-          if (items.length) output.push({ ...child, children: items });
-          items = [];
-        };
-        for (const item of child.children) {
-          const blocks =
-            item.children.length === 1 &&
-            item.children[0].type === "paragraph" &&
-            item.checked == null
-              ? artifactParagraphs(item.children[0])
-              : undefined;
-          if (!blocks) items.push(item);
-          else {
-            flush();
-            output.push(...blocks);
-          }
-        }
-        flush();
-      }
-      parent.children = output as typeof parent.children;
-    }
-    layout(tree);
-    // Keep a single file's trailing description before its actions. Do not
-    // combine multiple links, which would make the action target ambiguous.
-    function groupDescriptions(parent: Parent) {
-      for (const child of parent.children) {
-        if (child.type === "paragraph") {
-          const nodes = [...child.children];
-          while (nodes[0]?.type === "text" && !nodes[0].value.trim())
-            nodes.shift();
-          const first = nodes[0];
-          const hasLink = (node: (typeof nodes)[number]): boolean =>
-            node.type === "link" ||
-            node.type === "linkReference" ||
-            ("children" in node && node.children.some(hasLink));
-          if (
-            first?.type === "link" &&
-            first.data?.hProperties?.["data-local-path"] &&
-            !/\.html?$/i.test(first.url) &&
-            nodes.length > 1 &&
-            !nodes.slice(1).some(hasLink)
-          ) {
-            first.data.hProperties["data-local-description"] = "true";
-            first.children = nodes.slice(1) as Link["children"];
-            child.children = [first];
-          }
-        } else if ("children" in child) groupDescriptions(child);
+        content.length === 1 &&
+        content[0].type === "link" &&
+        cards.has(content[0].url)
+      ) {
+        content[0].data!.hProperties!["data-local-display"] = "card";
+        cards.delete(content[0].url);
       }
     }
-    groupDescriptions(tree);
+    for (const link of cards.values()) {
+      tree.children.push({
+        type: "paragraph",
+        children: [
+          {
+            ...link,
+            data: {
+              ...link.data,
+              hProperties: {
+                ...link.data?.hProperties,
+                "data-local-display": "card",
+              },
+            },
+          },
+        ],
+      });
+    }
   };
 }

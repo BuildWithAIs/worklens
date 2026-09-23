@@ -179,12 +179,11 @@ test("a file entry does not enhance references inside its description", () => {
       {
         type: "link",
         url: "report.md",
-        children: [
-          { type: "text", value: "：说明 " },
-          { type: "inlineCode", value: "config.toml" },
-          { type: "text", value: " 的用途" },
-        ],
+        children: [{ type: "text", value: "report.md" }],
       },
+      { type: "text", value: "：说明 " },
+      { type: "inlineCode", value: "config.toml" },
+      { type: "text", value: " 的用途" },
     ],
   });
 });
@@ -315,17 +314,31 @@ test("deliverable lists use filenames, recognize subtitles, and separate HTML fr
       "workspace/recording.mp3",
     ]),
   })(tree);
-  expect(tree.children.map((node) => node.type)).toEqual([
-    "list",
-    "paragraph",
-    "paragraph",
-    "list",
-  ]);
+  expect(tree.children.map((node) => node.type)).toEqual(["list", "paragraph"]);
   expect(tree.children[1]).toMatchObject({
-    children: [{ type: "link", url: "workspace/sample-page.html" }],
+    children: [
+      {
+        type: "link",
+        url: "workspace/sample-page.html",
+        data: { hProperties: { "data-local-display": "card" } },
+      },
+    ],
   });
-  expect(tree.children[2]).toMatchObject({
-    children: [{ type: "text", value: "说明" }],
+  expect(tree.children[0]).toMatchObject({
+    children: [
+      {},
+      {
+        children: [
+          {
+            children: [
+              { url: "workspace/sample-page.html" },
+              { type: "text", value: "：说明" },
+            ],
+          },
+        ],
+      },
+      {},
+    ],
   });
 });
 
@@ -352,7 +365,7 @@ test("same filenames receive directory context without converting numbered lists
   remarkLocalFiles({
     producedPaths: new Set(["desktop/index.html", "mobile/index.html"]),
   })(tree);
-  expect(tree.children).toHaveLength(1);
+  expect(tree.children).toHaveLength(3);
   expect(tree.children[0]).toMatchObject({
     type: "list",
     start: 3,
@@ -387,7 +400,7 @@ test("same filenames receive directory context without converting numbered lists
   });
 });
 
-test("file descriptions stay outside the clickable filename and before its actions", () => {
+test("file descriptions remain original siblings", () => {
   const description = [
     { type: "text" as const, value: "：" },
     {
@@ -438,9 +451,9 @@ test("file descriptions stay outside the clickable filename and before its actio
     children: [
       {
         url: "sample-captions.srt",
-        children: description,
-        data: { hProperties: { "data-local-description": "true" } },
+        children: [{ value: "sample-captions.srt" }],
       },
+      ...description,
     ],
   });
   expect(tree.children[1]).toMatchObject({
@@ -449,7 +462,10 @@ test("file descriptions stay outside the clickable filename and before its actio
     ],
   });
   expect(tree.children[2]).toMatchObject({
-    children: [{ url: "notes.md", children: [{ value: "：Meeting notes" }] }],
+    children: [
+      { url: "notes.md", children: [{ value: "notes.md" }] },
+      { value: "：Meeting notes" },
+    ],
   });
   expect(tree.children[3]).toMatchObject({
     children: [
@@ -526,16 +542,21 @@ test("explicit available file links keep navigation without claiming output prov
       "[Script](/tmp/source.sh)\n\n[Page](/tmp/existing.html)\n\n[Document](/tmp/README)\n\n`/tmp/source.sh`",
     ),
   ) as Root;
+  expect(JSON.stringify(tree)).not.toContain("data-local-display");
   for (const child of tree.children.slice(0, 3))
     expect(child).toMatchObject({
       children: [
         {
           type: "link",
-          data: { hProperties: { "data-local-actions": "false" } },
         },
       ],
     });
   expect(tree.children[3]).toMatchObject({
-    children: [{ type: "inlineCode", value: "/tmp/source.sh" }],
+    children: [
+      {
+        type: "link",
+        url: "/tmp/source.sh",
+      },
+    ],
   });
 });
