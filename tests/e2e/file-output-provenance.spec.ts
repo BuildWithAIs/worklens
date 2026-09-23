@@ -130,3 +130,208 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+for (const legacy of [true, false]) {
+  test(`shell deliverables have links and SVG preview without extension gating (legacy: ${legacy})`, async () => {
+    const { worklensTools } = await import("../../src/main/tools");
+    const root = await mkdtemp(join(tmpdir(), "worklens-shell-delivery-"));
+    const runtime = join(root, "runtime");
+    const sessions = join(root, "sessions");
+    await mkdir(runtime, { recursive: true });
+    await mkdir(sessions, { recursive: true });
+    await writeFile(join(runtime, "existing.sh"), "echo existing");
+    const tool = worklensTools(runtime, () => {}).find(
+      (tool) =>
+        tool.name === (process.platform === "win32" ? "powershell" : "bash"),
+    )!;
+    // Exercise the real wrapper and persisted details, not fabricated produced flags.
+    const script =
+      "const f=require('node:fs'); f.mkdirSync('logo'); for(const name of ['bmw-logo-white.svg','result.uninventedformat123456789','README','.env','报告 最终版']) f.writeFileSync('logo/'+name, name.endsWith('.svg') ? '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\"><rect width=\"80\" height=\"80\" fill=\"royalblue\"/></svg>' : 'delivered'); f.writeFileSync('logo/preview-white.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=','base64'));";
+    const scriptPath = join(runtime, "make-output.cjs");
+    await writeFile(scriptPath, script);
+    const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+    const command =
+      process.platform === "win32"
+        ? `& '${process.execPath.replace(/'/g, "''")}' '${scriptPath.replace(/'/g, "''")}'`
+        : `${quote(process.execPath)} ${quote(scriptPath)}`;
+    const result = await tool.execute(
+      "make",
+      { command },
+      undefined,
+      undefined,
+    );
+    const names = [
+      "bmw-logo-white.svg",
+      "preview-white.png",
+      "result.uninventedformat123456789",
+      "README",
+      ".env",
+      "报告 最终版",
+    ];
+    const id = randomUUID();
+    const timestamp = new Date().toISOString();
+    const text =
+      "## 已保存文件\n\n" +
+      names
+        .map((name) =>
+          legacy
+            ? `- [${name}](<${join(runtime, "logo", name)}>) — 已保存`
+            : `- ${name} — 已保存`,
+        )
+        .join("\n") +
+      "\n\n你的 `existing.sh` 保持原样。\n\n[普通引用](existing.sh)\n\n[官网](https://example.com/)";
+    const usage = {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 2,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    };
+    const messages = [
+      { role: "user", content: "保存文件", timestamp: Date.now() },
+      {
+        role: "assistant",
+        api: "openai-completions",
+        provider: "fixture",
+        model: "fixture",
+        stopReason: "toolUse",
+        timestamp: Date.now(),
+        usage,
+        content: [
+          {
+            type: "toolCall",
+            id: "make",
+            name: tool.name,
+            arguments: { command },
+          },
+        ],
+      },
+      {
+        role: "toolResult",
+        toolCallId: "make",
+        toolName: tool.name,
+        content: result.content,
+        details: legacy ? { worklensShell: { exitCode: 0 } } : result.details,
+        isError: false,
+        timestamp: Date.now(),
+      },
+      {
+        role: "assistant",
+        api: "openai-completions",
+        provider: "fixture",
+        model: "fixture",
+        stopReason: "stop",
+        timestamp: Date.now(),
+        usage,
+        content: [{ type: "text", text }],
+      },
+    ];
+    const records = [
+      { type: "session", version: 3, id, timestamp, cwd: runtime },
+      ...messages.map((message, index) => ({
+        type: "message",
+        id: `m${index}`,
+        parentId: index ? `m${index - 1}` : null,
+        timestamp,
+        message,
+      })),
+      {
+        type: "session_info",
+        id: "name",
+        parentId: "m3",
+        timestamp,
+        name: "Shell outputs",
+      },
+    ];
+    await writeFile(
+      join(sessions, `${id}.jsonl`),
+      records.map((record) => JSON.stringify(record)).join("\n") + "\n",
+    );
+    const env: NodeJS.ProcessEnv = { ...process.env, WORKLENS_TEST_ROOT: root };
+    delete env.ELECTRON_RUN_AS_NODE;
+    for (const key of Object.keys(env))
+      if (
+        /(?:API_KEY|ACCESS_TOKEN|AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN)$/.test(key)
+      )
+        delete env[key];
+    const app = await electron.launch({
+      args: ["."],
+      cwd: resolve("."),
+      env: env as Record<string, string>,
+    });
+    try {
+      const page = await app.firstWindow();
+      await page
+        .getByRole("button", { name: "Shell outputs", exact: true })
+        .click();
+      for (const name of names)
+        await expect(
+          page.getByRole("link", { name, exact: true }),
+        ).toBeVisible();
+      await expect(
+        page.locator("code").filter({ hasText: /^existing\.sh$/ }),
+      ).toBeVisible();
+      const reference = page.getByRole("link", {
+        name: "普通引用",
+        exact: true,
+      });
+      await expect(reference).toBeVisible();
+      await expect(
+        reference.locator("..").locator("..").locator(".local-file-menu"),
+      ).toHaveCount(0);
+      await expect(page.locator(".local-file-menu")).toHaveCount(
+        legacy ? 0 : names.length,
+      );
+      await page
+        .getByRole("link", { name: "bmw-logo-white.svg", exact: true })
+        .click();
+      await expect(
+        page.locator('[data-slot="image-zoom-overlay"]'),
+      ).toBeVisible();
+      const image = page.locator('img[data-slot="image-zoom-content"]');
+      await expect(image).toHaveAttribute("src", /^data:image\/svg\+xml/);
+      await expect
+        .poll(() =>
+          image.evaluate((node: HTMLImageElement) => node.naturalWidth),
+        )
+        .toBe(80);
+      await page.screenshot({
+        path: test.info().outputPath(`shell-svg-${legacy}.png`),
+      });
+      await page.keyboard.press("Escape");
+      await app.evaluate(({ shell }) => {
+        (globalThis as any).openedOutputPaths = [];
+        shell.openPath = async (path) => {
+          (globalThis as any).openedOutputPaths.push(path);
+          return "";
+        };
+      });
+      await page
+        .getByRole("link", {
+          name: "result.uninventedformat123456789",
+          exact: true,
+        })
+        .click();
+      await page.getByRole("link", { name: "README", exact: true }).click();
+      const opened = await app.evaluate(
+        () => (globalThis as any).openedOutputPaths,
+      );
+      expect(opened.map((path: string) => path.split("/").pop())).toEqual([
+        "result.uninventedformat123456789",
+        "README",
+      ]);
+      await page.reload();
+      for (const name of names)
+        await expect(
+          page.getByRole("link", { name, exact: true }),
+        ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "官网", exact: true }),
+      ).toHaveCSS("text-decoration-line", "underline");
+    } finally {
+      await app.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}

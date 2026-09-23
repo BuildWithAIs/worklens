@@ -23,10 +23,12 @@ export function LocalFileLink({
   path,
   label: displayLabel,
   children,
+  actions = true,
 }: {
   path: string;
   label?: string;
   children?: ReactNode;
+  actions?: boolean;
 }) {
   const context = useArtifactWorkspace();
   const id = context?.conversationId;
@@ -169,42 +171,44 @@ export function LocalFileLink({
           </a>
         </Hint>
         {children}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <TooltipIconButton
-                tooltip={t("localFiles.actions")}
-                aria-label={
-                  t("localFiles.actions") +
-                  ": " +
-                  (displayLabel || fileName(file?.path ?? path))
-                }
-                className="local-file-menu"
-              />
-            }
-          >
-            <MoreHorizontalIcon />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-max min-w-45">
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => void perform("reveal")}
-                disabled={busy || !!unavailable}
-              >
-                <FolderSearch />
-                {t(
-                  navigator.platform.startsWith("Mac")
-                    ? "htmlArtifact.showInFinder"
-                    : "htmlArtifact.showInFolder",
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void copyPath()}>
-                <CopyIcon />
-                {t("localFiles.copyPath")}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {actions && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <TooltipIconButton
+                  tooltip={t("localFiles.actions")}
+                  aria-label={
+                    t("localFiles.actions") +
+                    ": " +
+                    (displayLabel || fileName(file?.path ?? path))
+                  }
+                  className="local-file-menu"
+                />
+              }
+            >
+              <MoreHorizontalIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-max min-w-45">
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  onClick={() => void perform("reveal")}
+                  disabled={busy || !!unavailable}
+                >
+                  <FolderSearch />
+                  {t(
+                    navigator.platform.startsWith("Mac")
+                      ? "htmlArtifact.showInFinder"
+                      : "htmlArtifact.showInFolder",
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void copyPath()}>
+                  <CopyIcon />
+                  {t("localFiles.copyPath")}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </span>
       {image?.content && (
         <ImageZoom

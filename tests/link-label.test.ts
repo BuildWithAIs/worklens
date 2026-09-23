@@ -486,3 +486,56 @@ test.each(["html", "png", "txt", "pdf", "docx", "sh", "toml"])(
     }
   },
 );
+
+test("known outputs in plain text support arbitrary extensions, no extension and spaces", () => {
+  const paths = [
+    "bmw-logo-white.svg",
+    "preview-white.png",
+    "result.uninventedformat123456789",
+    "README",
+    ".env",
+    "报告 最终版",
+  ];
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkLocalFiles, { producedPaths: new Set(paths) });
+  for (const path of paths) {
+    const tree = processor.runSync(processor.parse(`已保存 ${path}。`)) as Root;
+    expect(tree.children[0]).toMatchObject({
+      children: [
+        { type: "text", value: "已保存 " },
+        { type: "link", url: path },
+        { type: "text", value: "。" },
+      ],
+    });
+  }
+});
+
+test("explicit available file links keep navigation without claiming output provenance", () => {
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkLocalFiles, {
+      availablePaths: new Set([
+        "/tmp/source.sh",
+        "/tmp/existing.html",
+        "/tmp/README",
+      ]),
+    });
+  const tree = processor.runSync(
+    processor.parse(
+      "[Script](/tmp/source.sh)\n\n[Page](/tmp/existing.html)\n\n[Document](/tmp/README)\n\n`/tmp/source.sh`",
+    ),
+  ) as Root;
+  for (const child of tree.children.slice(0, 3))
+    expect(child).toMatchObject({
+      children: [
+        {
+          type: "link",
+          data: { hProperties: { "data-local-actions": "false" } },
+        },
+      ],
+    });
+  expect(tree.children[3]).toMatchObject({
+    children: [{ type: "inlineCode", value: "/tmp/source.sh" }],
+  });
+});

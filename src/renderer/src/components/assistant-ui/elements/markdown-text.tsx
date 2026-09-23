@@ -17,7 +17,10 @@ import { remarkCjkAutolinks } from "@/lib/remark-cjk-autolinks";
 import { remarkLocalFiles } from "@/lib/remark-local-files";
 import { LocalFileLink } from "@/components/worklens/LocalFileLink";
 import { shortUrl } from "@/lib/link-label";
-import { localReferences } from "../../../../../shared/file-references";
+import {
+  localReferences,
+  fileReferenceAliases,
+} from "../../../../../shared/file-references";
 import { Hint } from "@/components/ui/tooltip";
 import {
   type ComponentPropsWithoutRef,
@@ -71,13 +74,21 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
   const assistant = useAuiState((s) => s.message.role === "assistant");
   const running = useAuiState((s) => s.thread.isRunning);
   const { text } = useMessagePartText();
-  const conversationId = useArtifactWorkspace()?.conversationId;
+  const workspace = useArtifactWorkspace();
+  const conversationId = workspace?.conversationId;
+  const outputs = JSON.stringify(workspace?.outputPaths ?? []);
   const candidates = JSON.stringify(
-    assistant ? localReferences(text).sort() : [],
+    assistant
+      ? localReferences(
+          text,
+          fileReferenceAliases(workspace?.outputPaths ?? []),
+        ).sort()
+      : [],
   );
   const [verification, setVerification] = useState<{
     conversationId: string;
     paths: ReadonlySet<string>;
+    available: ReadonlySet<string>;
   }>();
   useEffect(() => {
     let active = true;
@@ -91,7 +102,9 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
             path,
             action: "inspect",
           });
-          return file?.produced && !file.issue ? path : undefined;
+          return file && !file.issue
+            ? { path, produced: file.produced }
+            : undefined;
         } catch {
           return undefined;
         }
@@ -101,17 +114,24 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
         setVerification({
           conversationId,
           paths: new Set(
-            results.filter((path): path is string => path !== undefined),
+            results.flatMap((file) => (file?.produced ? [file.path] : [])),
+          ),
+          available: new Set(
+            results.flatMap((file) => (file ? [file.path] : [])),
           ),
         });
     });
     return () => {
       active = false;
     };
-  }, [assistant, conversationId, candidates, running]);
+  }, [assistant, conversationId, candidates, running, outputs]);
   const producedPaths =
     verification?.conversationId === conversationId
       ? (verification?.paths ?? new Set<string>())
+      : new Set<string>();
+  const availablePaths =
+    verification?.conversationId === conversationId
+      ? (verification?.available ?? new Set<string>())
       : new Set<string>();
   const stableComponents = useShallowStable(components);
   const markdownComponents = useMemo(() => {
@@ -127,7 +147,10 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
       remarkPlugins={[
         remarkGfm,
         remarkCjkAutolinks,
-        [remarkLocalFiles, { enabled: assistant, producedPaths }],
+        [
+          remarkLocalFiles,
+          { enabled: assistant, producedPaths, availablePaths },
+        ],
       ]}
       className={cn(
         "aui-md font-normal antialiased",
@@ -203,18 +226,21 @@ function ChatLink({
   "data-local-path": localPath,
   "data-local-label": localLabel,
   "data-local-description": localDescription,
+  "data-local-actions": localActionMode,
   ...props
 }: ComponentPropsWithoutRef<"a"> & {
   "data-local-path"?: string;
   "data-local-label"?: string;
   "data-local-description"?: string;
+  "data-local-actions"?: string;
 }) {
   const { t } = useAppTranslation();
+  const localActions = localActionMode !== "false";
   if (localPath)
-    return /\.html?$/i.test(localPath) ? (
+    return localActions && /\.html?$/i.test(localPath) ? (
       <HtmlFileCard path={localPath} label={localLabel} />
     ) : (
-      <LocalFileLink path={localPath} label={localLabel}>
+      <LocalFileLink path={localPath} label={localLabel} actions={localActions}>
         {localDescription ? props.children : undefined}
       </LocalFileLink>
     );

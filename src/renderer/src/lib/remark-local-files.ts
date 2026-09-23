@@ -5,7 +5,7 @@ import {
   localPathSpans,
 } from "../../../shared/file-references";
 
-function fileLink(path: string, label?: string): Link {
+function fileLink(path: string, label?: string, actions = true): Link {
   return {
     type: "link",
     url: path,
@@ -13,6 +13,7 @@ function fileLink(path: string, label?: string): Link {
     data: {
       hProperties: {
         "data-local-path": path,
+        ...(!actions ? { "data-local-actions": "false" } : {}),
         ...(label ? { "data-local-label": label } : {}),
       },
     },
@@ -22,7 +23,12 @@ function fileLink(path: string, label?: string): Link {
 export function remarkLocalFiles({
   enabled = true,
   producedPaths = new Set<string>(),
-}: { enabled?: boolean; producedPaths?: ReadonlySet<string> } = {}) {
+  availablePaths = producedPaths,
+}: {
+  enabled?: boolean;
+  producedPaths?: ReadonlySet<string>;
+  availablePaths?: ReadonlySet<string>;
+} = {}) {
   return (tree: Root) => {
     if (!enabled) return;
     const actionable = (path: string) =>
@@ -38,7 +44,7 @@ export function remarkLocalFiles({
             /* literal path */
           }
           if (isLocalReference(path)) {
-            if (!actionable(path)) {
+            if (!availablePaths.has(path)) {
               // A suggested or unavailable file is ordinary content, not an
               // actionable deliverable. Preserve inline formatting and labels.
               const fallback =
@@ -64,9 +70,10 @@ export function remarkLocalFiles({
               label &&
                 label !== path &&
                 label !== child.url &&
-                !isLocalReference(label)
+                label !== fileName(path)
                 ? label
                 : undefined,
+              producedPaths.has(path),
             );
           }
           continue;
@@ -76,8 +83,8 @@ export function remarkLocalFiles({
           continue;
         }
         if (child.type === "text") {
-          const spans = localPathSpans(child.value).filter((span) =>
-            actionable(span.value),
+          const spans = localPathSpans(child.value, [...producedPaths]).filter(
+            (span) => actionable(span.value),
           );
           if (!spans.length) continue;
           const nodes: (Link | { type: "text"; value: string })[] = [];
@@ -147,6 +154,7 @@ export function remarkLocalFiles({
       if (
         first?.type !== "link" ||
         !first.data?.hProperties?.["data-local-path"] ||
+        first.data.hProperties["data-local-actions"] === "false" ||
         !/\.html?$/i.test(first.url)
       )
         return;

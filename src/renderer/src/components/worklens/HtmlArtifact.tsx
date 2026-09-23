@@ -52,6 +52,7 @@ type Artifact = {
 };
 const Context = createContext<{
   conversationId?: string;
+  outputPaths: readonly string[];
   open: (artifact: Artifact) => void;
   register: (id: string, preview: () => void) => () => void;
 } | null>(null);
@@ -276,7 +277,12 @@ export function HtmlArtifactWorkspace({
   children,
   conversationId,
   running = false,
-}: PropsWithChildren<{ conversationId?: string; running?: boolean }>) {
+  outputPaths = [],
+}: PropsWithChildren<{
+  conversationId?: string;
+  running?: boolean;
+  outputPaths?: readonly string[];
+}>) {
   const { t } = useAppTranslation();
   const { isCopied, copyToClipboard } = useCopyToClipboard();
   const [artifact, setArtifact] = useState<Artifact | null>(null);
@@ -344,6 +350,7 @@ export function HtmlArtifactWorkspace({
     <Context.Provider
       value={{
         conversationId,
+        outputPaths,
         register,
         open: (item) => {
           autoPending.current = false;

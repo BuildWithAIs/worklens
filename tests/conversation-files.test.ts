@@ -226,7 +226,7 @@ test("reference parsing keeps URLs distinct and supports spaces, Unicode and Win
     "//example.com/a.png",
   ])
     expect(isLocalReference(url)).toBe(false);
-  expect(isLocalReference("settings.theme")).toBe(false);
+  expect(isLocalReference("settings.theme")).toBe(true); // Syntax is not output evidence.
   expect(localReferences("`/tmp/literal%20name.png`")).toContain(
     "/tmp/literal%20name.png",
   );
@@ -247,5 +247,32 @@ test("reference parsing keeps URLs distinct and supports spaces, Unicode and Win
       "workspace/a.png",
       "/tmp/a b.html",
     ]),
+  );
+});
+
+test("duplicate basenames never select an arbitrary output; SVG preview uses the image pipeline", async () => {
+  const f = await fixture();
+  for (const directory of ["one", "two"]) {
+    await mkdir(join(f.cwd, directory));
+    const path = join(f.cwd, directory, "result.svg");
+    await writeFile(path, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    f.context.messages.push({
+      id: directory,
+      role: "tool",
+      toolName: "bash",
+      status: "success",
+      text: "",
+      outputPaths: [path],
+    });
+  }
+  f.mention("result.svg");
+  expect((await inspectConversationFile(f.context, "result.svg")).issue).toBe(
+    "unavailable",
+  );
+  f.mention("one/result.svg");
+  const file = await inspectConversationFile(f.context, "one/result.svg");
+  expect(file).toMatchObject({ produced: true, kind: "image" });
+  expect((await previewConversationFile(file)).content).toMatch(
+    /^data:image\/svg\+xml;base64,/,
   );
 });

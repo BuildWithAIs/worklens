@@ -3,7 +3,12 @@ import { open, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, resolve } from "node:path";
 import type { ConversationFile, MessageView } from "../shared/contracts";
-import { isLocalReference, localReferences } from "../shared/file-references";
+import {
+  isLocalReference,
+  localReferences,
+  messageOutputPaths,
+  fileReferenceAliases,
+} from "../shared/file-references";
 import { isWithin } from "./session-files";
 
 export type FileContext = {
@@ -45,6 +50,7 @@ function evidence(context: FileContext) {
     if (message.role !== "tool" || message.status !== "success") return [];
     const paths = [
       message.targetPath,
+      ...(message.outputPaths ?? []),
       ...(message.artifacts?.map((file) => file.path) ?? []),
     ].filter((path): path is string => !!path);
     // Shell tools lack structured file results. Only exact local paths in a
@@ -65,22 +71,7 @@ function evidence(context: FileContext) {
 
 /** Output provenance is distinct from permission to inspect/read a file. */
 async function wasProduced(context: FileContext, actual: string) {
-  const outputs = context.messages.flatMap((message) => {
-    if (message.role !== "tool" || message.status !== "success") return [];
-    const paths = message.artifacts?.map((file) => file.path) ?? [];
-    if (["write", "edit"].includes(message.toolName ?? "")) {
-      if (message.targetPath) paths.push(message.targetPath);
-      else {
-        try {
-          const args = JSON.parse(message.args ?? "{}");
-          if (typeof args.path === "string") paths.push(args.path);
-        } catch {
-          /* Incomplete arguments are not output evidence. */
-        }
-      }
-    }
-    return paths;
-  });
+  const outputs = messageOutputPaths(context.messages);
   for (const output of new Set(outputs)) {
     const resolved = await resolveReference(context.cwd, output);
     if ((await realpath(resolved).catch(() => resolved)) === actual)
@@ -90,6 +81,7 @@ async function wasProduced(context: FileContext, actual: string) {
 }
 
 const imageTypes: Record<string, string> = {
+  ".svg": "image/svg+xml",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -105,12 +97,29 @@ export async function inspectConversationFile(
   if (!isLocalReference(reference))
     throw new Error("Invalid local file reference");
   // A renderer may only act on file references actually present in this chat.
+  const outputs = messageOutputPaths(context.messages);
+  const aliases = fileReferenceAliases(outputs);
   const references = context.messages
     .filter((m) => m.role === "assistant")
-    .flatMap((m) => localReferences(m.text));
+    .flatMap((m) => localReferences(m.text, aliases));
   if (!references.includes(reference))
     throw new Error("Unreferenced local file");
-  const path = await resolveReference(context.cwd, reference);
+  let path = await resolveReference(context.cwd, reference);
+  if (!(await stat(path).catch(() => undefined))) {
+    const matches = outputs.filter((output) =>
+      fileReferenceAliases([output]).includes(reference),
+    );
+    const resolved = [
+      ...new Set(
+        await Promise.all(
+          matches.map((output) => resolveReference(context.cwd, output)),
+        ),
+      ),
+    ];
+    if (resolved.length > 1)
+      return { path, kind: "file", issue: "unavailable" };
+    if (resolved.length === 1) path = resolved[0];
+  }
   const extension = extname(path).toLowerCase();
   const kind = /\.html?$/.test(extension)
     ? "html"

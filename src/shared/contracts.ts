@@ -129,6 +129,8 @@ export interface SkillsSnapshot {
   local: SkillInfo[];
 }
 export interface MessageView {
+  /** Files observed to be created or changed by a successful tool invocation. */
+  outputPaths?: string[];
   artifacts?: LocalArtifact[];
   createdAt?: string;
   runStartedAt?: string;
@@ -220,7 +222,7 @@ export interface Bootstrap {
 export interface ConversationFile {
   path: string;
   kind: "html" | "image" | "file" | "directory";
-  /** A successful write/edit or explicit tool artifact identifies this as output. */
+  /** Successful write/edit, observed shell output, or an explicit tool artifact. */
   produced?: boolean;
   issue?: "missing" | "unassociated" | "tooLarge" | "unavailable";
   content?: string;

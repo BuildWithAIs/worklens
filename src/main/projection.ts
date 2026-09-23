@@ -119,6 +119,16 @@ export function projectMessages(
         : "success";
       if (["bash", "powershell"].includes(tool.toolName ?? "")) {
         const exitCode = message.details?.worklensShell?.exitCode;
+        const outputPaths = message.details?.worklensShell?.outputPaths;
+        if (
+          tool.status === "success" &&
+          exitCode === 0 &&
+          Array.isArray(outputPaths)
+        )
+          tool.outputPaths = outputPaths.filter(
+            (path: unknown): path is string => typeof path === "string",
+          );
+
         const failureCode = /Command exited with code (-?\d+)\s*$/.exec(
           textContent(message.content),
         );
