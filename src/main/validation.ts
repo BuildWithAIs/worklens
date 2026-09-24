@@ -21,6 +21,13 @@ export const selection = z
   })
   .strict();
 export const schemas = {
+  conversationFile: z
+    .object({
+      id,
+      path: z.string().min(1).max(4096),
+      action: z.enum(["inspect", "preview", "open", "reveal", "chrome"]),
+    })
+    .strict(),
   htmlFileAction: z
     .object({
       id,

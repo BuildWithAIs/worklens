@@ -10,9 +10,18 @@ import {
   HtmlArtifactCard,
   HtmlFileCard,
   isHtmlArtifact,
+  useArtifactWorkspace,
 } from "@/components/worklens/HtmlArtifact";
 import remarkGfm from "remark-gfm";
 import { remarkCjkAutolinks } from "@/lib/remark-cjk-autolinks";
+import { remarkLocalFiles } from "@/lib/remark-local-files";
+import { LocalFileLink } from "@/components/worklens/LocalFileLink";
+import { shortUrl } from "@/lib/link-label";
+import {
+  localReferences,
+  fileReferenceAliases,
+} from "../../../../../shared/file-references";
+import { Hint } from "@/components/ui/tooltip";
 import {
   type ComponentPropsWithoutRef,
   type FC,
@@ -20,9 +29,18 @@ import {
   createContext,
   useContext,
   useMemo,
+  useEffect,
+  useState,
   useRef,
+  Children,
+  isValidElement,
+  type ReactNode,
 } from "react";
-import { useAuiState, type TextMessagePartProps } from "@assistant-ui/react";
+import {
+  useAuiState,
+  useMessagePartText,
+  type TextMessagePartProps,
+} from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
@@ -53,6 +71,68 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
 };
 
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
+  const assistant = useAuiState((s) => s.message.role === "assistant");
+  const running = useAuiState((s) => s.thread.isRunning);
+  const { text } = useMessagePartText();
+  const workspace = useArtifactWorkspace();
+  const conversationId = workspace?.conversationId;
+  const outputs = JSON.stringify(workspace?.outputPaths ?? []);
+  const candidates = JSON.stringify(
+    assistant
+      ? localReferences(
+          text,
+          fileReferenceAliases(workspace?.outputPaths ?? []),
+        ).sort()
+      : [],
+  );
+  const [verification, setVerification] = useState<{
+    conversationId: string;
+    paths: ReadonlySet<string>;
+    available: ReadonlySet<string>;
+  }>();
+  useEffect(() => {
+    let active = true;
+    if (!conversationId || !assistant) return;
+    const paths: string[] = JSON.parse(candidates);
+    void Promise.all(
+      paths.map(async (path) => {
+        try {
+          const file = await window.worklens.invoke("conversationFile", {
+            id: conversationId,
+            path,
+            action: "inspect",
+          });
+          return file && !file.issue
+            ? { path, produced: file.produced }
+            : undefined;
+        } catch {
+          return undefined;
+        }
+      }),
+    ).then((results) => {
+      if (active)
+        setVerification({
+          conversationId,
+          paths: new Set(
+            results.flatMap((file) => (file?.produced ? [file.path] : [])),
+          ),
+          available: new Set(
+            results.flatMap((file) => (file ? [file.path] : [])),
+          ),
+        });
+    });
+    return () => {
+      active = false;
+    };
+  }, [assistant, conversationId, candidates, running, outputs]);
+  const producedPaths =
+    verification?.conversationId === conversationId
+      ? (verification?.paths ?? new Set<string>())
+      : new Set<string>();
+  const availablePaths =
+    verification?.conversationId === conversationId
+      ? (verification?.available ?? new Set<string>())
+      : new Set<string>();
   const stableComponents = useShallowStable(components);
   const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents;
@@ -64,7 +144,14 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
 
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm, remarkCjkAutolinks]}
+      remarkPlugins={[
+        remarkGfm,
+        remarkCjkAutolinks,
+        [
+          remarkLocalFiles,
+          { enabled: assistant, producedPaths, availablePaths },
+        ],
+      ]}
       className={cn(
         "aui-md font-normal antialiased",
         compact ? "text-sm leading-6" : "text-[14px] leading-[1.7]",
@@ -136,34 +223,74 @@ function ChatLink({
   className,
   href,
   onClick,
+  "data-local-path": localPath,
+  "data-local-label": localLabel,
+  "data-local-display": localDisplay,
   ...props
-}: ComponentPropsWithoutRef<"a">) {
+}: ComponentPropsWithoutRef<"a"> & {
+  "data-local-path"?: string;
+  "data-local-label"?: string;
+  "data-local-display"?: string;
+}) {
   const { t } = useAppTranslation();
+  if (localPath)
+    return localDisplay === "card" ? (
+      <HtmlFileCard path={localPath} label={localLabel} />
+    ) : (
+      <LocalFileLink path={localPath} label={localLabel} />
+    );
+  const textOf = (node: ReactNode): string =>
+    Children.toArray(node)
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : isValidElement<{ children?: ReactNode }>(item)
+            ? textOf(item.props.children)
+            : "",
+      )
+      .join("");
+  const text = textOf(props.children);
+  const shortened =
+    href &&
+    isInlineWebUrl(text) &&
+    text.replace(/\/$/, "") === href.replace(/\/$/, "")
+      ? shortUrl(text)
+      : text;
+  const link = (
+    <a
+      {...props}
+      children={shortened !== text ? shortened : props.children}
+      href={href}
+      className={cn(
+        "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+        className,
+      )}
+      onClick={(event) => {
+        if (!href || !/^https?:\/\//i.test(href)) {
+          onClick?.(event);
+          return;
+        }
+        event.preventDefault();
+        void window.worklens.invoke("external", { url: href }).catch(() => {
+          toast.add({
+            type: "error",
+            title: t("chatLinks.openFailed"),
+            timeout: 0,
+            priority: "high",
+          });
+        });
+      }}
+    />
+  );
   return (
     <InsideChatLink.Provider value={true}>
-      <a
-        {...props}
-        href={href}
-        className={cn(
-          "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
-          className,
-        )}
-        onClick={(event) => {
-          if (!href || !/^https?:\/\//i.test(href)) {
-            onClick?.(event);
-            return;
-          }
-          event.preventDefault();
-          void window.worklens.invoke("external", { url: href }).catch(() => {
-            toast.add({
-              type: "error",
-              title: t("chatLinks.openFailed"),
-              timeout: 0,
-              priority: "high",
-            });
-          });
-        }}
-      />
+      {href && /^https?:\/\//i.test(href) ? (
+        <Hint content={<span className="link-target-hint">{href}</span>}>
+          {link}
+        </Hint>
+      ) : (
+        link
+      )}
     </InsideChatLink.Provider>
   );
 }
@@ -328,15 +455,8 @@ const defaultComponents = memoizeMarkdownComponents({
   code: function Code({ className, ...props }) {
     const isCodeBlock = useIsMarkdownCodeBlock();
     const insideLink = useContext(InsideChatLink);
-    const assistant = useAuiState((s) => s.message.role === "assistant");
     const path =
       typeof props.children === "string" ? props.children.trim() : "";
-    if (
-      assistant &&
-      !isCodeBlock &&
-      /^(?:\/|[A-Za-z]:[\\/]).*\.html?$/i.test(path)
-    )
-      return <HtmlFileCard path={path} />;
     if (!isCodeBlock && !insideLink && isInlineWebUrl(path))
       return (
         <ChatLink href={path} className="aui-md-code-link">

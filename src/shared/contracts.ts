@@ -129,6 +129,8 @@ export interface SkillsSnapshot {
   local: SkillInfo[];
 }
 export interface MessageView {
+  /** Files observed to be created or changed by a successful tool invocation. */
+  outputPaths?: string[];
   artifacts?: LocalArtifact[];
   createdAt?: string;
   runStartedAt?: string;
@@ -217,7 +219,24 @@ export interface Bootstrap {
   diagnostics: string[];
   recoveries: Recovery[];
 }
+export interface ConversationFile {
+  path: string;
+  kind: "html" | "image" | "file" | "directory";
+  /** Successful write/edit, observed shell output, or an explicit tool artifact. */
+  produced?: boolean;
+  issue?: "missing" | "unassociated" | "tooLarge" | "unavailable";
+  content?: string;
+}
+
 export interface Requests {
+  conversationFile: {
+    input: {
+      id: string;
+      path: string;
+      action: "inspect" | "preview" | "open" | "reveal" | "chrome";
+    };
+    output: ConversationFile;
+  };
   jiraSave: { input: JiraSettingsInput; output: JiraConnection };
   jiraTest: { input: JiraSettingsInput; output: string };
   jiraRemove: { input: undefined; output: void };

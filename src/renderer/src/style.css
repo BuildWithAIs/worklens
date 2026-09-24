@@ -1417,10 +1417,18 @@ kbd {
   stroke-width: 1.5;
 }
 
+.local-file-link { overflow-wrap: anywhere; white-space: normal; user-select: text; }
+.local-file-reference { display: inline; }
+.link-target-hint { overflow-wrap: anywhere; white-space: normal; }
+.local-file-link:focus-visible { outline: 2px solid var(--border); outline-offset: 3px; border-radius: 2px; }
+.local-file-link[aria-busy="true"] { cursor: progress; }
+.image-preview-path { position: absolute; bottom: 0; max-height: 20vh; overflow: auto; width: 100%; padding: 12px 24px; text-align: center; overflow-wrap: anywhere; background: var(--bg); color: var(--text); font-size: 12px; user-select: text; }
+.aui-image-zoom-overlay:has(.image-preview-path) .aui-image-zoom-content { max-height: 75vh; }
 .artifact-workspace { display: flex; flex: 1; min-height: 0; min-width: 0; }
 .artifact-chat { display: flex; flex: 1; min-width: 0; min-height: 0; }
-.artifact-card-container { display: block; width: 100%; max-width: 440px; margin: 10px 0; }
-.html-artifact-card { display: flex; align-items: center; width: 100%; padding: 10px; gap: 10px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--bg) 80%, var(--hover)); color: var(--text); }
+.artifact-card-container { display: block; }
+.artifact-card-container, .artifact-file-list { width: 100%; max-width: 440px; margin: 10px 0; }
+.html-artifact-card { display: flex; font-size: 14px; line-height: 1.7; align-items: center; width: 100%; padding: 10px; gap: 10px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--bg) 80%, var(--hover)); color: var(--text); }
 .artifact-card-open { display: flex; flex: 1; min-width: 0; height: auto; padding: 0; gap: 10px; justify-content: flex-start; color: var(--text); }
 .artifact-card-icon { display: flex; align-items: center; justify-content: center; width: 48px; height: 56px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--muted); }
 .artifact-card-download { flex-shrink: 0; }

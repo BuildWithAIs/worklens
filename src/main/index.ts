@@ -217,6 +217,32 @@ else {
                 case "clearConnection":
                   providers!.clearConnection(input.provider);
                   break;
+                case "conversationFile": {
+                  const file = await agents!.conversationFile(
+                    input.id,
+                    input.path,
+                    input.action === "preview",
+                  );
+                  if (!file.issue) {
+                    if (input.action === "reveal")
+                      shell.showItemInFolder(file.path);
+                    if (input.action === "open") {
+                      const error = await shell.openPath(file.path);
+                      if (error) throw new Error(error);
+                    }
+                    if (input.action === "chrome") {
+                      if (process.platform !== "darwin" || file.kind !== "html")
+                        throw new Error("Chrome opening is unavailable");
+                      await promisify(execFile)("/usr/bin/open", [
+                        "-a",
+                        "Google Chrome",
+                        file.path,
+                      ]);
+                    }
+                  }
+                  value = file;
+                  break;
+                }
                 case "htmlFileAction": {
                   const file = await agents!.htmlActionFile(input.id, {
                     path: input.path,

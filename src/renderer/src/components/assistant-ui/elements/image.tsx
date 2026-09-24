@@ -252,20 +252,40 @@ function ImageFilename({
 type ImageZoomProps = PropsWithChildren<{
   src: string;
   alt?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  filename?: string;
+  returnFocus?: HTMLElement | null;
 }>;
 
-function ImageZoom({ src, alt, children }: ImageZoomProps) {
+function ImageZoom({
+  src,
+  alt,
+  children,
+  open,
+  onOpenChange,
+  filename,
+  returnFocus,
+}: ImageZoomProps) {
   const { t } = useAppTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = open ?? internalOpen;
+  const setIsOpen = useCallback(
+    (value: boolean) => {
+      setInternalOpen(value);
+      onOpenChange?.(value);
+    },
+    [onOpenChange],
+  );
   const triggerRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  const handleOpen = useCallback(() => setIsOpen(true), []);
+  const handleOpen = useCallback(() => setIsOpen(true), [setIsOpen]);
   const handleClose = useCallback(() => {
     setIsOpen(false);
-    triggerRef.current?.focus();
-  }, []);
+    (returnFocus ?? triggerRef.current)?.focus();
+  }, [returnFocus, setIsOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -308,17 +328,19 @@ function ImageZoom({ src, alt, children }: ImageZoomProps) {
 
   return (
     <>
-      <div
-        ref={triggerRef}
-        onClick={handleOpen}
-        onKeyDown={(e) => e.key === "Enter" && handleOpen()}
-        role="button"
-        tabIndex={0}
-        className="aui-image-zoom-trigger cursor-zoom-in"
-        aria-label={t("image.clickToZoom")}
-      >
-        {children}
-      </div>
+      {children && (
+        <div
+          ref={triggerRef}
+          onClick={handleOpen}
+          onKeyDown={(e) => e.key === "Enter" && handleOpen()}
+          role="button"
+          tabIndex={0}
+          className="aui-image-zoom-trigger cursor-zoom-in"
+          aria-label={t("image.clickToZoom")}
+        >
+          {children}
+        </div>
+      )}
       {isOpen &&
         createPortal(
           <div
@@ -340,6 +362,14 @@ function ImageZoom({ src, alt, children }: ImageZoomProps) {
                 handleClose();
               }}
             />
+            {filename && (
+              <span
+                className="image-preview-path"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {filename}
+              </span>
+            )}
             <button
               ref={closeRef}
               type="button"

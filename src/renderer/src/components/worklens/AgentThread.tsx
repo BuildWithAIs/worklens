@@ -1,3 +1,4 @@
+import { messageOutputPaths } from "../../../../shared/file-references";
 import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
 import { createThreadMessageCache } from "@/lib/thread-message-cache";
@@ -709,6 +710,7 @@ export function AgentThread({
       <ModelMenuContext.Provider value={modelMenu}>
         <HtmlArtifactWorkspace
           conversationId={view?.id}
+          outputPaths={messageOutputPaths(view?.messages ?? [])}
           running={!!view && activePhases.has(view.phase)}
         >
           <div className="agent-thread">

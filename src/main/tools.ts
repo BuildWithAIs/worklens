@@ -1,6 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { resolve, dirname, basename, join } from "node:path";
 import { homedir } from "node:os";
+import { Type } from "typebox";
+import { observeFileOutputs } from "./file-outputs";
 import {
   createWriteTool,
   createEditTool,
@@ -126,6 +128,16 @@ export function worklensTools(
     {
       ...shell,
       label: shell.name,
+      parameters: Type.Object({
+        ...shell.parameters.properties,
+        outputPaths: Type.Optional(
+          Type.Array(Type.String(), {
+            maxItems: 256,
+            description:
+              "Paths of files this command will create or modify for delivery, resolved relative to the tool working directory (not an internal cd). Include external outputs and outputs in large workspaces. Only observed changes are recorded.",
+          }),
+        ),
+      }),
       executionMode: "sequential" as const,
       async execute(...args: Parameters<typeof shell.execute>) {
         const native =
@@ -144,10 +156,17 @@ export function worklensTools(
           process.platform === "win32"
             ? createPowerShellTool(cwd, { operations })
             : createBashTool(cwd, { operations });
+        const declared =
+          (args[1] as { outputPaths?: string[] }).outputPaths ?? [];
+        const collectOutputs = await observeFileOutputs(cwd, declared);
         const result = await invocation.execute(...args);
+        const outputPaths = exitCode === 0 ? await collectOutputs() : [];
         return {
           ...result,
-          details: { ...result.details, worklensShell: { exitCode } },
+          details: {
+            ...result.details,
+            worklensShell: { exitCode, outputPaths },
+          },
         };
       },
     },
