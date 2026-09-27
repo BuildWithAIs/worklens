@@ -1,3 +1,5 @@
+import type { ChatImage, ChatImageRef } from "./chat-images";
+
 export type Thinking =
   | "off"
   | "minimal"
@@ -129,6 +131,7 @@ export interface SkillsSnapshot {
   local: SkillInfo[];
 }
 export interface MessageView {
+  images?: ChatImageRef[];
   /** Files observed to be created or changed by a successful tool invocation. */
   outputPaths?: string[];
   artifacts?: LocalArtifact[];
@@ -192,6 +195,7 @@ export interface AuthStep {
   placeholder?: string;
 }
 export interface Recovery {
+  imageCount?: number;
   runId: string;
   conversationId: string;
   text: string;
@@ -302,10 +306,16 @@ export interface Requests {
       conversationId?: string;
       requestId: string;
       text: string;
+      images?: ChatImage[];
       selection: Selection;
     };
     output: ConversationView;
   };
+  chatImage: {
+    input: { conversationId: string; messageId: string; index: number };
+    output: string;
+  };
+  recoveryImages: { input: { runId: string }; output: ChatImage[] };
   cancel: { input: { conversationId: string; runId: string }; output: void };
   model: {
     input: { id: string; selection: Selection };

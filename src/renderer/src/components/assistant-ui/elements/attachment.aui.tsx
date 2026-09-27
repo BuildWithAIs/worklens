@@ -5,6 +5,7 @@ import {
   useState,
   type FC,
   isValidElement,
+  useContext,
 } from "react";
 import {
   XIcon,
@@ -19,6 +20,7 @@ import {
   MessagePrimitive,
   useAuiState,
   useAui,
+  useAuiEvent,
 } from "@assistant-ui/react";
 import {
   Tooltip,
@@ -37,6 +39,8 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { useAttachmentSrc } from "@/hooks/use-attachment-src";
 import { cn } from "@/lib/utils";
 import { useAppTranslation } from "@/i18n";
+import { ChatImageContext } from "@/lib/chat-images";
+import { systemText } from "@/lib/system-text";
 
 type AttachmentPreviewProps = {
   src: string;
@@ -62,8 +66,20 @@ const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
 
 const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
   const { t } = useAppTranslation();
-  const src = useAttachmentSrc();
+  const { src, error, retry } = useAttachmentSrc();
 
+  if (error)
+    return (
+      <button
+        type="button"
+        onClick={retry}
+        className="flex size-24 flex-col items-center justify-center gap-1 rounded-xl border border-border bg-muted p-2 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        aria-label={t("attachments.retryPreview")}
+      >
+        <AlertCircleIcon className="size-5" aria-hidden="true" />
+        {t("attachments.retryPreview")}
+      </button>
+    );
   if (!src) return children;
 
   return (
@@ -93,7 +109,7 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
 
 const AttachmentThumb: FC = () => {
   const { t } = useAppTranslation();
-  const src = useAttachmentSrc();
+  const { src, error } = useAttachmentSrc();
 
   return (
     <Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none after:hidden">
@@ -103,14 +119,21 @@ const AttachmentThumb: FC = () => {
         className="aui-attachment-tile-image rounded-none object-cover"
       />
       <AvatarFallback>
-        <FileText className="aui-attachment-tile-fallback-icon text-muted-foreground/80 size-6 stroke-[1.5]" />
+        {error ? (
+          <AlertCircleIcon
+            aria-label={t("attachments.previewFailed")}
+            className="text-destructive size-6"
+          />
+        ) : (
+          <FileText className="aui-attachment-tile-fallback-icon text-muted-foreground/80 size-6 stroke-[1.5]" />
+        )}
       </AvatarFallback>
     </Avatar>
   );
 };
 
 const AttachmentUI: FC = () => {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const aui = useAui();
   const isComposer = aui.attachment.source !== "message";
 
@@ -143,7 +166,9 @@ const AttachmentUI: FC = () => {
       : undefined,
   );
   const errorMessage = isError
-    ? (attachmentError ?? t("attachments.uploadFailed"))
+    ? attachmentError
+      ? systemText(attachmentError, language)
+      : t("attachments.uploadFailed")
     : undefined;
 
   return (
@@ -164,7 +189,7 @@ const AttachmentUI: FC = () => {
               render={
                 <div
                   className={cn(
-                    "aui-attachment-tile bg-muted hover:after:bg-foreground/10 focus-visible:ring-ring/50 relative size-14 cursor-pointer overflow-hidden rounded-[calc(var(--composer-radius,1.5rem)-var(--composer-padding,8px))] transition-transform outline-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-black/10 after:transition-colors after:ring-inset focus-visible:ring-1 active:scale-[0.96] motion-reduce:transition-none dark:after:ring-white/10",
+                    "aui-attachment-tile bg-muted hover:after:bg-foreground/10 focus-visible:ring-ring/50 relative size-24 cursor-pointer overflow-hidden rounded-[calc(var(--composer-radius,1.5rem)-var(--composer-padding,8px))] transition-transform outline-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-black/10 after:transition-colors after:ring-inset focus-visible:ring-1 active:scale-[0.96] motion-reduce:transition-none dark:after:ring-white/10",
                     isError &&
                       "after:ring-destructive/60 dark:after:ring-destructive/60",
                   )}
@@ -232,7 +257,7 @@ const AttachmentRemove: FC = () => {
 
 export const UserMessageAttachments: FC = () => {
   return (
-    <div className="aui-user-message-attachments-end col-span-full col-start-1 row-start-1 flex w-full flex-row justify-end gap-2">
+    <div className="aui-user-message-attachments-end col-span-full col-start-1 row-start-1 flex w-full flex-row flex-wrap justify-end gap-2">
       <MessagePrimitive.Attachments>
         {() => <AttachmentUI />}
       </MessagePrimitive.Attachments>
@@ -241,22 +266,47 @@ export const UserMessageAttachments: FC = () => {
 };
 
 export const ComposerAttachments: FC = () => {
+  const { supported, historical, reportError } = useContext(ChatImageContext);
+  const { t } = useAppTranslation();
+  const hasAttachments = useAuiState((s) => s.composer.attachments.length > 0);
+  useAuiEvent("composer.attachmentAddError", (event) => {
+    reportError(
+      event.reason === "not-accepted" ? "CHAT_IMAGE_FORMAT" : event.message,
+    );
+  });
   return (
-    <div className="aui-composer-attachments flex w-full flex-row items-center gap-2 overflow-x-auto empty:hidden">
-      <ComposerPrimitive.Attachments>
-        {() => <AttachmentUI />}
-      </ComposerPrimitive.Attachments>
-    </div>
+    <>
+      {!supported && (hasAttachments || historical) && (
+        <p role="status" className="px-2.5 text-xs text-muted-foreground">
+          {t(
+            hasAttachments
+              ? "attachments.unsupportedModel"
+              : "attachments.historyUnsupported",
+          )}
+        </p>
+      )}
+      <div className="aui-composer-attachments flex max-h-56 w-full flex-row flex-wrap items-center gap-2 overflow-y-auto p-1 empty:hidden">
+        <ComposerPrimitive.Attachments>
+          {() => <AttachmentUI />}
+        </ComposerPrimitive.Attachments>
+      </div>
+    </>
   );
 };
 
 export const ComposerAddAttachment: FC = () => {
   const { t } = useAppTranslation();
+  const { supported } = useContext(ChatImageContext);
   return (
     <ComposerPrimitive.AddAttachment
+      disabled={!supported}
       render={
         <TooltipIconButton
-          tooltip={t("attachments.addAttachment")}
+          tooltip={t(
+            supported
+              ? "attachments.addAttachment"
+              : "attachments.unsupportedModel",
+          )}
           side="bottom"
           variant="ghost"
           size="icon"

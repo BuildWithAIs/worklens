@@ -3,6 +3,15 @@ import i18n, { type AppLanguage } from "../i18n";
 // Main-process and provider messages are untrusted runtime data. Translate only
 // known application-owned text and leave conversation/tool content untouched.
 const messages = [
+  ["CHAT_IMAGE_MODEL", "CHAT_IMAGE_MODEL", "attachments.unsupportedModel"],
+  ["CHAT_IMAGE_FORMAT", "CHAT_IMAGE_FORMAT", "attachments.format"],
+  ["CHAT_IMAGE_INVALID", "CHAT_IMAGE_INVALID", "attachments.invalid"],
+  ["CHAT_IMAGE_SIZE", "CHAT_IMAGE_SIZE", "attachments.size"],
+  ["CHAT_IMAGE_LIMITS", "CHAT_IMAGE_LIMITS", "attachments.limits"],
+  ["CHAT_IMAGE_TOTAL", "CHAT_IMAGE_TOTAL", "attachments.total"],
+  ["CHAT_IMAGE_DIMENSIONS", "CHAT_IMAGE_DIMENSIONS", "attachments.dimensions"],
+  ["CHAT_IMAGE_MISSING", "CHAT_IMAGE_MISSING", "attachments.previewFailed"],
+
   [
     "该技能未启用或已不存在，请在设置中检查技能",
     "This skill is disabled or no longer available. Check Skills in Settings.",

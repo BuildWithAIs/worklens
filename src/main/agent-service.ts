@@ -38,6 +38,8 @@ import { ConnectorRegistry } from "./connectors/registry";
 import type { SkillsService } from "./skills";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
+import { validateChatImages, validateImageContent } from "./chat-images";
+import type { ChatImage } from "../shared/chat-images";
 import type {
   ChatEvent,
   Conversation,
@@ -157,7 +159,14 @@ export class AgentService {
           typeof item.text === "string" &&
           file === `${item.runId}.pending.json`
         )
-          this.recoveries.push(item);
+          this.recoveries.push({
+            runId: item.runId,
+            conversationId: item.conversationId,
+            text: item.text,
+            selection: item.selection,
+            startedAt: item.startedAt,
+            imageCount: Array.isArray(item.images) ? item.images.length : 0,
+          });
       } catch {
         this.diagnostics.push("有一份运行恢复记录无法读取，原文件已保留。");
       }
@@ -172,6 +181,37 @@ export class AgentService {
       throw new Error("恢复记录不存在");
     await unlink(join(this.paths.userData, "runs", `${runId}.pending.json`));
     this.recoveries = this.recoveries.filter((r) => r.runId !== runId);
+  }
+  async recoveryImages(runId: string): Promise<ChatImage[]> {
+    if (!this.recoveries.some((r) => r.runId === runId))
+      throw new Error("恢复记录不存在");
+    const item = JSON.parse(
+      await readFile(
+        join(this.paths.userData, "runs", `${runId}.pending.json`),
+        "utf8",
+      ),
+    );
+    return validateChatImages(item.images ?? []);
+  }
+  async chatImage(input: {
+    conversationId: string;
+    messageId: string;
+    index: number;
+  }) {
+    const runtime = await this.get(input.conversationId);
+    const entry = runtime.manager.getEntry(input.messageId);
+    if (
+      entry?.type !== "message" ||
+      entry.message.role !== "user" ||
+      !Array.isArray(entry.message.content)
+    )
+      throw new Error("CHAT_IMAGE_MISSING");
+    const block = entry.message.content[input.index];
+    if (block?.type !== "image") throw new Error("CHAT_IMAGE_MISSING");
+    const [image] = validateChatImages([
+      { name: "image", mimeType: block.mimeType, data: block.data },
+    ]);
+    return `data:${image.mimeType};base64,${image.data}`;
   }
   private assertSelection(selection: Selection) {
     const model = this.modelRuntime.getModel(
@@ -616,6 +656,7 @@ export class AgentService {
     conversationId?: string;
     requestId: string;
     text: string;
+    images?: ChatImage[];
     selection: Selection;
   }): Promise<ConversationView> {
     if (this.stopping) return Promise.reject(new Error("应用正在退出"));
@@ -624,6 +665,15 @@ export class AgentService {
     const task = this.operations.run(
       input.conversationId ?? input.requestId,
       async () => {
+        const images = validateChatImages(input.images ?? []);
+        if (!input.text.trim() && !images.length)
+          throw new Error("消息不能为空");
+        if (
+          images.length &&
+          !this.assertSelection(input.selection).input.includes("image")
+        )
+          throw new Error("CHAT_IMAGE_MODEL");
+        await validateImageContent(images);
         let runtime: Runtime;
         if (input.conversationId)
           runtime = await this.get(input.conversationId);
@@ -655,7 +705,9 @@ export class AgentService {
           : input.text;
         const id = runtime.manager.getSessionId();
         if (!runtime.manager.getSessionName())
-          runtime.session!.setSessionName(input.text.trim().slice(0, 48));
+          runtime.session!.setSessionName(
+            (input.text.trim() || images[0]?.name || "新会话").slice(0, 48),
+          );
         this.sessions.set(id, runtime);
         const active: ActiveRun = {
           id: randomUUID(),
@@ -679,6 +731,7 @@ export class AgentService {
             conversationId: id,
             runId: active.id,
             text: input.text,
+            images,
             selection: input.selection,
             startedAt: runtime.updated,
             phase: "accepted",
@@ -708,6 +761,10 @@ export class AgentService {
             if (active.cancelled) return;
             await runtime.session!.prompt(prompt, {
               expandPromptTemplates: !!skillCommand,
+              images: images.map((image) => ({
+                type: "image" as const,
+                ...image,
+              })),
             });
             const last = [...runtime.session!.messages]
               .reverse()
@@ -770,6 +827,7 @@ export class AgentService {
                 conversationId: id,
                 runId: active.id,
                 text: input.text,
+                images,
                 selection: input.selection,
                 startedAt: runtime.usage?.run?.startedAt,
                 phase: runtime.phase,
@@ -843,6 +901,26 @@ export class AgentService {
       runtime.session?.dispose();
       runtime.session = undefined;
       await this.artifacts.removeSession(id);
+      // Accepted prompts can outlive an unflushed Pi session. Delete their image
+      // payloads together with the conversation, including markers from this run.
+      for (const name of await readdir(join(this.paths.userData, "runs"))) {
+        if (!name.endsWith(".pending.json")) continue;
+        const path = join(this.paths.userData, "runs", name);
+        const marker = await readFile(path, "utf8").then(
+          (text) => {
+            try {
+              return JSON.parse(text);
+            } catch {
+              return undefined;
+            }
+          },
+          () => undefined,
+        );
+        if (marker?.conversationId === id) await unlink(path);
+      }
+      this.recoveries = this.recoveries.filter(
+        (item) => item.conversationId !== id,
+      );
       if (sessionFile) await unlink(sessionFile);
       this.sessions.delete(id);
       this.usage.remove(id);

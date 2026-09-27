@@ -84,3 +84,12 @@ test("connector result translation preserves account names, URLs and unknown det
     "upstream detail: 仓库暂时不可用",
   );
 });
+
+test("image validation messages use the selected language", () => {
+  expect(systemText("CHAT_IMAGE_INVALID", "en")).toBe(
+    "Couldn’t read this image. Choose another file.",
+  );
+  expect(systemText("CHAT_IMAGE_MODEL", "zh")).toBe(
+    "请选择支持图片的模型后再发送附件。",
+  );
+});

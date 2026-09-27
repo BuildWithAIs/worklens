@@ -3,6 +3,15 @@ import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
 import { createThreadMessageCache } from "@/lib/thread-message-cache";
 import {
+  ChatImageContext,
+  createImageAdapter,
+  submittedImages,
+} from "@/lib/chat-images";
+import {
+  chatImageSource,
+  type ChatImage,
+} from "../../../../shared/chat-images";
+import {
   toolProgress,
   toolActivityLabel,
   toolActivitySummary,
@@ -20,6 +29,7 @@ import {
 } from "react";
 import {
   AssistantRuntimeProvider,
+  MessageNotSentError,
   type AppendMessage,
   type ThreadMessageLike,
   type ThreadMessage,
@@ -51,8 +61,11 @@ type Props = {
   view?: ConversationView;
   canSend: boolean;
   draft: string;
+  draftImages?: ChatImage[];
+  supportsImages: boolean;
+  onError: (message: string) => void;
   onDraftLoaded: () => void;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, images: ChatImage[]) => Promise<void>;
   onCancel: () => Promise<void>;
   modelMenu?: ModelMenuProps;
 };
@@ -143,6 +156,14 @@ function convertMessage(
         id: message.id,
         role: "user",
         content: message.text,
+        attachments: (message.images ?? []).map((image) => ({
+          id: `${image.messageId}-${image.index}`,
+          type: "image",
+          name: image.name,
+          contentType: image.mimeType,
+          status: { type: "complete" },
+          content: [{ type: "image", image: chatImageSource(view!.id, image) }],
+        })),
         metadata: { custom: { sentAt: message.createdAt } },
       };
     }
@@ -413,12 +434,44 @@ export function AgentThread({
   view,
   canSend,
   draft,
+  draftImages,
+  supportsImages,
+  onError,
   onDraftLoaded,
   onSend,
   onCancel,
   modelMenu,
 }: Props) {
   const { t, language } = useAppTranslation();
+  const attachmentState = useRef<Parameters<typeof createImageAdapter>[0]>(
+    () => ({ supported: false, attachments: [] }),
+  );
+  const imageAdapter = useMemo(
+    () => createImageAdapter(() => attachmentState.current()),
+    [],
+  );
+  const loadImage = useMemo(() => {
+    const cache = new Map<string, Promise<string>>();
+    return (source: string) => {
+      const existing = cache.get(source);
+      if (existing) return existing;
+      const match = /^worklens-image:([\w-]+)\/([\w-]+)\/(\d+)$/.exec(source);
+      if (!match || match[1] !== view?.id)
+        return Promise.reject(new Error("CHAT_IMAGE_MISSING"));
+      const task = window.worklens
+        .invoke("chatImage", {
+          conversationId: match[1],
+          messageId: match[2],
+          index: Number(match[3]),
+        })
+        .catch((error) => {
+          cache.delete(source);
+          throw error;
+        });
+      cache.set(source, task);
+      return task;
+    };
+  }, [view?.id]);
   // Order live blocks by their first visible content, not an empty message shell.
   const liveOrder = useRef({
     conversationId: view?.id,
@@ -688,36 +741,103 @@ export function AgentThread({
     () => messageCache(messages),
     [messageCache, messages],
   );
+  const [attachmentsBlocked, setAttachmentsBlocked] = useState(false);
   const runtime = useExternalStoreRuntime<ThreadMessage>({
     messageRepository,
     isRunning: !!view && activePhases.has(view.phase),
-    isSendDisabled: !canSend,
+    isSendDisabled: !canSend || attachmentsBlocked,
+    adapters: { attachments: imageAdapter },
     onNew: async (message) => {
       const text = submittedText(message);
-      if (text) await onSend(text);
+      let images: ChatImage[];
+      try {
+        images = submittedImages(message);
+        if (images.length && !supportsImages)
+          throw new Error("CHAT_IMAGE_MODEL");
+      } catch (error) {
+        onError(String(error));
+        throw new MessageNotSentError();
+      }
+      try {
+        await onSend(text, images);
+      } catch {
+        throw new MessageNotSentError();
+      }
     },
     onCancel,
   });
+  attachmentState.current = () => ({
+    supported: supportsImages,
+    attachments: runtime.thread.composer.getState().attachments,
+  });
 
   useEffect(() => {
-    if (!draft) return;
+    const update = () => {
+      const attachments = runtime.thread.composer.getState().attachments;
+      setAttachmentsBlocked(
+        attachments.some(
+          (image) =>
+            !supportsImages ||
+            image.status.type === "running" ||
+            image.status.type === "incomplete",
+        ),
+      );
+    };
+    update();
+    return runtime.thread.composer.subscribe(update);
+  }, [runtime, supportsImages]);
+
+  const restoredDraft = useRef<
+    { text: string; images?: ChatImage[] } | undefined
+  >(undefined);
+  useEffect(() => {
+    if (!draft && !draftImages?.length) return;
+    if (
+      restoredDraft.current?.text === draft &&
+      restoredDraft.current.images === draftImages
+    )
+      return;
+    restoredDraft.current = { text: draft, images: draftImages };
     runtime.thread.composer.setText(draft);
+    for (const image of draftImages ?? [])
+      void runtime.thread.composer.addAttachment({
+        type: "image",
+        name: image.name,
+        contentType: image.mimeType,
+        content: [
+          {
+            type: "image",
+            image: `data:${image.mimeType};base64,${image.data}`,
+          },
+        ],
+      });
     onDraftLoaded();
-  }, [draft, onDraftLoaded, runtime]);
+  }, [draft, draftImages, onDraftLoaded, runtime]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ModelMenuContext.Provider value={modelMenu}>
-        <HtmlArtifactWorkspace
-          conversationId={view?.id}
-          outputPaths={messageOutputPaths(view?.messages ?? [])}
-          running={!!view && activePhases.has(view.phase)}
-        >
-          <div className="agent-thread">
-            <Thread components={threadComponents} />
-          </div>
-        </HtmlArtifactWorkspace>
-      </ModelMenuContext.Provider>
+      <ChatImageContext.Provider
+        value={{
+          supported: supportsImages,
+          historical: !!view?.messages.some(
+            (message) => message.images?.length,
+          ),
+          load: loadImage,
+          reportError: onError,
+        }}
+      >
+        <ModelMenuContext.Provider value={modelMenu}>
+          <HtmlArtifactWorkspace
+            conversationId={view?.id}
+            outputPaths={messageOutputPaths(view?.messages ?? [])}
+            running={!!view && activePhases.has(view.phase)}
+          >
+            <div className="agent-thread">
+              <Thread components={threadComponents} />
+            </div>
+          </HtmlArtifactWorkspace>
+        </ModelMenuContext.Provider>
+      </ChatImageContext.Provider>
     </AssistantRuntimeProvider>
   );
 }

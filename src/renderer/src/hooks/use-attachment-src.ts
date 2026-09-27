@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { useShallow } from "zustand/react/shallow";
+import { useStoredImage } from "@/lib/chat-images";
 
 const useFileSrc = (file: File | undefined) => {
   const [entry, setEntry] = useState<{ file: File; url: string } | undefined>(
@@ -42,5 +43,6 @@ export const useAttachmentSrc = () => {
     }),
   );
 
-  return useFileSrc(file) ?? src;
+  const local = useFileSrc(file);
+  return useStoredImage(local ?? src);
 };
