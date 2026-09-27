@@ -219,7 +219,9 @@ for (const cloud of [false, true])
         await s.call({ operation: "download_attachment", attachment: "8" })
       ).data;
       expect(downloaded.status).toBe("success");
-      expect(downloaded.artifacts[0].path).toContain(join("session1", "jira"));
+      expect(downloaded.artifacts[0].path).toContain(
+        join("sessions", "session1", "artifacts", "jira"),
+      );
       expect(await readFile(downloaded.artifacts[0].path, "utf8")).toBe(
         "fixture attachment bytes",
       );

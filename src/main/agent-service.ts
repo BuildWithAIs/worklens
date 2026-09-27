@@ -17,7 +17,6 @@ import {
   ownedDirectory,
   sessionDirectory,
   sessionWorkspace,
-  workingDirectory,
 } from "./session-files";
 import { dirname, join, resolve } from "node:path";
 import { mkdir, unlink, realpath, readFile, readdir } from "node:fs/promises";
@@ -129,7 +128,6 @@ export class AgentService {
     private skills?: SkillsService,
     private artifacts = new LocalArtifacts(
       join(dirname(paths.sessions), "artifacts"),
-      paths.runtime,
       paths.sessions,
     ),
   ) {}
@@ -214,7 +212,7 @@ export class AgentService {
   }
   private view(id: string, runtime: Runtime): ConversationView {
     const branch = runtime.manager.getBranch();
-    const cwd = workingDirectory(this.paths, runtime.manager);
+    const cwd = sessionWorkspace(this.paths.sessions, id);
     const messages = projectMessages(withRunTiming(branch), cwd);
     // During streaming the public agent state may not yet include the current assistant partial.
     if (runtime.session?.agent.state.streamingMessage)
@@ -359,7 +357,7 @@ export class AgentService {
       const runtime = await this.get(id);
       const file = await inspectConversationFile(
         {
-          cwd: workingDirectory(this.paths, runtime.manager),
+          cwd: sessionWorkspace(this.paths.sessions, id),
           roots: await this.previewRoots(runtime),
           messages: this.view(id, runtime).messages,
         },
@@ -396,15 +394,9 @@ export class AgentService {
   }
   private async previewRoots(runtime: Runtime) {
     const id = runtime.manager.getSessionId();
-    const roots = [
-      sessionDirectory(this.paths.sessions, id),
-      join(this.artifacts.root, "files", id),
-    ];
-    await ownedDirectory(this.paths.sessions, roots[0]);
-    await ownedDirectory(this.artifacts.root, roots[1]);
-    if (workingDirectory(this.paths, runtime.manager) === this.paths.runtime)
-      roots.push(this.paths.runtime);
-    return roots;
+    const directory = sessionDirectory(this.paths.sessions, id);
+    await ownedDirectory(this.paths.sessions, directory);
+    return [directory];
   }
   private async ensureSession(
     runtime: Runtime,
@@ -440,10 +432,11 @@ export class AgentService {
       runtime.session = undefined;
     }
     if (!runtime.session) {
-      const cwd = workingDirectory(this.paths, runtime.manager);
-      if (cwd !== this.paths.runtime)
-        await ownedDirectory(this.paths.sessions, cwd, true);
-      this.artifacts.useSession(runtime.manager.getSessionId(), cwd);
+      const cwd = sessionWorkspace(
+        this.paths.sessions,
+        runtime.manager.getSessionId(),
+      );
+      await ownedDirectory(this.paths.sessions, cwd, true);
       const local = await resources(
         cwd,
         join(this.paths.userData, "pi"),
@@ -639,9 +632,6 @@ export class AgentService {
             toolUpdates: new Map(),
             updated: new Date().toISOString(),
           };
-          runtime.manager.appendCustomEntry("worklens.workspace", {
-            version: 1,
-          });
         }
         if (runtime.active) throw new Error("当前会话正在运行，请先停止");
         const skillCommand = /^\/skill:([^\s]+)(?:\s+([\s\S]*))?$/.exec(

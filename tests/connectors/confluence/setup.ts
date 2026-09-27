@@ -68,7 +68,10 @@ export async function setup() {
     token: "synthetic-secret-123",
   };
   await connections.save(input);
-  const artifacts = new LocalArtifacts(join(root, "artifacts"), root);
+  const artifacts = new LocalArtifacts(
+    join(root, "artifacts"),
+    join(root, "sessions"),
+  );
   const service = new ConfluenceService(connections, artifacts);
   let run = "run1";
   const tools = service.tools("session1", () => run);

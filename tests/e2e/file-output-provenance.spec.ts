@@ -4,19 +4,20 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
-test("legacy runtime HTML output retains a preview card through real file IPC", async () => {
+test("session workspace HTML output retains a preview card through real file IPC", async () => {
   const root = await mkdtemp(join(tmpdir(), "worklens-output-provenance-"));
-  const runtime = join(root, "runtime");
+  const id = randomUUID();
   const sessions = join(root, "sessions");
-  await mkdir(runtime, { recursive: true });
+  const workspace = join(sessions, id, "workspace");
+  await mkdir(workspace, { recursive: true });
   await mkdir(sessions, { recursive: true });
-  const output = join(runtime, "index.html");
-  const reference = join(runtime, "existing.html");
+  const output = join(workspace, "index.html");
+  const reference = join(workspace, "existing.html");
   const html =
-    "<!doctype html><html><body><h1>Generated legacy page</h1></body></html>";
+    "<!doctype html><html><body><h1>Generated session page</h1></body></html>";
   await writeFile(output, html);
   await writeFile(reference, "<html>Existing source page</html>");
-  const reportDir = join(runtime, "bili_luming");
+  const reportDir = join(workspace, "bili_luming");
   await mkdir(reportDir);
   const report = join(reportDir, "REPORT.md");
   await writeFile(report, "Report");
@@ -24,7 +25,6 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
     join(reportDir, "report.html"),
     "<html><body><h1>Sibling report preview</h1></body></html>",
   );
-  const id = randomUUID();
   const timestamp = new Date().toISOString();
   const assistant = (content: unknown[], stopReason = "stop") => ({
     role: "assistant",
@@ -91,7 +91,7 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
     ]),
   ];
   const records = [
-    { type: "session", version: 3, id, timestamp, cwd: runtime },
+    { type: "session", version: 3, id, timestamp, cwd: workspace },
     ...messages.map((message, i) => ({
       type: "message",
       id: `entry-${i}`,
@@ -104,7 +104,7 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
       id: "title",
       parentId: `entry-${messages.length - 1}`,
       timestamp,
-      name: "Legacy HTML output",
+      name: "Session HTML output",
     },
   ];
   await writeFile(
@@ -124,7 +124,7 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
   try {
     const page = await app.firstWindow();
     await page
-      .getByRole("button", { name: "Legacy HTML output", exact: true })
+      .getByRole("button", { name: "Session HTML output", exact: true })
       .click();
     const card = page.locator('[data-slot="html-file-card"]');
     await expect(card).toHaveCount(1);
@@ -192,10 +192,10 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
     await expect(
       page
         .frameLocator("iframe")
-        .getByRole("heading", { name: "Generated legacy page" }),
+        .getByRole("heading", { name: "Generated session page" }),
     ).toBeVisible();
     await page.screenshot({
-      path: test.info().outputPath("legacy-html-preview.png"),
+      path: test.info().outputPath("session-html-preview.png"),
     });
   } finally {
     await app.close();
@@ -203,23 +203,24 @@ test("legacy runtime HTML output retains a preview card through real file IPC", 
   }
 });
 
-for (const legacy of [true, false]) {
-  test(`shell deliverables have links and SVG preview without extension gating (legacy: ${legacy})`, async () => {
+for (const explicitLinks of [true, false]) {
+  test(`shell deliverables have links and SVG preview without extension gating (explicitLinks: ${explicitLinks})`, async () => {
     const { worklensTools } = await import("../../src/main/tools");
     const root = await mkdtemp(join(tmpdir(), "worklens-shell-delivery-"));
-    const runtime = join(root, "runtime");
+    const id = randomUUID();
     const sessions = join(root, "sessions");
-    await mkdir(runtime, { recursive: true });
+    const workspace = join(sessions, id, "workspace");
+    await mkdir(workspace, { recursive: true });
     await mkdir(sessions, { recursive: true });
-    await writeFile(join(runtime, "existing.sh"), "echo existing");
-    const tool = worklensTools(runtime, () => {}).find(
+    await writeFile(join(workspace, "existing.sh"), "echo existing");
+    const tool = worklensTools(workspace, () => {}).find(
       (tool) =>
         tool.name === (process.platform === "win32" ? "powershell" : "bash"),
     )!;
     // Exercise the real wrapper and persisted details, not fabricated produced flags.
     const script =
       "const f=require('node:fs'); f.mkdirSync('logo'); for(const name of ['bmw-logo-white.svg','result.uninventedformat123456789','README','.env','报告 最终版']) f.writeFileSync('logo/'+name, name.endsWith('.svg') ? '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\"><rect width=\"80\" height=\"80\" fill=\"royalblue\"/></svg>' : 'delivered'); f.writeFileSync('logo/preview-white.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=','base64'));";
-    const scriptPath = join(runtime, "make-output.cjs");
+    const scriptPath = join(workspace, "make-output.cjs");
     await writeFile(scriptPath, script);
     const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
     const command =
@@ -240,14 +241,13 @@ for (const legacy of [true, false]) {
       ".env",
       "报告 最终版",
     ];
-    const id = randomUUID();
     const timestamp = new Date().toISOString();
     const text =
       "## 已保存文件\n\n" +
       names
         .map((name) =>
-          legacy
-            ? `- [${name}](<${join(runtime, "logo", name)}>) — 已保存`
+          explicitLinks
+            ? `- [${name}](<${join(workspace, "logo", name)}>) — 已保存`
             : `- ${name} — 已保存`,
         )
         .join("\n") +
@@ -284,7 +284,9 @@ for (const legacy of [true, false]) {
         toolCallId: "make",
         toolName: tool.name,
         content: result.content,
-        details: legacy ? { worklensShell: { exitCode: 0 } } : result.details,
+        details: explicitLinks
+          ? { worklensShell: { exitCode: 0 } }
+          : result.details,
         isError: false,
         timestamp: Date.now(),
       },
@@ -300,7 +302,7 @@ for (const legacy of [true, false]) {
       },
     ];
     const records = [
-      { type: "session", version: 3, id, timestamp, cwd: runtime },
+      { type: "session", version: 3, id, timestamp, cwd: workspace },
       ...messages.map((message, index) => ({
         type: "message",
         id: `m${index}`,
@@ -367,7 +369,7 @@ for (const legacy of [true, false]) {
         )
         .toBe(80);
       await page.screenshot({
-        path: test.info().outputPath(`shell-svg-${legacy}.png`),
+        path: test.info().outputPath(`shell-svg-${explicitLinks}.png`),
       });
       await page.keyboard.press("Escape");
       await app.evaluate(({ shell }) => {

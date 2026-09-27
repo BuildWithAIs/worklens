@@ -12,6 +12,7 @@ import {
   access,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
@@ -56,11 +57,7 @@ async function setup() {
   let service: AgentService;
   const restart = async () => {
     await service?.shutdown();
-    artifacts = new LocalArtifacts(
-      join(root, "artifacts"),
-      paths.runtime,
-      paths.sessions,
-    );
+    artifacts = new LocalArtifacts(join(root, "artifacts"), paths.sessions);
     service = new AgentService(
       model,
       paths,
@@ -158,6 +155,7 @@ test("relative outputs are isolated, survive restart and clean up with only thei
     )?.targetPath,
   ).toBe(aFile);
   expect(await f.artifacts.get(downloaded.id)).toEqual(downloaded);
+  expect(f.artifacts.resolvePath("relative.txt", a.id)).toBe(relative.path);
   const updated = await f.write("<html>A2</html>", a.id);
   await f.end(updated.runId);
   expect(await readFile(aFile, "utf8")).toBe("<html>A2</html>");
@@ -246,7 +244,7 @@ test("conversation file links resolve workspace and external output across resta
   }
 });
 
-test("legacy conversations keep their shared runtime while owned legacy downloads are cleaned", async () => {
+test("sessions use their own workspace without storage markers or legacy directory fallback", async () => {
   const f = await setup();
   const legacyFile = join(f.paths.runtime, "legacy.html");
   await writeFile(legacyFile, "<html>legacy</html>");
@@ -258,50 +256,50 @@ test("legacy conversations keep their shared runtime while owned legacy download
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
-  // A pre-workspace session has no storage marker and a shared cwd in its header.
+  expect(
+    records.some((record) => record.customType === "worklens.workspace"),
+  ).toBe(false);
+  // Even a stale shared cwd in the header must not restore the old layout.
   records[0].cwd = f.paths.runtime;
-  const marker = records.find(
-    (record) => record.customType === "worklens.workspace",
-  );
-  for (const record of records)
-    if (record.parentId === marker.id) record.parentId = marker.parentId;
   await writeFile(
     info.path,
-    records
-      .filter((record) => record !== marker)
-      .map((record) => JSON.stringify(record))
-      .join("\n") + "\n",
+    records.map((record) => JSON.stringify(record)).join("\n") + "\n",
   );
-  const legacyArtifacts = new LocalArtifacts(
-    join(f.root, "artifacts"),
-    f.paths.runtime,
-  );
-  const download = await legacyArtifacts.save(
-    old.id,
-    "legacy.txt",
-    "legacy download",
-  );
-  // Index records created before this change did not contain session ownership.
-  await writeFile(
-    join(legacyArtifacts.root, "index", download.id + ".json"),
-    JSON.stringify(download),
-  );
+  const legacyDirectory = join(f.artifacts.root, "files", old.id);
+  await mkdir(legacyDirectory, { recursive: true });
+  const download = {
+    id: randomUUID(),
+    name: "legacy.html",
+    path: join(legacyDirectory, "legacy.html"),
+    size: 19,
+  };
+  await writeFile(download.path, "<html>legacy</html>");
+  const index = join(f.artifacts.root, "index", download.id + ".json");
+  await mkdir(join(f.artifacts.root, "index"), { recursive: true });
+  await writeFile(index, JSON.stringify(download));
   await f.restart();
-  expect(await f.service.previewHtml(old.id, legacyFile)).toBe(
-    "<html>legacy</html>",
-  );
-  const resumed = await f.write("legacy continued", old.id);
+  const linked = await f.send(`\`${download.path}\``, old.id);
+  await f.end(linked.runId);
+  await expect(f.service.previewHtml(old.id, legacyFile)).rejects.toThrow();
+  await expect(f.service.previewHtml(old.id, download.path)).rejects.toThrow();
+  const resumed = await f.write("session continued", old.id);
   await f.end(resumed.runId);
-  expect(await readFile(join(f.paths.runtime, "report.html"), "utf8")).toBe(
-    "legacy continued",
+  const output = join(
+    sessionWorkspace(f.paths.sessions, old.id),
+    "report.html",
   );
+  expect(await readFile(output, "utf8")).toBe("session continued");
+  await expect(access(join(f.paths.runtime, "report.html"))).rejects.toThrow();
+  const saved = await f.artifacts.save(old.id, "new.txt", "new download");
+  expect(
+    saved.path.startsWith(join(f.paths.sessions, old.id, "artifacts")),
+  ).toBe(true);
   await f.service.delete(old.id);
   expect(await readFile(legacyFile, "utf8")).toBe("<html>legacy</html>");
-  expect(await readFile(join(f.paths.runtime, "report.html"), "utf8")).toBe(
-    "legacy continued",
-  );
-  await expect(access(download.path)).rejects.toThrow();
-  await expect(f.artifacts.get(download.id)).rejects.toThrow();
+  expect(await readFile(download.path, "utf8")).toBe("<html>legacy</html>");
+  expect(JSON.parse(await readFile(index, "utf8"))).toEqual(download);
+  await expect(access(output)).rejects.toThrow();
+  await expect(f.artifacts.get(saved.id)).rejects.toThrow();
 });
 
 test("cleanup rejects replaced session roots, is retryable, and never follows child symlinks", async () => {

@@ -116,7 +116,10 @@ async function setup() {
     fetch,
   );
   const input = { url: fake.api, token: KEY };
-  const artifacts = new LocalArtifacts(join(root, "artifacts"), root);
+  const artifacts = new LocalArtifacts(
+    join(root, "artifacts"),
+    join(root, "sessions"),
+  );
   const service = new TavilyService(connections, artifacts);
   const call = async (
     name: "web_search" | "web_fetch" | "web_research" | "web_research_status",
