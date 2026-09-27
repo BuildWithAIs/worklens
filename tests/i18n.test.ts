@@ -57,7 +57,7 @@ describe("internationalization resources", () => {
 for (const service of ["Jira", "Confluence", "GitHub"]) {
   test(`${service} runtime failures follow the selected language`, () => {
     expect(systemText(`${service} 网络请求失败或超时`, "en")).toBe(
-      `Could not reach ${service} or the request timed out. Check your network and site address, then try again.`,
+      `Couldn’t reach ${service} or the request timed out. Check your network and site address, then try again.`,
     );
     expect(systemText(`${service} 网络请求失败或超时`, "zh")).toContain(
       `无法连接 ${service}`,
