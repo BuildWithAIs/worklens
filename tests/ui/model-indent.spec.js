@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
 for (const theme of ["light", "dark"]) {
-  test(`model names align with their provider logo: ${theme}`, async ({ page }, info) => {
+  test(`model cards keep external headings and compact rows: ${theme}`, async ({ page }, info) => {
     await mockWorklens(page);
     await page.goto("/");
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
@@ -18,10 +18,11 @@ for (const theme of ["light", "dark"]) {
       await expect(row).toHaveCSS("padding-top", "10px");
       const parentBox = await page.locator('[data-slot="accordion-content"]').first().boundingBox();
       const rowBox = await row.boundingBox();
-      const brandBox = await page.locator('.settings-model-heading-copy [data-slot="provider-icon"]').first().boundingBox();
-      const nameBox = await row.locator(".settings-entry-title").boundingBox();
-      expect(nameBox.x).toBeCloseTo(brandBox.x, 0);
-      expect(rowBox.x + rowBox.width).toBeCloseTo(parentBox.x + parentBox.width, 0);
+      const headingBox = await page.locator(".settings-accordion-heading").first().boundingBox();
+      expect(headingBox.y + headingBox.height).toBeLessThanOrEqual(parentBox.y);
+      expect(rowBox.x - parentBox.x).toBeCloseTo(25, 0);
+      expect(parentBox.x + parentBox.width - rowBox.x - rowBox.width).toBeCloseTo(25, 0);
+      if (width === 1280) expect(rowBox.height).toBe(48);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: info.outputPath(`models-${width}.png`) });
     }

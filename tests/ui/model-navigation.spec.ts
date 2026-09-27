@@ -87,7 +87,7 @@ test("first launch stays in chat and both connection shortcuts open Providers", 
   await search.fill("no-such-model");
   await expect(
     page.getByText(
-      "No models match these filters. Try another search or filter.",
+      "No matching models or providers. Try another search.",
       { exact: true },
     ),
   ).toBeVisible();
@@ -113,7 +113,7 @@ test("Models excludes unconnected providers while Providers retains connection m
   ).toHaveCount(3);
   await expect(page.getByText("Claude Sonnet", { exact: true })).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Select models: DeepSeek", exact: true }),
+    page.getByRole("button", { name: "Manage models: DeepSeek", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Providers", exact: true }).click();
   await page
@@ -149,7 +149,7 @@ for (const modelState of ["unavailable", "hidden", "available"] as const) {
       .fill("no-such-model");
     await expect(
       page.getByText(
-        "No models match these filters. Try another search or filter.",
+        "No matching models or providers. Try another search.",
         { exact: true },
       ),
     ).toBeVisible();

@@ -59,6 +59,7 @@ const en = {
     loadDraftForReview: "Load draft for review",
     dismissRecoveryRecord: "Dismiss recovery record",
     deleteConversationQuestion: "Delete conversation?",
+    deletingConversation: "Deleting…",
     renameConversation: "Rename conversation",
     deleteConversationDescription:
       "This will permanently delete this conversation and its files. Files saved elsewhere will be kept.",
@@ -125,7 +126,7 @@ const en = {
     jade: "Jade",
     silverMist: "Silver mist",
     dusk: "Dusk",
-    couldNotSaveBackgroundAppearance: "Could not save background appearance.",
+    couldNotSaveBackgroundAppearance: "Couldn’t save background appearance.",
     backgroundEffect: "Background effect",
     off: "Off",
     softSurface: "Soft surface",
@@ -152,8 +153,8 @@ const en = {
       githubHttps: "GitHub Cloud requires a standard HTTPS site address.",
       cloudEmail: "Enter your Atlassian account email for Cloud.",
       cloudIdRequired: "Enter the site Cloud ID for a scoped token.",
-      cloudIdDiscover: "Could not discover the Cloud ID. Enter it manually.",
-      cloudIdVerify: "Could not verify the Cloud ID for this site address.",
+      cloudIdDiscover: "Couldn’t discover the Cloud ID. Enter it manually.",
+      cloudIdVerify: "Couldn’t verify the Cloud ID for this site address.",
       cloudIdMismatch: "The Cloud ID does not match the site address.",
       tokenRequired:
         "Enter a token. A new token is required after changing the site or account.",
@@ -172,10 +173,10 @@ const en = {
         "GitHub redirected the API request. Check the site address and target. Credentials were not forwarded.",
       connectedPrefix: "Connected: ",
       network:
-        "Could not reach {{service}} or the request timed out. Check your network and site address, then try again.",
+        "Couldn’t reach {{service}} or the request timed out. Check your network and site address, then try again.",
       httpStatus: "{{service}} returned HTTP {{status}}. ",
       credentialsUnreadable:
-        "Could not read or decrypt the {{service}} settings. The original file is preserved. Enter the token again or disconnect.",
+        "Couldn’t read or decrypt the {{service}} settings. The original file is preserved. Enter the token again or disconnect.",
       connectFirst:
         "Save and verify the {{service}} connection in Settings → Connectors first.",
       changed: "The {{service}} connection changed. Read the target again.",
@@ -239,7 +240,7 @@ const en = {
       tavilySettingsSaved: "Tavily settings saved",
       tavilyDisconnected: "Tavily disconnected",
       description:
-        "Give the agent web search and page reading through your Tavily API key.",
+        "Connect Tavily to let the agent search the web and read web pages.",
       plan: "Plan",
       apiURL: "API URL",
       enterYourApiKey: "Enter your Tavily API key",
@@ -277,7 +278,7 @@ const en = {
     retry: "Try again",
     viewDetails: "About {{skill}}",
     appliesNextTurn:
-      "Changes apply on the next conversation turn. Instructions already read in the current turn remain in context.",
+      "Changes take effect on your next message. Skills already loaded may still affect this conversation.",
     shadowed: "Inactive: the {{source}} version takes precedence.",
     builtin: "Built-in",
     builtinDescription: "Ships with WorkLens.",
@@ -326,15 +327,15 @@ const en = {
     openPreview: "Open preview",
     loadingPlaceholder: "Loading…",
     download: "Download",
-    unavailableDescription: "Unable to preview this HTML.",
+    unavailableDescription: "Couldn’t preview this HTML file.",
     displayMode: "Display mode",
     preview: "Preview",
     code: "Code",
     closePreview: "Close preview",
     staticHTMLPreview: "Static HTML preview",
     chromeOpenError:
-      "Could not open Chrome. Check that it is installed and the HTML file is available.",
-    fileMissingError: "Could not locate the HTML file.",
+      "Couldn’t open Chrome. Check that it is installed and the HTML file is available.",
+    fileMissingError: "Couldn’t locate the HTML file.",
     artifactActions: "Artifact actions",
     downloadAsHTML: "Download as HTML",
     openInGoogleChrome: "Open in Google Chrome",
@@ -350,7 +351,7 @@ const en = {
     searchModelsPlaceholder: "Search models…",
     emptySearch: "No matching models. Try another search.",
     emptyVisibleModels:
-      "No models to show. Check availability and visibility in Models.",
+      "No models available. Check your model selection in Settings → Models.",
     emptyProviders: "Connect a provider to choose a model.",
     manageModels: "Manage models",
     connectAProvider: "Connect a provider",
@@ -383,7 +384,7 @@ const en = {
       baseUrl: "Base URL",
       resourceName: "Resource name",
       apiVersion: "API version",
-      modelDeployment: "Model = deployment",
+      modelDeployment: "Model deployment mapping",
     },
     continue: "Continue",
   },
@@ -392,12 +393,12 @@ const en = {
   },
   settings: {
     chooseModels: "Select models",
-    manageModelsFor: "Select models: {{provider}}",
+    manageModelsFor: "Manage models: {{provider}}",
     modelsFor: "{{provider}} models",
-    modelsSelectedCount: "{{count}} / {{total}} added",
+    modelsSelectedCount: "{{count}} / {{total}}",
     modelsDraftCount: "{{count}} / {{total}} selected",
     modelsMatchedCount: "{{count}} matching",
-    selectModelsDescription: "Select models for your chat menu. Save to apply.",
+    selectModelsDescription: "Select models to use in chats. Save to apply.",
     searchModelsPlaceholder: "Search all models…",
     selectAllModels: "Select all",
     clearModelSelection: "Deselect all",
@@ -412,7 +413,7 @@ const en = {
     noModelsInCatalog:
       "No models found for this provider. Try refreshing the model list.",
     noModelsSelected:
-      "No models added. Use Select models to choose models for your chat menu.",
+      "No models added. Select models to use in chats.",
     modelsSaved: "Model selection saved",
 
     modelsRefreshed: "Models refreshed",
@@ -465,10 +466,10 @@ const en = {
     showMoreModels: "Show more models",
     noProvidersConnected: "No providers connected",
     emptyProvidersDescription: "Connect a provider to use its models.",
-    emptyModels: "No models match these filters. Try another search or filter.",
+    emptyModels: "No matching models or providers. Try another search.",
     preferences: "Preferences",
     language: "Language",
-    couldNotSaveLanguage: "Could not save language",
+    couldNotSaveLanguage: "Couldn’t save language",
     appearance: "Appearance",
     light: "Light",
     dark: "Dark",
@@ -531,7 +532,7 @@ const en = {
     aboutTotalUsage: "About total usage",
   },
   clipboard: {
-    error: "Could not copy. Select the text and copy it manually.",
+    error: "Couldn’t copy. Select the text and copy it manually.",
   },
   attachments: {
     preview: "Attachment preview",
@@ -560,7 +561,7 @@ const en = {
     providerBlocked: "The provider blocked this image.",
   },
   toolApproval: {
-    cancelledReason: "Cancelled reason:",
+    cancelledReason: "Reason for cancellation:",
     error: "Error:",
     allow: "Allow",
     alwaysAllow: "Always allow",
@@ -641,7 +642,7 @@ const en = {
     connectProvider: "Connect a provider in Settings to use this model.",
     modelRemoved: "This model is no longer available. Select another model.",
     unsupportedReasoning:
-      "This model does not support the selected reasoning level.",
+      "This model doesn’t support the selected thinking level.",
     modelRequestFailed: "The model request failed.",
     appClosing: "The app is closing.",
     conversationCouldNotBeOpened: "This conversation could not be opened.",
@@ -675,7 +676,7 @@ const en = {
     authInProgress: "Authentication is already in progress.",
     authExpired: "This authentication step has expired. Please try again.",
     modelRefreshFailed:
-      "Could not refresh models. The cached catalog is retained. Please try again.",
+      "Couldn’t refresh models. Your existing model list is unchanged. Try again.",
     authFailed: "Authentication failed. Update your credentials.",
     rateLimited: "Rate limited by the provider. Please try again later.",
     connectionTimeout: "Connection timed out. Check your network or endpoint.",
@@ -687,7 +688,7 @@ const en = {
       "Saved credentials could not be read or decrypted. Update or remove them. The original file is unchanged.",
     redacted: "[redacted]",
     retry: "Retry {{current}} of {{total}} in {{seconds}} seconds",
-    conversationOpenFailed: "Could not open conversation {{id}}: ",
+    conversationOpenFailed: "Couldn’t open conversation {{id}}: ",
     interruptedTasks:
       "{{count}} tasks were interrupted when the app last closed. Recovery records are saved. Check any tool changes before continuing.",
   },

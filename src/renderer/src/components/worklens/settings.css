@@ -303,8 +303,7 @@
   line-height: 1.5;
 }
 .settings-model-panel {
-  margin-inline: 24px 0;
-  padding-bottom: 8px;
+  padding-bottom: 0;
 }
 .settings-model-copy {
   display: flex;
@@ -321,6 +320,13 @@
 }
 .settings-model-panel .settings-entry-actions {
   gap: 16px;
+}
+.settings-model-test {
+  color: var(--faint);
+}
+.settings-model-test:hover,
+.settings-model-test:focus-visible {
+  color: var(--text);
 }
 .settings-empty {
   color: var(--faint);
@@ -589,9 +595,8 @@ body:has(.settings-disconnect-dialog[data-open])
   align-items: center;
   gap: 16px;
   min-height: 48px;
-  margin-inline: -24px;
-  padding-inline: 24px;
-  border-radius: 15px;
+  padding-inline: 0;
+  border-radius: 8px;
 }
 .settings-model-disclosure {
   position: static;
@@ -685,5 +690,11 @@ body:has(.settings-disconnect-dialog[data-open])
 }
 
 .settings-model-groups {
-  gap: 12px;
+  gap: 4px;
+}
+.settings-model-groups > .settings-model-group {
+  border: 0;
+}
+.settings-model-group[data-open]:not(:last-child) {
+  margin-bottom: 12px;
 }

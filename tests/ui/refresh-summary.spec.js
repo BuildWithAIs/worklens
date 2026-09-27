@@ -53,7 +53,7 @@ for (const language of ["en", "zh"]) {
       .click();
     await page
       .getByRole("button", {
-        name: t("Select models: DeepSeek", "选择模型：DeepSeek"),
+        name: t("Manage models: DeepSeek", "管理模型：DeepSeek"),
         exact: true,
       })
       .click();

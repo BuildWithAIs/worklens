@@ -17,7 +17,6 @@ import {
   Globe,
   LoaderCircle,
   Plus,
-  ListChecks,
   RefreshCw,
   Settings2,
   Sparkles,
@@ -422,7 +421,7 @@ export function SettingsPage({
                   >
                     {modelGroups.map((p) => (
                       <AccordionItem
-                        className="settings-list"
+                        className="settings-model-group"
                         value={p.id}
                         key={p.id}
                       >
@@ -474,15 +473,15 @@ export function SettingsPage({
                               )
                             }
                           >
-                            <ListChecks
+                            <Settings2
                               data-icon="inline-start"
                               aria-hidden="true"
                             />
-                            {t("settings.chooseModels")}
+                            {t("common.manage")}
                           </Button>
                         </div>
                         <AccordionContent className="settings-model-panel">
-                          <div className="settings-model-list">
+                          <div className="settings-list settings-model-list">
                             {p.models.slice(0, limits[p.id] ?? 50).map((m) => {
                               const key = p.id + "/" + m.id;
                               return (
@@ -522,6 +521,7 @@ export function SettingsPage({
                                         <TooltipIconButton
                                           variant="ghost"
                                           size="icon-xs"
+                                          className="settings-model-test"
                                           disabled={testing.has(key)}
                                           aria-label={t(
                                             "settings.testConnectionFor",

@@ -9,7 +9,7 @@ async function openModels(page: Page, large = false) {
 }
 async function manage(page: Page, provider = "DeepSeek") {
   await page
-    .getByRole("button", { name: `Select models: ${provider}`, exact: true })
+    .getByRole("button", { name: `Manage models: ${provider}`, exact: true })
     .click();
   return page.getByRole("dialog", {
     name: `${provider} models`,
@@ -41,7 +41,7 @@ test("new candidates come first, search covers the catalog, and checking a row k
   });
   const disclosure = group.locator('[data-slot="accordion-trigger"]');
   await expect(group.locator(".settings-group-count")).toHaveText(
-    "1 / 2 added",
+    "1 / 2",
   );
   await group.locator(".settings-group-count").click();
   await expect(disclosure).toHaveAttribute("aria-expanded", "false");
@@ -106,7 +106,7 @@ test("new candidates come first, search covers the catalog, and checking a row k
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(disclosure).toHaveAttribute("aria-expanded", "false");
   await expect(group.locator(".settings-group-count")).toHaveText(
-    "1 / 2 added",
+    "1 / 2",
   );
   await disclosure.focus();
   await page.keyboard.press("Space");
@@ -237,7 +237,7 @@ test("search preserves the saved total and bulk selection excludes unavailable m
       .locator(".settings-accordion-heading")
       .filter({ hasText: "GitHub Copilot" })
       .locator(".settings-group-count"),
-  ).toHaveText("2 / 4 added · 1 matching");
+  ).toHaveText("2 / 4 · 1 matching");
   await search.fill("");
   const dialog = await manage(page, "GitHub Copilot");
   await expect(
@@ -285,7 +285,7 @@ test("draft edits cancel without writing; save clears a large catalog and keeps 
     page
       .locator(".settings-list")
       .getByText(
-        "No models added. Use Select models to choose models for your chat menu.",
+        "No models added. Select models to use in chats.",
         {
           exact: true,
         },
@@ -427,7 +427,7 @@ for (const theme of ["light", "dark"]) {
       document.documentElement.dataset.theme = theme;
     }, theme);
     const trigger = page.getByRole("button", {
-      name: "Select models: DeepSeek",
+      name: "Manage models: DeepSeek",
       exact: true,
     });
     await trigger.focus();
