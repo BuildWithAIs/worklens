@@ -1,6 +1,5 @@
 import { lstat, mkdir, rm } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { SessionManager } from "@earendil-works/pi-coding-agent";
 
 export function sessionDirectory(sessions: string, id: string) {
   if (!/^[\w-]+$/.test(id)) throw new Error("Invalid session ID");
@@ -9,23 +8,6 @@ export function sessionDirectory(sessions: string, id: string) {
 
 export function sessionWorkspace(sessions: string, id: string) {
   return join(sessionDirectory(sessions, id), "workspace");
-}
-
-export function workingDirectory(
-  paths: { sessions: string; runtime: string },
-  manager: SessionManager,
-) {
-  const isolated = manager
-    .getEntries()
-    .some(
-      (entry) =>
-        entry.type === "custom" &&
-        entry.customType === "worklens.workspace" &&
-        (entry.data as { version?: number } | undefined)?.version === 1,
-    );
-  return isolated
-    ? sessionWorkspace(paths.sessions, manager.getSessionId())
-    : paths.runtime;
 }
 
 export function isWithin(root: string, path: string) {

@@ -31,6 +31,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  LoaderCircle,
 } from "lucide-react";
 import {
   SettingsPage,
@@ -162,6 +163,9 @@ export function App() {
     id: string;
     title: string;
   }>();
+  const [deleting, setDeleting] = useState(false);
+  const deletionPending = useRef(false);
+  const deletedConversations = useRef(new Set<string>());
   const [showRecovery, setShowRecovery] = useState(true);
   const sequences = useRef(new Map<string, number>());
   const latestRuns = useRef(new Map<string, string>());
@@ -175,10 +179,17 @@ export function App() {
       globalUsage.current,
       next.globalUsage,
     );
-    setData({ ...next, globalUsage: globalUsage.current });
+    setData({
+      ...next,
+      globalUsage: globalUsage.current,
+      conversations: next.conversations.filter(
+        (conversation) => !deletedConversations.current.has(conversation.id),
+      ),
+    });
     return next;
   }, []);
   const acceptView = useCallback((view: ConversationView) => {
+    if (deletedConversations.current.has(view.id)) return;
     if (
       view.runId &&
       (sequences.current.get(`${view.id}/${view.runId}`) ?? 0) >
@@ -224,6 +235,7 @@ export function App() {
       setData((previous) =>
         previous ? { ...previous, globalUsage: globalUsage.current } : previous,
       );
+      if (deletedConversations.current.has(event.conversationId)) return;
       const latest = latestRuns.current.get(event.conversationId);
       if (latest && latest !== event.runId && event.type !== "run_start")
         return;
@@ -282,6 +294,42 @@ export function App() {
     setSelection(data?.settings.defaults);
     setText("");
     setPage("chat");
+  }
+  async function deleteConversation(id: string) {
+    if (deletionPending.current) return;
+    deletionPending.current = true;
+    setDeleting(true);
+    try {
+      await api.invoke("delete", { id });
+      deletedConversations.current.add(id);
+      setData((previous) =>
+        previous
+          ? {
+              ...previous,
+              conversations: previous.conversations.filter((c) => c.id !== id),
+            }
+          : previous,
+      );
+      setViews((previous) => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setUnread((previous) => {
+        const next = new Set(previous);
+        next.delete(id);
+        return next;
+      });
+      if (current === id) newConversation();
+      setDialog(undefined);
+      // Refresh usage and settings without delaying the visible removal.
+      void refresh().catch((error) => notifyError(String(error)));
+    } catch (error) {
+      notifyError(String(error));
+    } finally {
+      deletionPending.current = false;
+      setDeleting(false);
+    }
   }
   async function togglePin(id: string) {
     if (!data || pinSaving.current) return;
@@ -369,6 +417,7 @@ export function App() {
   }
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
+      if (deletionPending.current) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
         event.preventDefault();
         newConversation();
@@ -729,7 +778,9 @@ export function App() {
               ? t("app.deleteConversationQuestion")
               : t("app.renameConversation")
           }
-          onClose={() => setDialog(undefined)}
+          onClose={() => {
+            if (!deletionPending.current) setDialog(undefined);
+          }}
         >
           {dialog.type === "delete" ? (
             <DialogDescription className="text-sm leading-6">
@@ -774,6 +825,7 @@ export function App() {
             <Button
               variant="outline"
               autoFocus={dialog.type === "delete"}
+              disabled={deleting}
               onClick={() => setDialog(undefined)}
             >
               {t("common.cancel")}
@@ -785,33 +837,41 @@ export function App() {
                   : undefined
               }
               disabled={
+                deleting ||
                 !dialog.title.trim() ||
                 (dialog.type === "rename" &&
                   titleCharacters(dialog.title).length > RENAME_LIMIT)
               }
+              aria-busy={deleting}
               onClick={() =>
-                void (
-                  dialog.type === "delete"
-                    ? api.invoke("delete", { id: dialog.id })
-                    : api.invoke("rename", {
+                dialog.type === "delete"
+                  ? void deleteConversation(dialog.id)
+                  : void api
+                      .invoke("rename", {
                         id: dialog.id,
                         title: dialog.title,
                       })
-                )
-                  .then(async () => {
-                    if (dialog.type === "delete" && current === dialog.id)
-                      newConversation();
-                    if (dialog.type === "rename" && current === dialog.id)
-                      await open(dialog.id);
-                    setDialog(undefined);
-                    await refresh();
-                  })
-                  .catch((e) => notifyError(String(e)))
+                      .then(async () => {
+                        if (current === dialog.id) await open(dialog.id);
+                        setDialog(undefined);
+                        await refresh();
+                      })
+                      .catch((e) => notifyError(String(e)))
               }
             >
-              {dialog.type === "delete"
-                ? t("common.delete")
-                : t("app.saveName")}
+              {deleting && (
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="motion-safe:animate-spin"
+                />
+              )}
+              <span aria-live="polite">
+                {deleting
+                  ? t("app.deletingConversation")
+                  : dialog.type === "delete"
+                    ? t("common.delete")
+                    : t("app.saveName")}
+              </span>
             </Button>
           </div>
         </ConversationDialog>

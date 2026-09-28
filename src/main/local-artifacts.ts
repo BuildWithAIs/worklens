@@ -24,10 +24,10 @@ import { Readable } from "node:stream";
 import { atomicJson, SerialQueue } from "./storage";
 import type { LocalArtifact } from "../shared/contracts";
 import {
-  isWithin,
   ownedDirectory,
   removeOwnedDirectory,
   sessionDirectory,
+  sessionWorkspace,
 } from "./session-files";
 
 export const MAX_FILE_BYTES = 100 * 1024 * 1024;
@@ -64,15 +64,10 @@ export function fileIdentity(info: {
 }
 export class LocalArtifacts {
   private queue = new SerialQueue();
-  private sessionCwds = new Map<string, string>();
   constructor(
     readonly root: string,
-    readonly cwd: string,
-    readonly sessions?: string,
+    readonly sessions: string,
   ) {}
-  useSession(sessionId: string, cwd: string) {
-    this.sessionCwds.set(sessionId, cwd);
-  }
   resolvePath(path: string, sessionId?: string) {
     const expanded =
       path === "~"
@@ -80,23 +75,18 @@ export class LocalArtifacts {
         : /^~[\\/]/.test(path)
           ? join(homedir(), path.slice(2))
           : path;
-    return isAbsolute(expanded)
-      ? resolve(expanded)
-      : resolve(
-          (sessionId && this.sessionCwds.get(sessionId)) || this.cwd,
-          expanded,
-        );
+    if (isAbsolute(expanded)) return resolve(expanded);
+    if (!sessionId) throw new Error("Session ID required for relative paths");
+    return resolve(sessionWorkspace(this.sessions, sessionId), expanded);
   }
   async directory(
     sessionId: string,
     connector: "confluence" | "jira" | "github" | "tavily" = "confluence",
   ) {
     if (!/^[\w-]+$/.test(sessionId)) throw new Error("Invalid session ID");
-    const base = this.sessions
-      ? join(sessionDirectory(this.sessions, sessionId), "artifacts")
-      : join(this.root, "files", sessionId);
+    const base = join(sessionDirectory(this.sessions, sessionId), "artifacts");
     const directory = join(base, connector, randomUUID());
-    await ownedDirectory(this.sessions ?? this.root, directory, true);
+    await ownedDirectory(this.sessions, directory, true);
     return directory;
   }
   async save(
@@ -210,14 +200,8 @@ export class LocalArtifacts {
   async removeSession(sessionId: string) {
     // Validate every cleanup target before removing any file. External exports
     // only lose their conversation-owned index entry, never their actual file.
-    const legacy = join(this.root, "files", sessionId);
-    sessionDirectory(this.sessions ?? this.root, sessionId);
-    await ownedDirectory(this.root, legacy);
-    if (this.sessions)
-      await ownedDirectory(
-        this.sessions,
-        sessionDirectory(this.sessions, sessionId),
-      );
+    const directory = sessionDirectory(this.sessions, sessionId);
+    await ownedDirectory(this.sessions, directory);
     const index = join(this.root, "index");
     await ownedDirectory(this.root, index);
     const entries = await readdir(index).catch((error) => {
@@ -239,23 +223,13 @@ export class LocalArtifacts {
       } catch {
         continue;
       }
-      if (
-        record?.sessionId === sessionId ||
-        (typeof record?.path === "string" && isWithin(legacy, record.path))
-      )
-        owned.push(path);
+      if (record?.sessionId === sessionId) owned.push(path);
     }
-    await removeOwnedDirectory(this.root, legacy);
-    if (this.sessions)
-      await removeOwnedDirectory(
-        this.sessions,
-        sessionDirectory(this.sessions, sessionId),
-      );
+    await removeOwnedDirectory(this.sessions, directory);
     for (const path of owned)
       await unlink(path).catch((error) => {
         if (error.code !== "ENOENT") throw error;
       });
-    this.sessionCwds.delete(sessionId);
   }
   copy(id: string, destination: string) {
     return this.queue.run("copy:" + destination, async () => {

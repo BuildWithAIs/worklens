@@ -49,7 +49,9 @@ test("output persistence failure preserves remote success and long content remai
   s.fixture.state.issues.get("TEST-1").fields.description =
     "long document ".repeat(3000);
   const result = await s.call({ operation: "read_issue", issue: "TEST-1" });
-  expect(result.data.resultPath).toContain(join("session1", "jira"));
+  expect(result.data.resultPath).toContain(
+    join("sessions", "session1", "artifacts", "jira"),
+  );
   const compacted = serializeConversation([
     {
       role: "toolResult",

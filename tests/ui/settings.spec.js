@@ -30,7 +30,7 @@ test("local paths stay compact and expose their full value on keyboard focus", a
   await page.keyboard.press("Tab");
   await page.mouse.move(0, 0);
   await path.focus();
-  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(full);
+  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveText(full);
   await row.getByRole("button", { name: "Open Runtime directory" }).focus();
   await expect(
     page
@@ -285,7 +285,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     .fill("DeepSeek");
   await expect(page.locator(".settings-entry")).toHaveCount(2);
   await page
-    .getByRole("button", { name: "Select models: DeepSeek", exact: true })
+    .getByRole("button", { name: "Manage models: DeepSeek", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Refresh models: DeepSeek", exact: true })
@@ -314,7 +314,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
   ).toHaveText("DeepSeek V4 Flash connection successful");
   await expect(page.locator(".model-test-result")).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Select models: DeepSeek", exact: true })
+    .getByRole("button", { name: "Manage models: DeepSeek", exact: true })
     .click();
   await page
     .getByRole("checkbox", { name: "DeepSeek V4 Pro", exact: true })
@@ -327,7 +327,7 @@ test("settings and chat model workflow", async ({ page }, testInfo) => {
     .getByRole("textbox", { name: "Search models", exact: true })
     .fill("Copilot");
   await page
-    .getByRole("button", { name: "Select models: GitHub Copilot", exact: true })
+    .getByRole("button", { name: "Manage models: GitHub Copilot", exact: true })
     .click();
   await page
     .getByRole("checkbox", { name: "Copilot Sonnet", exact: true })

@@ -56,7 +56,10 @@ export async function setup(
   );
   const input = { url: fixture.url, token: "synthetic-github-secret" };
   await connections.save(input);
-  const artifacts = new LocalArtifacts(join(root, "artifacts"), root);
+  const artifacts = new LocalArtifacts(
+    join(root, "artifacts"),
+    join(root, "sessions"),
+  );
   const service = new GitHubService(connections, artifacts);
   let run = "run1";
   const call = async (

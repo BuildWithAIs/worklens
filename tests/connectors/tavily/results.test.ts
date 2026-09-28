@@ -21,7 +21,10 @@ async function setup() {
     join(root, "connection.json"),
     encryption(),
   );
-  const artifacts = new LocalArtifacts(join(root, "artifacts"), root);
+  const artifacts = new LocalArtifacts(
+    join(root, "artifacts"),
+    join(root, "sessions"),
+  );
   const call = async (
     operation: string,
     value: object,

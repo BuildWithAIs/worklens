@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
 
+export function mockExistingConversation(page: Page): Promise<void>;
+
 export function mockWorklens(
   page: Page,
   options?: {

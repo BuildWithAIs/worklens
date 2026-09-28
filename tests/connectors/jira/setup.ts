@@ -75,7 +75,10 @@ export async function setup(cloud = false, scoped = false) {
     fetcher,
   );
   await connections.save(input);
-  const artifacts = new LocalArtifacts(join(root, "artifacts"), root);
+  const artifacts = new LocalArtifacts(
+    join(root, "artifacts"),
+    join(root, "sessions"),
+  );
   const service = new JiraService(connections, artifacts, fetcher);
   let run = "run1";
   const call = async (

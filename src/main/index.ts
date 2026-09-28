@@ -89,7 +89,6 @@ else {
       await skills.initialize();
       const artifacts = new LocalArtifacts(
         join(root, "artifacts"),
-        paths.runtime,
         paths.sessions,
       );
       const connectors = createConnectors(
