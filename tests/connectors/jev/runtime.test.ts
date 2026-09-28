@@ -36,7 +36,6 @@ async function runtimeSetup() {
     undefined,
     new LocalArtifacts(
       join(f.root, "artifacts"),
-      paths.runtime,
       paths.sessions,
     ),
     f.consent,
