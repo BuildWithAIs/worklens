@@ -922,11 +922,30 @@ kbd {
   --syntax-number: #edb776;
   --syntax-comment: #999da6;
 }
-.aui-md-pre, .artifact-source {
+.aui-md-pre, .artifact-source, .aui-tool-code-embedded pre {
   font-family: var(--code-font-family);
   font-weight: 400;
   font-variant-ligatures: none;
   -webkit-font-smoothing: antialiased;
+}
+.aui-tool-code-embedded pre {
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  white-space: pre;
+  overflow-wrap: normal;
+  font-size: 12px;
+  line-height: 20px;
+}
+.aui-tool-code-embedded code {
+  font-family: inherit;
+}
+.aui-tool-code-embedded pre:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: -2px;
 }
 .hljs-tag, .hljs-meta { color: var(--faint); }
 .hljs-name, .hljs-selector-tag { color: var(--syntax-tag); }
@@ -1168,6 +1187,20 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .aui-assistant-message-time,
   .aui-user-action-bar-wrapper { transition: none; }
+}
+
+/* Attribution is a separate hover/focus target from answer actions. Preserve
+   the last answer's always-visible actions and every footer's reserved space. */
+[data-slot="aui_assistant-message-root"]:has(
+  > [data-slot="aui_assistant-message-attribution"]:is(:hover, :focus-within),
+  > [data-slot="aui_assistant-message-attribution"] [aria-expanded="true"]
+) .aui-assistant-message-time,
+[data-slot="aui_assistant-message-root"][data-message-last="false"]:has(
+  > [data-slot="aui_assistant-message-attribution"]:is(:hover, :focus-within),
+  > [data-slot="aui_assistant-message-attribution"] [aria-expanded="true"]
+) > [data-slot="aui_assistant-message-footer"] {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .history-title-clip { display: block; min-width: 0; text-overflow: clip; }
@@ -1555,7 +1588,8 @@ kbd {
   background: transparent;
   transition: opacity 120ms ease;
 }
-.aui-code-header-root .aui-code-copy svg {
+.aui-code-header-root .aui-code-copy svg,
+.aui-tool-code-embedded .aui-button-icon svg {
   width: 14px;
   height: 14px;
 }

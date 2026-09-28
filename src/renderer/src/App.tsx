@@ -680,6 +680,7 @@ export function App() {
           <AgentThread
             key={current ?? draftId}
             view={currentView}
+            onConsentChange={acceptView}
             canSend={!!availableModel?.available && !sending}
             draft={text}
             onDraftLoaded={() => setText("")}
@@ -717,6 +718,8 @@ export function App() {
           {page === "settings" && (
             <SettingsPage
               data={data}
+              conversation={currentView}
+              onConsentChange={acceptView}
               initialSection={settingsSection}
               save={settings}
               refresh={refresh}

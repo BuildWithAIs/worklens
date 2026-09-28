@@ -53,6 +53,7 @@ import type {
   Bootstrap,
   ProviderInfo,
   Settings,
+  ConversationView,
 } from "../../../../shared/contracts";
 import "./settings.css";
 
@@ -63,6 +64,8 @@ export type SettingsSection =
   | "connections"
   | "skills";
 type Props = {
+  conversation?: ConversationView;
+  onConsentChange?: (view: ConversationView) => void;
   data: Bootstrap;
   initialSection?: SettingsSection;
   save: (patch: Partial<Settings>) => Promise<void>;
@@ -73,6 +76,8 @@ type Props = {
 };
 const api = window.worklens;
 export function SettingsPage({
+  conversation,
+  onConsentChange,
   data,
   initialSection = "general",
   save,
@@ -612,6 +617,8 @@ export function SettingsPage({
             {section === "connections" && (
               <ConnectionsSettings
                 data={data}
+                conversation={conversation}
+                onConsentChange={onConsentChange}
                 refresh={refresh}
                 onSuccess={onSuccess}
               />

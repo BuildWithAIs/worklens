@@ -172,6 +172,7 @@ export interface Conversation {
 export interface ConversationView extends Conversation {
   messages: MessageView[];
   usage?: UsageSnapshot;
+  jevConsent?: JevSessionConsent;
 }
 export interface ChatEvent {
   conversationId: string;
@@ -203,6 +204,7 @@ export interface Bootstrap {
   jira?: JiraConnection;
   github?: GitHubConnection;
   tavily?: TavilyConnection;
+  jev?: JevConnection;
   globalUsage?: GlobalUsage;
   settings: Settings;
   providers: ProviderInfo[];
@@ -229,6 +231,22 @@ export interface ConversationFile {
 }
 
 export interface Requests {
+  jevSave: { input: JevSettingsInput; output: JevConnection };
+  jevTest: { input: JevSettingsInput; output: string };
+  jevRemove: { input: undefined; output: void };
+  jevConsentReply: {
+    input: {
+      conversationId: string;
+      requestId: string;
+      allow: boolean;
+      autoAllow?: boolean;
+    };
+    output: ConversationView;
+  };
+  jevConsentReset: {
+    input: { conversationId: string; blocked: boolean };
+    output: ConversationView;
+  };
   conversationFile: {
     input: {
       id: string;
@@ -387,6 +405,32 @@ export interface TavilyConnection extends Omit<TavilySettingsInput, "token"> {
   configured: boolean;
   plan?: string;
   error?: string;
+}
+export type ConnectorId = "confluence" | "jira" | "github" | "tavily" | "jev";
+export interface JevSettingsInput {
+  url: string;
+  token?: string;
+}
+export interface JevConnection extends Omit<JevSettingsInput, "token"> {
+  configured: boolean;
+  error?: string;
+}
+export type JevPurpose = "rank" | "classify" | "check";
+export interface JevApproval {
+  id: string;
+  conversationId: string;
+  toolCallId: string;
+  purpose: JevPurpose;
+  endpoint: string;
+  itemCount: number;
+  /** Exact request body, prepared by the main process, without credentials. */
+  payload: string;
+}
+export interface JevSessionConsent {
+  blocked: boolean;
+  autoAllowed?: boolean;
+  approvedBatches: number;
+  pending: JevApproval[];
 }
 export interface JiraConnection extends Omit<JiraSettingsInput, "token"> {
   configured: boolean;

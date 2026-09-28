@@ -4,7 +4,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
-import { BrandIcon } from "../ProviderIcon";
+import { BrandIcon, ProviderIcon } from "../ProviderIcon";
 import { Plus, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ export function ConnectionsSettings({
   data,
   refresh,
   onSuccess,
+  conversation,
+  onConsentChange,
 }: Omit<ConnectorSettingsProps, "onClose">) {
   const { t } = useAppTranslation();
   const [query, setQuery] = useState("");
@@ -96,7 +98,7 @@ export function ConnectionsSettings({
                 >
                   <ItemContent className="settings-entry-copy">
                     <ItemTitle className="settings-entry-title">
-                      <BrandIcon source={icon} />
+                      {icon ? <BrandIcon source={icon} /> : <ProviderIcon />}
                       <span>{name}</span>
                       {tagline && <Badge variant="outline">{tagline(t)}</Badge>}
                     </ItemTitle>
@@ -148,6 +150,8 @@ export function ConnectionsSettings({
       {Settings && (
         <Settings
           data={data}
+          conversation={conversation}
+          onConsentChange={onConsentChange}
           refresh={refresh}
           onSuccess={onSuccess}
           onClose={() => setEditing(undefined)}

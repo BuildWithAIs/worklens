@@ -40,7 +40,9 @@ export async function resources(
           const details = event.details as { status?: string } | undefined;
           if (details?.status)
             return {
-              isError: !["success", "accepted"].includes(details.status),
+              isError: !["success", "accepted", "not_sent"].includes(
+                details.status,
+              ),
             };
         });
       },
