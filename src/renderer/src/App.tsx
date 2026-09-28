@@ -342,7 +342,7 @@ export function App() {
         setDraftImages([]);
         // The prompt is already accepted. A settings failure must not restore
         // it as an unsent draft and invite a duplicate submission.
-        await settings({ lastConversation: view.id }).catch((error) =>
+        void settings({ lastConversation: view.id }).catch((error) =>
           notifyError(String(error)),
         );
       }
@@ -645,6 +645,7 @@ export function App() {
             key={current ?? draftId}
             view={currentView}
             canSend={!!availableModel?.available && !sending}
+            submitting={sending}
             draft={text}
             draftImages={draftImages}
             supportsImages={!!availableModel?.image}

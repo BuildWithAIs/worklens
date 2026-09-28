@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resizeImage } from "@earendil-works/pi-coding-agent";
+import { processChatImage, originalOptions } from "./image-processing";
 import type { ChatImage } from "../shared/chat-images";
 import {
   CHAT_IMAGE_LIMITS,
@@ -22,10 +22,21 @@ export const chatImagesSchema = z
   )
   .max(CHAT_IMAGE_LIMITS.count)
   .superRefine((images, ctx) => {
+    if (images.length > CHAT_IMAGE_LIMITS.count) return;
     let total = 0;
     for (const image of images) {
+      // Zod can run refinements after a size issue. Do not allocate a decoded
+      // buffer for a string already outside the accepted byte envelope.
+      if (image.data.length > Math.ceil(CHAT_IMAGE_LIMITS.perImage / 3) * 4) {
+        ctx.addIssue({ code: "custom", message: "CHAT_IMAGE_SIZE" });
+        return;
+      }
       const bytes = Buffer.from(image.data, "base64");
       total += bytes.length;
+      if (total > CHAT_IMAGE_LIMITS.total) {
+        ctx.addIssue({ code: "custom", message: "CHAT_IMAGE_TOTAL" });
+        return;
+      }
       if (
         bytes.toString("base64") !== image.data ||
         imageMimeType(bytes) !== image.mimeType ||
@@ -35,8 +46,6 @@ export const chatImagesSchema = z
       if (bytes.length > CHAT_IMAGE_LIMITS.perImage)
         ctx.addIssue({ code: "custom", message: "CHAT_IMAGE_SIZE" });
     }
-    if (total > CHAT_IMAGE_LIMITS.total)
-      ctx.addIssue({ code: "custom", message: "CHAT_IMAGE_TOTAL" });
   });
 
 export function validateChatImages(images: unknown) {
@@ -49,23 +58,7 @@ export function validateChatImages(images: unknown) {
 }
 
 export async function validateImageContent(images: ChatImage[]) {
-  // Pi's worker decoder supports all accepted formats. Keep the original bytes;
-  // these options avoid resizing or re-encoding during validation.
   for (const image of images) {
-    const decoded = await resizeImage(
-      Buffer.from(image.data, "base64"),
-      image.mimeType,
-      {
-        maxWidth: Number.MAX_SAFE_INTEGER,
-        maxHeight: Number.MAX_SAFE_INTEGER,
-        maxBytes: Math.ceil(CHAT_IMAGE_LIMITS.perImage / 3) * 4 + 1,
-      },
-    );
-    if (!decoded) throw new Error("CHAT_IMAGE_INVALID");
-    if (
-      decoded.originalWidth * decoded.originalHeight >
-      CHAT_IMAGE_LIMITS.pixels
-    )
-      throw new Error("CHAT_IMAGE_DIMENSIONS");
+    await processChatImage(image, originalOptions);
   }
 }

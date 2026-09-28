@@ -12,24 +12,39 @@ import {
   base64ImageBytes,
   type ChatImage,
 } from "../../../shared/chat-images";
+import { imageDimensions } from "../../../shared/image-dimensions";
+import type { ImageLease, ImageVariant } from "./image-loader";
+
+export const draftImagePreviews = new WeakMap<File, string>();
 
 export const ChatImageContext = createContext({
   supported: false,
   historical: false,
-  load: async (_source: string): Promise<string> => {
+  load: async (
+    _source: string,
+    _variant: ImageVariant,
+    _signal: AbortSignal,
+  ): Promise<ImageLease> => {
     throw new Error("CHAT_IMAGE_MISSING");
   },
   reportError: (_message: string) => {},
 });
 
 export function createImageAdapter(
-  getState: () => { supported: boolean; attachments: readonly Attachment[] },
+  getState: () => {
+    supported: boolean;
+    disabled: boolean;
+    attachments: readonly Attachment[];
+  },
 ): AttachmentAdapter {
   const pending = new Map<string, number>();
   return {
     accept: CHAT_IMAGE_TYPES.join(","),
     async *add({ file }) {
       const state = getState();
+      // File pickers and drop/paste callbacks can outlive the interaction that
+      // opened them. Do not fill the draft reserved for a rejected submission.
+      if (state.disabled) return;
       if (!state.supported) throw new Error("CHAT_IMAGE_MODEL");
       if (!file.size || file.size > CHAT_IMAGE_LIMITS.perImage)
         throw new Error("CHAT_IMAGE_SIZE");
@@ -67,19 +82,23 @@ export function createImageAdapter(
         const mimeType = imageMimeType(bytes);
         if (!mimeType || mimeType !== file.type)
           throw new Error("CHAT_IMAGE_INVALID");
-        const bitmap = await createImageBitmap(file).catch(() => {
-          throw new Error("CHAT_IMAGE_INVALID");
-        });
-        const pixels = bitmap.width * bitmap.height;
-        bitmap.close();
-        if (pixels > CHAT_IMAGE_LIMITS.pixels)
-          throw new Error("CHAT_IMAGE_DIMENSIONS");
+        imageDimensions(bytes);
         const source = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result));
           reader.onerror = () => reject(new Error("CHAT_IMAGE_INVALID"));
           reader.readAsDataURL(file);
         });
+        const preview = await window.worklens.invoke("prepareChatImage", {
+          images: [
+            {
+              name: attachment.name,
+              mimeType,
+              data: source.slice(source.indexOf(",") + 1),
+            },
+          ],
+        });
+        draftImagePreviews.set(file, preview);
         yield {
           ...attachment,
           content: [{ type: "image", image: source }],
@@ -132,36 +151,55 @@ export function submittedImages(message: AppendMessage): ChatImage[] {
   return images;
 }
 
-export function useStoredImage(source?: string) {
+export function useStoredImage(
+  source?: string,
+  enabled = true,
+  variant: ImageVariant = "thumbnail",
+) {
   const { load } = useContext(ChatImageContext);
   const [result, setResult] = useState<{
     source: string;
+    variant: ImageVariant;
     url?: string;
     error?: boolean;
   }>();
   const [attempt, retry] = useState(0);
   useEffect(() => {
-    if (!source?.startsWith("worklens-image:")) return;
-    let cancelled = false;
-    void load(source).then(
-      (url) => {
-        if (!cancelled) setResult({ source, url });
+    if (!enabled || !source?.startsWith("worklens-image:")) return;
+    const controller = new AbortController();
+    let lease: ImageLease | undefined;
+    setResult(undefined);
+    void load(source, variant, controller.signal).then(
+      (value) => {
+        if (controller.signal.aborted) value.release();
+        else {
+          lease = value;
+          setResult({ source, variant, url: value.url });
+        }
       },
       () => {
-        if (!cancelled) setResult({ source, error: true });
+        if (!controller.signal.aborted)
+          setResult({ source, variant, error: true });
       },
     );
     return () => {
-      cancelled = true;
+      controller.abort();
+      lease?.release();
     };
-  }, [source, load, attempt]);
+  }, [source, load, attempt, enabled, variant]);
   return {
-    src: source?.startsWith("worklens-image:")
-      ? result?.source === source
-        ? result.url
-        : undefined
-      : source,
-    error: result?.source === source && result?.error,
+    src: !enabled
+      ? undefined
+      : source?.startsWith("worklens-image:")
+        ? result?.source === source && result.variant === variant
+          ? result.url
+          : undefined
+        : source,
+    error:
+      enabled &&
+      result?.source === source &&
+      result?.variant === variant &&
+      result?.error,
     retry: () => retry((value) => value + 1),
   };
 }

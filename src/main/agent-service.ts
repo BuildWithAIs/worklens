@@ -39,6 +39,12 @@ import type { SkillsService } from "./skills";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import { validateChatImages, validateImageContent } from "./chat-images";
+import {
+  processChatImage,
+  thumbnailOptions,
+  originalOptions,
+} from "./image-processing";
+import { installImageRequestGuard } from "./image-requests";
 import type { ChatImage } from "../shared/chat-images";
 import type {
   ChatEvent,
@@ -191,12 +197,15 @@ export class AgentService {
         "utf8",
       ),
     );
-    return validateChatImages(item.images ?? []);
+    const images = validateChatImages(item.images ?? []);
+    await validateImageContent(images);
+    return images;
   }
   async chatImage(input: {
     conversationId: string;
     messageId: string;
     index: number;
+    variant?: "thumbnail" | "original";
   }) {
     const runtime = await this.get(input.conversationId);
     const entry = runtime.manager.getEntry(input.messageId);
@@ -211,7 +220,17 @@ export class AgentService {
     const [image] = validateChatImages([
       { name: "image", mimeType: block.mimeType, data: block.data },
     ]);
-    return `data:${image.mimeType};base64,${image.data}`;
+    const decoded = await processChatImage(
+      image,
+      input.variant === "thumbnail" ? thumbnailOptions : originalOptions,
+    );
+    return `data:${decoded.mimeType};base64,${decoded.data}`;
+  }
+  async prepareChatImage(input: { images: ChatImage[] }) {
+    const [image] = validateChatImages(input.images);
+    if (input.images.length !== 1) throw new Error("CHAT_IMAGE_INVALID");
+    const decoded = await processChatImage(image, thumbnailOptions);
+    return `data:${decoded.mimeType};base64,${decoded.data}`;
   }
   private assertSelection(selection: Selection) {
     const model = this.modelRuntime.getModel(
@@ -521,6 +540,7 @@ export class AgentService {
           ...local,
         })
       ).session;
+      installImageRequestGuard(runtime.session.agent);
       if (
         previous.model &&
         (previous.model.provider !== model.provider ||
@@ -741,14 +761,18 @@ export class AgentService {
           runtime.phase = "failed";
           throw error;
         }
+        let runStartEntryId: string;
         try {
-          runtime.manager.appendCustomEntry("worklens.run-start", {
-            version: 1,
-            conversationId: id,
-            runId: active.id,
-            ...input.selection,
-            startedAt: runtime.updated,
-          });
+          runStartEntryId = runtime.manager.appendCustomEntry(
+            "worklens.run-start",
+            {
+              version: 1,
+              conversationId: id,
+              runId: active.id,
+              ...input.selection,
+              startedAt: runtime.updated,
+            },
+          );
           this.refreshUsage(runtime);
         } catch (error) {
           runtime.active = undefined;
@@ -784,23 +808,28 @@ export class AgentService {
             let terminalPersisted = false;
             try {
               this.refreshUsage(runtime);
-              runtime.manager.appendCustomEntry("worklens.run-end", {
-                version: 1,
-                conversationId: id,
-                runId: active.id,
-                outcome: runtime.phase,
-                endedAt: runtime.updated,
-                usage: runtime.usage?.run
-                  ? {
-                      ...runtime.usage.run,
-                      state: runtime.phase,
-                      endedAt: runtime.updated,
-                    }
-                  : undefined,
-              });
+              const runEndEntryId = runtime.manager.appendCustomEntry(
+                "worklens.run-end",
+                {
+                  version: 1,
+                  conversationId: id,
+                  runId: active.id,
+                  outcome: runtime.phase,
+                  endedAt: runtime.updated,
+                  usage: runtime.usage?.run
+                    ? {
+                        ...runtime.usage.run,
+                        state: runtime.phase,
+                        endedAt: runtime.updated,
+                      }
+                    : undefined,
+                },
+              );
               this.refreshUsage(runtime);
               // appendCustomEntry may only have updated memory. Verify the actual
-              // canonical file contains BOTH boundaries before releasing recovery.
+              // canonical file contains both boundaries AND this run's user input.
+              // Pi can reject auth or fail preflight before appending the prompt,
+              // even when an existing session can persist our run-end marker.
               const file = runtime.manager.getSessionFile();
               if (file && existsSync(file)) {
                 const persisted = SessionManager.open(
@@ -808,12 +837,26 @@ export class AgentService {
                   this.paths.sessions,
                   this.paths.runtime,
                 );
-                const run = getLatestRun(
-                  persisted.getEntries(),
-                  this.lookupModel,
+                const entries = persisted.getEntries();
+                const run = getLatestRun(entries, this.lookupModel);
+                const startIndex = entries.findIndex(
+                  (entry) => entry.id === runStartEntryId,
+                );
+                const endIndex = entries.findIndex(
+                  (entry) => entry.id === runEndEntryId,
                 );
                 terminalPersisted =
-                  run?.runId === active.id && run.state === runtime.phase;
+                  run?.runId === active.id &&
+                  run.state === runtime.phase &&
+                  startIndex >= 0 &&
+                  endIndex > startIndex &&
+                  entries
+                    .slice(startIndex + 1, endIndex)
+                    .some(
+                      (entry) =>
+                        entry.type === "message" &&
+                        entry.message.role === "user",
+                    );
               }
             } catch {
               this.diagnostics.push("本轮用量归档未完成，已保留恢复记录。");

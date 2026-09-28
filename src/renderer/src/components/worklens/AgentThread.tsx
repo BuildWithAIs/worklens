@@ -60,6 +60,7 @@ import type {
 type Props = {
   view?: ConversationView;
   canSend: boolean;
+  submitting: boolean;
   draft: string;
   draftImages?: ChatImage[];
   supportsImages: boolean;
@@ -433,6 +434,7 @@ const threadComponents = {
 export function AgentThread({
   view,
   canSend,
+  submitting,
   draft,
   draftImages,
   supportsImages,
@@ -444,34 +446,13 @@ export function AgentThread({
 }: Props) {
   const { t, language } = useAppTranslation();
   const attachmentState = useRef<Parameters<typeof createImageAdapter>[0]>(
-    () => ({ supported: false, attachments: [] }),
+    () => ({ supported: false, disabled: false, attachments: [] }),
   );
   const imageAdapter = useMemo(
     () => createImageAdapter(() => attachmentState.current()),
     [],
   );
-  const loadImage = useMemo(() => {
-    const cache = new Map<string, Promise<string>>();
-    return (source: string) => {
-      const existing = cache.get(source);
-      if (existing) return existing;
-      const match = /^worklens-image:([\w-]+)\/([\w-]+)\/(\d+)$/.exec(source);
-      if (!match || match[1] !== view?.id)
-        return Promise.reject(new Error("CHAT_IMAGE_MISSING"));
-      const task = window.worklens
-        .invoke("chatImage", {
-          conversationId: match[1],
-          messageId: match[2],
-          index: Number(match[3]),
-        })
-        .catch((error) => {
-          cache.delete(source);
-          throw error;
-        });
-      cache.set(source, task);
-      return task;
-    };
-  }, [view?.id]);
+  const loadImage = useMemo(() => createImageLoader(view?.id), [view?.id]);
   // Order live blocks by their first visible content, not an empty message shell.
   const liveOrder = useRef({
     conversationId: view?.id,
@@ -742,12 +723,19 @@ export function AgentThread({
     [messageCache, messages],
   );
   const [attachmentsBlocked, setAttachmentsBlocked] = useState(false);
+  const submittedAfterRunId = useRef<string | undefined>(undefined);
+  const isRunning = !!view && activePhases.has(view.phase);
   const runtime = useExternalStoreRuntime<ThreadMessage>({
     messageRepository,
-    isRunning: !!view && activePhases.has(view.phase),
+    isRunning,
+    // Only lock the draft until acceptance. A run-start event can arrive before
+    // send resolves; keep typing and Stop available as soon as the run appears.
+    isDisabled:
+      submitting && !isRunning && view?.runId === submittedAfterRunId.current,
     isSendDisabled: !canSend || attachmentsBlocked,
     adapters: { attachments: imageAdapter },
     onNew: async (message) => {
+      submittedAfterRunId.current = view?.runId;
       const text = submittedText(message);
       let images: ChatImage[];
       try {
@@ -768,6 +756,7 @@ export function AgentThread({
   });
   attachmentState.current = () => ({
     supported: supportsImages,
+    disabled: runtime.thread.getState().isDisabled,
     attachments: runtime.thread.composer.getState().attachments,
   });
 
@@ -842,3 +831,4 @@ export function AgentThread({
   );
 }
 import { SkillComposerInput } from "./skills/SkillComposerInput";
+import { createImageLoader } from "@/lib/image-loader";

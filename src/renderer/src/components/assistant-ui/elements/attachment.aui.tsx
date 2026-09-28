@@ -6,6 +6,7 @@ import {
   type FC,
   isValidElement,
   useContext,
+  useEffect,
 } from "react";
 import {
   XIcon,
@@ -64,15 +65,23 @@ const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
   );
 };
 
-const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
+const AttachmentPreviewDialog: FC<
+  PropsWithChildren<{ thumbnailError?: boolean; onRetry: () => void }>
+> = ({ children, thumbnailError, onRetry }) => {
   const { t } = useAppTranslation();
-  const { src, error, retry } = useAttachmentSrc();
-
-  if (error)
+  const [open, setOpen] = useState(false);
+  const { src, error, retry } = useAttachmentSrc(open, "original");
+  const previewable = useAuiState(
+    (s) =>
+      s.attachment.type === "image" &&
+      s.attachment.content?.some((part) => part.type === "image"),
+  );
+  if (!previewable) return children;
+  if (thumbnailError && !open)
     return (
       <button
         type="button"
-        onClick={retry}
+        onClick={onRetry}
         className="flex size-24 flex-col items-center justify-center gap-1 rounded-xl border border-border bg-muted p-2 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
         aria-label={t("attachments.retryPreview")}
       >
@@ -80,10 +89,9 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
         {t("attachments.retryPreview")}
       </button>
     );
-  if (!src) return children;
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         nativeButton={false}
         className="aui-attachment-preview-trigger cursor-zoom-in"
@@ -100,16 +108,33 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
           {t("attachments.imagePreview")}
         </DialogTitle>
         <div className="aui-attachment-preview bg-background relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden rounded-sm">
-          <AttachmentPreview src={src} />
+          {src ? (
+            <AttachmentPreview src={src} />
+          ) : error ? (
+            <button
+              type="button"
+              onClick={retry}
+              className="p-6 text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t("attachments.retryPreview")}
+            </button>
+          ) : (
+            <Loader2Icon
+              className="m-6 size-5 animate-spin"
+              aria-label={t("attachments.preview")}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>
   );
 };
 
-const AttachmentThumb: FC = () => {
+const AttachmentThumb: FC<{ src?: string; error?: boolean }> = ({
+  src,
+  error,
+}) => {
   const { t } = useAppTranslation();
-  const { src, error } = useAttachmentSrc();
 
   return (
     <Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none after:hidden">
@@ -136,6 +161,25 @@ const AttachmentUI: FC = () => {
   const { t, language } = useAppTranslation();
   const aui = useAui();
   const isComposer = aui.attachment.source !== "message";
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const [nearViewport, setNearViewport] = useState(false);
+  useEffect(() => {
+    if (isComposer || !element) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // One target can cross the boundary more than once before delivery.
+        const latest = entries.at(-1);
+        if (latest) setNearViewport(latest.isIntersecting);
+      },
+      {
+        root: element.closest('[data-slot="aui_thread-viewport"]'),
+        rootMargin: "160px",
+      },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element, isComposer]);
+  const thumbnail = useAttachmentSrc(isComposer || nearViewport);
 
   const isImage = useAuiState((s) => s.attachment.type === "image");
   const attachmentType = useAuiState((s) => s.attachment.type);
@@ -175,6 +219,7 @@ const AttachmentUI: FC = () => {
     <TooltipProvider>
       <Tooltip>
         <AttachmentPrimitive.Root
+          ref={setElement}
           className={cn(
             "aui-attachment-root relative",
             isComposer &&
@@ -184,7 +229,10 @@ const AttachmentUI: FC = () => {
               "aui-attachment-root-message only:*:first:size-24",
           )}
         >
-          <AttachmentPreviewDialog>
+          <AttachmentPreviewDialog
+            thumbnailError={thumbnail.error}
+            onRetry={thumbnail.retry}
+          >
             <TooltipTrigger
               render={
                 <div
@@ -206,7 +254,7 @@ const AttachmentUI: FC = () => {
                 />
               }
             >
-              <AttachmentThumb />
+              <AttachmentThumb src={thumbnail.src} error={thumbnail.error} />
               {isUploading && (
                 <div
                   aria-hidden="true"
@@ -240,8 +288,10 @@ const AttachmentUI: FC = () => {
 
 const AttachmentRemove: FC = () => {
   const { t } = useAppTranslation();
+  const disabled = useAuiState((s) => s.thread.isDisabled);
   return (
     <AttachmentPrimitive.Remove
+      disabled={disabled}
       render={
         <TooltipIconButton
           tooltip={t("attachments.removeFile")}
@@ -297,9 +347,10 @@ export const ComposerAttachments: FC = () => {
 export const ComposerAddAttachment: FC = () => {
   const { t } = useAppTranslation();
   const { supported } = useContext(ChatImageContext);
+  const disabled = useAuiState((s) => s.thread.isDisabled);
   return (
     <ComposerPrimitive.AddAttachment
-      disabled={!supported}
+      disabled={disabled || !supported}
       render={
         <TooltipIconButton
           tooltip={t(

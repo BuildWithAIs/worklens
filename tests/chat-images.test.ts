@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -13,6 +13,7 @@ import { schemas } from "../src/main/validation";
 import { CHAT_IMAGE_LIMITS, type ChatImage } from "../src/shared/chat-images";
 import type { ChatEvent, Selection } from "../src/shared/contracts";
 import { fixtureModel, mockServer } from "./mock-server";
+import { syntheticPng } from "./image-fixtures";
 
 const image: ChatImage = {
   name: "screenshot.png",
@@ -21,6 +22,7 @@ const image: ChatImage = {
 };
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
@@ -34,7 +36,7 @@ test("main-process decoding rejects a truncated image with a valid PNG signature
     "CHAT_IMAGE_INVALID",
   );
 });
-async function setup(vision = true) {
+async function setup(vision = true, failAlways = false) {
   const root = await mkdtemp(join(tmpdir(), "worklens-images-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const paths = {
@@ -42,9 +44,13 @@ async function setup(vision = true) {
     sessions: join(root, "sessions"),
     userData: join(root, "app"),
   };
-  const server = await mockServer();
+  const server = await mockServer({ failAlways });
   cleanups.push(server.close);
-  const runtime = await ModelRuntime.create({ modelsPath: null });
+  const runtime = await ModelRuntime.create({
+    modelsPath: null,
+    authPath: join(root, "auth.json"),
+    allowModelNetwork: false,
+  });
   runtime.registerProvider("worklens-test", {
     api: "openai-completions",
     baseUrl: server.url,
@@ -199,6 +205,155 @@ test("text-only models reject images before accepting or creating a recovery rec
   expect(await readdir(join(paths.userData, "runs"))).toHaveLength(0);
 });
 
+test.each([false, true])(
+  "preflight auth failure preserves the current prompt for restart (images: %s)",
+  async (withImages) => {
+    const { service, selection, server, events, paths, runtime } =
+      await setup();
+    const text = "Keep this request";
+    const images = withImages ? [image] : [];
+    // Use the same input twice so a previously persisted user message cannot
+    // accidentally be accepted as evidence that the failed turn was saved.
+    const first = await service.send({
+      requestId: randomUUID(),
+      text,
+      images,
+      selection,
+    });
+    await expect
+      .poll(() =>
+        events.some(
+          (event) => event.type === "run_end" && event.runId === first.runId,
+        ),
+      )
+      .toBe(true);
+    const markerPath = (runId: string) =>
+      join(paths.userData, "runs", `${runId}.pending.json`);
+    await expect
+      .poll(() =>
+        readFile(markerPath(first.runId!), "utf8").then(
+          () => true,
+          () => false,
+        ),
+      )
+      .toBe(false);
+
+    // Keep availability intact and fail Pi's real, later authentication check.
+    // AgentSession.prompt itself is not mocked.
+    vi.spyOn(runtime, "hasConfiguredAuth").mockReturnValue(false);
+    vi.spyOn(runtime, "checkAuth").mockResolvedValue(undefined);
+    const failed = await service.send({
+      conversationId: first.id,
+      requestId: randomUUID(),
+      text,
+      images,
+      selection,
+    });
+    await expect
+      .poll(() =>
+        events.some(
+          (event) => event.type === "run_end" && event.runId === failed.runId,
+        ),
+      )
+      .toBe(true);
+    const view = await service.open(first.id);
+    expect(view.phase).toBe("failed");
+    expect(view.error).toContain("No API key found");
+    expect(
+      view.messages.filter((message) => message.role === "user"),
+    ).toHaveLength(1);
+    expect(server.requests).toHaveLength(1);
+    await expect
+      .poll(() =>
+        readFile(markerPath(failed.runId!), "utf8").then(
+          (value) => JSON.parse(value),
+          () => undefined,
+        ),
+      )
+      .toMatchObject({ text, images, phase: "failed" });
+
+    vi.restoreAllMocks();
+    await service.shutdown();
+    const restored = new AgentService(
+      runtime,
+      paths,
+      () => {},
+      (value) => value,
+    );
+    cleanups.push(() => restored.shutdown());
+    await restored.initialize();
+    expect(restored.recoveries).toEqual([
+      expect.objectContaining({
+        runId: failed.runId,
+        conversationId: first.id,
+        text,
+        selection,
+        imageCount: images.length,
+      }),
+    ]);
+    expect(await restored.recoveryImages(failed.runId!)).toEqual(images);
+    expect(server.requests).toHaveLength(1);
+    // A later successful turn must only clean up its own recovery record.
+    const next = await restored.send({
+      conversationId: first.id,
+      requestId: randomUUID(),
+      text: "Continue",
+      selection,
+    });
+    await expect
+      .poll(() => restored.open(first.id).then((current) => current.phase))
+      .toBe("completed");
+    await expect
+      .poll(() =>
+        readFile(markerPath(next.runId!), "utf8").then(
+          () => true,
+          () => false,
+        ),
+      )
+      .toBe(false);
+    expect(
+      JSON.parse(await readFile(markerPath(failed.runId!), "utf8")).images,
+    ).toEqual(images);
+  },
+);
+
+test("provider failure after persisting the prompt releases its recovery record", async () => {
+  const { service, selection, events, paths } = await setup(true, true);
+  const sent = await service.send({
+    requestId: randomUUID(),
+    text: "Keep the image in history",
+    images: [image],
+    selection,
+  });
+  await expect
+    .poll(
+      () =>
+        events.some(
+          (event) => event.type === "run_end" && event.runId === sent.runId,
+        ),
+      { timeout: 25000 },
+    )
+    .toBe(true);
+  const view = await service.open(sent.id);
+  expect(view.phase).toBe("failed");
+  const user = view.messages.find((message) => message.role === "user")!;
+  expect(user.text).toBe("Keep the image in history");
+  expect(
+    await service.chatImage({ conversationId: sent.id, ...user.images![0] }),
+  ).toBe(`data:image/png;base64,${image.data}`);
+  await expect
+    .poll(() =>
+      readFile(
+        join(paths.userData, "runs", `${sent.runId}.pending.json`),
+        "utf8",
+      ).then(
+        () => true,
+        () => false,
+      ),
+    )
+    .toBe(false);
+});
+
 test("unflushed first input journals image bytes but exposes only a count; recovery is read on demand", async () => {
   const { service, selection, server, paths, runtime } = await setup();
   const view = await service.send({
@@ -229,4 +384,76 @@ test("unflushed first input journals image bytes but exposes only a count; recov
   await restored.delete(view.id);
   expect(restored.recoveries).toHaveLength(0);
   await expect(readFile(path)).rejects.toThrow();
+});
+
+test("later requests budget retained image turns while history keeps the originals", async () => {
+  const { service, selection, server, events } = await setup();
+  const original = {
+    name: "synthetic-noise.png",
+    mimeType: "image/png" as const,
+    data: syntheticPng(800, 800, true).toString("base64"),
+  };
+  expect(original.data.length * 8).toBeGreaterThan(20_000_000);
+  const first = await service.send({
+    requestId: randomUUID(),
+    text: "First group",
+    images: Array(4).fill(original),
+    selection,
+  });
+  await expect
+    .poll(
+      () =>
+        events.some(
+          (event) => event.type === "run_end" && event.runId === first.runId,
+        ),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  const second = await service.send({
+    conversationId: first.id,
+    requestId: randomUUID(),
+    text: "Second group",
+    images: Array(4).fill(original),
+    selection,
+  });
+  await expect
+    .poll(
+      () =>
+        events.some(
+          (event) => event.type === "run_end" && event.runId === second.runId,
+        ),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  expect(server.requests).toHaveLength(2);
+  const imageUrls = server.requests[1].messages.flatMap((message: any) =>
+    Array.isArray(message.content)
+      ? message.content
+          .filter((part: any) => part.type === "image_url")
+          .map((part: any) => part.image_url.url)
+      : [],
+  );
+  expect(imageUrls).toHaveLength(8);
+  expect(Buffer.byteLength(JSON.stringify(server.requests[1]))).toBeLessThan(
+    20_000_000,
+  );
+  expect(
+    imageUrls.every((url: string) => url.length < original.data.length),
+  ).toBe(true);
+  const reopened = await service.open(first.id);
+  const ref = reopened.messages.find((message) => message.role === "user")!
+    .images![0];
+  expect(
+    await service.chatImage({
+      conversationId: first.id,
+      ...ref,
+      variant: "original",
+    }),
+  ).toBe(`data:image/png;base64,${original.data}`);
+  const thumbnail = await service.chatImage({
+    conversationId: first.id,
+    ...ref,
+    variant: "thumbnail",
+  });
+  expect(thumbnail.length).toBeLessThan(128 * 1024 + 40);
 });

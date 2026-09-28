@@ -171,6 +171,10 @@ export async function mockWorklens(page, options = {}) {
         };
       },
       invoke: async (name, input) => {
+        if (name === "prepareChatImage") {
+          const image = input.images[0];
+          return `data:${image.mimeType};base64,${image.data}`;
+        }
         window.calls.push({ name, input });
         if (name === "bootstrap") {
           data.settings.modelCatalogs ??= {};

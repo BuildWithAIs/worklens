@@ -312,9 +312,15 @@ export interface Requests {
     output: ConversationView;
   };
   chatImage: {
-    input: { conversationId: string; messageId: string; index: number };
+    input: {
+      conversationId: string;
+      messageId: string;
+      index: number;
+      variant?: "thumbnail" | "original";
+    };
     output: string;
   };
+  prepareChatImage: { input: { images: ChatImage[] }; output: string };
   recoveryImages: { input: { runId: string }; output: ChatImage[] };
   cancel: { input: { conversationId: string; runId: string }; output: void };
   model: {

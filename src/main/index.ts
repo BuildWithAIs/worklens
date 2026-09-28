@@ -281,6 +281,9 @@ else {
                 case "chatImage":
                   value = await agents!.chatImage(input);
                   break;
+                case "prepareChatImage":
+                  value = await agents!.prepareChatImage(input);
+                  break;
                 case "recoveryImages":
                   value = (await agents!.recoveryImages(input.runId)).map(
                     (image) => ({ ...image, name: redact(image.name) }),
@@ -323,7 +326,9 @@ else {
               ok: true,
               // Image bytes are opaque binary payloads. Text redaction would corrupt them.
               value:
-                method === "chatImage" || method === "recoveryImages"
+                method === "chatImage" ||
+                method === "recoveryImages" ||
+                method === "prepareChatImage"
                   ? value
                   : redactStrings(value, redact),
             };

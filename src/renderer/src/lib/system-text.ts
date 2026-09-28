@@ -11,6 +11,17 @@ const messages = [
   ["CHAT_IMAGE_TOTAL", "CHAT_IMAGE_TOTAL", "attachments.total"],
   ["CHAT_IMAGE_DIMENSIONS", "CHAT_IMAGE_DIMENSIONS", "attachments.dimensions"],
   ["CHAT_IMAGE_MISSING", "CHAT_IMAGE_MISSING", "attachments.previewFailed"],
+  ["CHAT_IMAGE_REQUEST", "CHAT_IMAGE_REQUEST", "attachments.requestLimit"],
+  [
+    "CHAT_IMAGE_PROCESSING",
+    "CHAT_IMAGE_PROCESSING",
+    "attachments.processingFailed",
+  ],
+  [
+    "CHAT_IMAGE_CANCELLED",
+    "CHAT_IMAGE_CANCELLED",
+    "attachments.processingFailed",
+  ],
 
   [
     "该技能未启用或已不存在，请在设置中检查技能",

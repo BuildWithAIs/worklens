@@ -27,6 +27,12 @@ export const schemas = {
       conversationId: id,
       messageId: id,
       index: z.number().int().min(0).max(1000),
+      variant: z.enum(["thumbnail", "original"]).optional(),
+    })
+    .strict(),
+  prepareChatImage: z
+    .object({
+      images: chatImagesSchema.refine((images) => images.length === 1),
     })
     .strict(),
   recoveryImages: z.object({ runId: id }).strict(),
