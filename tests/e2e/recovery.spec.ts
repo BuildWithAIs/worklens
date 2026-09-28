@@ -42,7 +42,7 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
           api: "openai-completions",
           baseUrl: url,
           apiKey: "fixture",
-          models: [model],
+          models: [{ ...model, input: ["text", "image"] }],
         });
         await imported.agents.modelRuntime.refresh({ allowNetwork: false });
       },
@@ -60,6 +60,13 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
       (text) =>
         window.worklens.invoke("send", {
           text,
+          images: [
+            {
+              name: "recovered.png",
+              mimeType: "image/png",
+              data: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGNoCX0HRwzEcQDdEhxxGEJJKQAAAABJRU5ErkJggg==",
+            },
+          ],
           requestId: crypto.randomUUID(),
           selection: {
             provider: "worklens-test",
@@ -82,6 +89,7 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
       ),
     );
     expect(pending.text).toBe(text);
+    expect(pending.images[0].name).toBe("recovered.png");
     const child = application.process();
     if (process.platform === "win32")
       execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"]);
@@ -107,6 +115,12 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
     await expect(
       restored.getByRole("textbox", { name: "Message", exact: true }),
     ).toHaveValue(text);
+    await expect(restored.locator(".aui-composer-attachments img")).toHaveCount(
+      1,
+    );
+    await expect(
+      restored.locator(".aui-composer-attachments img"),
+    ).toHaveJSProperty("naturalWidth", 4);
     expect(server.requests.length).toBe(1);
     await restored.screenshot({
       path: "test-results/recovered-draft.png",

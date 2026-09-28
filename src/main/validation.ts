@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { connectorSchemas } from "./connectors/ipc";
+import { chatImagesSchema } from "./chat-images";
 const id = z
   .string()
   .min(1)
@@ -21,6 +22,20 @@ export const selection = z
   })
   .strict();
 export const schemas = {
+  chatImage: z
+    .object({
+      conversationId: id,
+      messageId: id,
+      index: z.number().int().min(0).max(1000),
+      variant: z.enum(["thumbnail", "original"]).optional(),
+    })
+    .strict(),
+  prepareChatImage: z
+    .object({
+      images: chatImagesSchema.refine((images) => images.length === 1),
+    })
+    .strict(),
+  recoveryImages: z.object({ runId: id }).strict(),
   conversationFile: z
     .object({
       id,
@@ -121,14 +136,15 @@ export const schemas = {
     .object({
       conversationId: id.optional(),
       requestId: id,
-      text: z
-        .string()
-        .min(1)
-        .max(100000)
-        .refine((value) => value.trim().length > 0, "消息不能为空"),
+      text: z.string().max(100000),
+      images: chatImagesSchema.optional(),
       selection,
     })
-    .strict(),
+    .strict()
+    .refine(
+      (value) => value.text.trim().length > 0 || !!value.images?.length,
+      "消息不能为空",
+    ),
   cancel: z.object({ conversationId: id, runId: id }).strict(),
   model: z.object({ id, selection }).strict(),
   external: z.object({ url: z.string().url().max(10000) }).strict(),

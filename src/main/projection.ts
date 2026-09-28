@@ -30,6 +30,27 @@ export function projectMessages(
       result.push({
         id,
         role: "user",
+        ...(typeof message.sessionEntryId === "string" &&
+        Array.isArray(message.content)
+          ? {
+              images: message.content.flatMap(
+                (block: RecordValue, index: number) =>
+                  block.type === "image"
+                    ? [
+                        {
+                          messageId: message.sessionEntryId,
+                          index,
+                          name:
+                            typeof block.name === "string"
+                              ? block.name
+                              : `image-${index + 1}`,
+                          mimeType: block.mimeType,
+                        },
+                      ]
+                    : [],
+              ),
+            }
+          : {}),
         text: skill
           ? `/skill:${skill.name}${skill.userMessage ? ` ${skill.userMessage}` : ""}`
           : text,
@@ -178,7 +199,7 @@ export function withRunTiming(branch: readonly unknown[]): unknown[] {
     const entry = raw as RecordValue;
     if (entry.type === "custom" && entry.customType === "worklens.run-start") timing = runs.get(entry.data?.runId);
     if (entry.type === "custom" && entry.customType === "worklens.run-end") timing = undefined;
-    if (entry.type === "message") return [{ ...entry.message, ...timing }];
+    if (entry.type === "message") return [{ ...entry.message, sessionEntryId: entry.id, ...timing }];
     if (entry.type === "compaction") return [{ role: "compactionSummary", summary: entry.summary }];
     return [];
   });
