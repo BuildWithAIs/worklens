@@ -3,10 +3,12 @@
 import {
   type PropsWithChildren,
   useState,
+  createContext,
   type FC,
   isValidElement,
   useContext,
   useEffect,
+  useRef,
 } from "react";
 import {
   XIcon,
@@ -14,8 +16,11 @@ import {
   FileText,
   Loader2Icon,
   AlertCircleIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "lucide-react";
 import {
+  type Attachment,
   AttachmentPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
@@ -34,14 +39,18 @@ import {
   DialogTitle,
   DialogContent,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { useAttachmentSrc } from "@/hooks/use-attachment-src";
 import { cn } from "@/lib/utils";
 import { useAppTranslation } from "@/i18n";
-import { ChatImageContext } from "@/lib/chat-images";
+import { ChatImageContext, useStoredImage } from "@/lib/chat-images";
 import { systemText } from "@/lib/system-text";
+import { ImageMenu } from "./image-menu";
+
+const MessageImagesContext = createContext<readonly Attachment[]>([]);
 
 type AttachmentPreviewProps = {
   src: string;
@@ -55,7 +64,7 @@ const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
       src={src}
       alt={t("attachments.preview")}
       className={cn(
-        "block h-auto max-h-[80vh] w-auto max-w-full rounded-sm object-contain transition-opacity duration-300 motion-reduce:transition-none",
+        "block h-auto max-h-[calc(100dvh-8rem)] w-auto max-w-full rounded-sm object-contain transition-opacity duration-300 motion-reduce:transition-none",
         isLoaded
           ? "aui-attachment-preview-image-loaded opacity-100"
           : "aui-attachment-preview-image-loading opacity-0",
@@ -70,12 +79,40 @@ const AttachmentPreviewDialog: FC<
 > = ({ children, thumbnailError, onRetry }) => {
   const { t } = useAppTranslation();
   const [open, setOpen] = useState(false);
-  const { src, error, retry } = useAttachmentSrc(open, "original");
-  const previewable = useAuiState(
-    (s) =>
-      s.attachment.type === "image" &&
-      s.attachment.content?.some((part) => part.type === "image"),
+  const attachment = useAuiState((s) => s.attachment);
+  const siblings = useContext(MessageImagesContext);
+  const images = siblings.length ? siblings : [attachment];
+  const [selectedId, setSelectedId] = useState(attachment.id);
+  const selectedIndex = Math.max(
+    0,
+    images.findIndex((image) => image.id === selectedId),
   );
+  const selected = images[selectedIndex];
+  const source = attachment.content?.find(
+    (part) => part.type === "image",
+  )?.image;
+  const selectedSource = selected?.content?.find(
+    (part) => part.type === "image",
+  )?.image;
+  const { src, error, retry } = useStoredImage(
+    selectedSource,
+    open,
+    "original",
+  );
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const previewDialog = useRef<HTMLDivElement | null>(null);
+  const previewable = attachment.type === "image" && Boolean(source);
+  const navigate = (direction: number) => {
+    const next = images[selectedIndex + direction];
+    if (next) {
+      // The old image unmounts and an end-of-list button becomes disabled.
+      // Keep keyboard navigation inside the dialog in both cases.
+      previewDialog.current?.focus();
+      setSelectedId(next.id);
+    }
+  };
+  const controlClass =
+    "rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white";
   if (!previewable) return children;
   if (thumbnailError && !open)
     return (
@@ -91,30 +128,79 @@ const AttachmentPreviewDialog: FC<
     );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        nativeButton={false}
-        className="aui-attachment-preview-trigger cursor-zoom-in"
-        render={
-          isValidElement(children) ? (
-            children
-          ) : (
-            <button type="button">{children}</button>
-          )
-        }
-      />
-      <DialogContent className="aui-attachment-preview-dialog-content [&>button]:bg-foreground/60 [&>button]:hover:bg-foreground/80 [&_svg]:text-background p-2 sm:max-w-3xl [&>button]:rounded-full [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0!">
-        <DialogTitle className="aui-sr-only sr-only">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) setSelectedId(attachment.id);
+        setOpen(nextOpen);
+      }}
+    >
+      <ImageMenu source={source} filename={attachment.name}>
+        <DialogTrigger
+          ref={trigger}
+          nativeButton={false}
+          className="aui-attachment-preview-trigger cursor-zoom-in"
+          render={
+            isValidElement(children) ? (
+              children
+            ) : (
+              <button type="button">{children}</button>
+            )
+          }
+        />
+      </ImageMenu>
+      <DialogContent
+        ref={previewDialog}
+        initialFocus={previewDialog}
+        finalFocus={trigger}
+        showCloseButton={false}
+        overlayClassName="bg-black/80"
+        className="aui-attachment-preview-dialog-content flex h-dvh max-w-none items-center justify-center rounded-none bg-transparent p-4 text-white ring-0 sm:max-w-none sm:p-16"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) setOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if ((event.target as HTMLElement).closest('[role="menu"]')) return;
+          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            event.preventDefault();
+            navigate(event.key === "ArrowLeft" ? -1 : 1);
+          }
+        }}
+      >
+        <DialogTitle className="sr-only">
           {t("attachments.imagePreview")}
         </DialogTitle>
-        <div className="aui-attachment-preview bg-background relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden rounded-sm">
+        <DialogClose
+          render={
+            <TooltipIconButton
+              tooltip={t("common.close")}
+              className={cn(controlClass, "absolute right-4 top-4")}
+            />
+          }
+        >
+          <XIcon />
+        </DialogClose>
+        <div className="aui-attachment-preview flex max-h-[calc(100dvh-8rem)] max-w-full items-center justify-center">
           {src ? (
-            <AttachmentPreview src={src} />
+            <ImageMenu
+              key={selected.id}
+              source={selectedSource}
+              resolvedSource={src}
+              filename={selected.name}
+            >
+              <div
+                tabIndex={0}
+                className="max-w-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={t("attachments.preview")}
+              >
+                <AttachmentPreview key={src} src={src} />
+              </div>
+            </ImageMenu>
           ) : error ? (
             <button
               type="button"
               onClick={retry}
-              className="p-6 text-sm text-muted-foreground hover:text-foreground"
+              className="p-6 text-sm text-white/80 hover:text-white"
             >
               {t("attachments.retryPreview")}
             </button>
@@ -125,6 +211,42 @@ const AttachmentPreviewDialog: FC<
             />
           )}
         </div>
+        {images.length > 1 && (
+          <>
+            <TooltipIconButton
+              tooltip={t("image.previous")}
+              disabled={selectedIndex === 0}
+              onClick={() => navigate(-1)}
+              className={cn(
+                controlClass,
+                "absolute left-4 bottom-4 sm:bottom-auto",
+              )}
+            >
+              <ChevronLeftIcon />
+            </TooltipIconButton>
+            <TooltipIconButton
+              tooltip={t("image.next")}
+              disabled={selectedIndex === images.length - 1}
+              onClick={() => navigate(1)}
+              className={cn(
+                controlClass,
+                "absolute right-4 bottom-4 sm:bottom-auto",
+              )}
+            >
+              <ChevronRightIcon />
+            </TooltipIconButton>
+            <span
+              role="status"
+              aria-label={t("image.position", {
+                current: selectedIndex + 1,
+                total: images.length,
+              })}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs tabular-nums text-white/80"
+            >
+              {selectedIndex + 1} / {images.length}
+            </span>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -306,12 +428,20 @@ const AttachmentRemove: FC = () => {
 };
 
 export const UserMessageAttachments: FC = () => {
+  const attachments = useAuiState((s) => s.message.attachments);
+  const images = (attachments ?? []).filter(
+    (attachment) =>
+      attachment.type === "image" &&
+      attachment.content?.some((part) => part.type === "image"),
+  );
   return (
-    <div className="aui-user-message-attachments-end col-span-full col-start-1 row-start-1 flex w-full flex-row flex-wrap justify-end gap-2">
-      <MessagePrimitive.Attachments>
-        {() => <AttachmentUI />}
-      </MessagePrimitive.Attachments>
-    </div>
+    <MessageImagesContext.Provider value={images}>
+      <div className="aui-user-message-attachments-end col-span-full col-start-1 row-start-1 flex w-full flex-row flex-wrap justify-end gap-2">
+        <MessagePrimitive.Attachments>
+          {() => <AttachmentUI />}
+        </MessagePrimitive.Attachments>
+      </div>
+    </MessageImagesContext.Provider>
   );
 };
 

@@ -1,3 +1,4 @@
+import { editParent, messageVersions, versionLeaf } from "./message-versions";
 import { readHtmlPreview, htmlActionFile } from "./html-preview";
 import {
   inspectConversationFile,
@@ -47,6 +48,7 @@ import {
 import { installImageRequestGuard } from "./image-requests";
 import type { ChatImage } from "../shared/chat-images";
 import type {
+  Requests,
   ChatEvent,
   Conversation,
   ConversationView,
@@ -101,7 +103,11 @@ export class AgentService {
       : undefined;
     runtime.usage = {
       conversation: getConversationUsage(entries, this.lookupModel),
-      run: getLatestRun(entries, this.lookupModel, activeId),
+      run: getLatestRun(
+        runtime.manager.getBranch(),
+        this.lookupModel,
+        activeId,
+      ),
       context: runtime.session
         ? buildContextUsage(runtime.session.getContextUsage())
         : getHistoricalContext(
@@ -166,6 +172,7 @@ export class AgentService {
           file === `${item.runId}.pending.json`
         )
           this.recoveries.push({
+            editOf: typeof item.editOf === "string" ? item.editOf : undefined,
             runId: item.runId,
             conversationId: item.conversationId,
             text: item.text,
@@ -275,6 +282,12 @@ export class AgentService {
     const branch = runtime.manager.getBranch();
     const cwd = sessionWorkspace(this.paths.sessions, id);
     const messages = projectMessages(withRunTiming(branch), cwd);
+    const versions = messageVersions(runtime.manager);
+    for (const message of messages) {
+      if (!message.entryId) continue;
+      const group = versions.groups.get(versions.roots.get(message.entryId)!);
+      if (group && group.length > 1) message.versions = group;
+    }
     // During streaming the public agent state may not yet include the current assistant partial.
     if (runtime.session?.agent.state.streamingMessage)
       messages.push(
@@ -324,6 +337,7 @@ export class AgentService {
     return redactStrings(
       {
         ...this.summary(id, runtime),
+        branchId: runtime.manager.getLeafId() ?? undefined,
         messages,
         usage: runtime.usage,
         jevConsent: this.jevConsent?.view(id),
@@ -481,11 +495,7 @@ export class AgentService {
     await ownedDirectory(this.paths.sessions, directory);
     return [directory];
   }
-  private async ensureSession(
-    runtime: Runtime,
-    selection: Selection,
-    requestedSkill?: string,
-  ) {
+  private async prepareSession(selection: Selection, requestedSkill?: string) {
     const model = this.assertSelection(selection);
     if (
       !(
@@ -503,6 +513,16 @@ export class AgentService {
       )
     )
       throw new Error("该技能未启用或已不存在，请在设置中检查技能");
+    return { model, skillConfiguration };
+  }
+  private async ensureSession(
+    runtime: Runtime,
+    selection: Selection,
+    requestedSkill?: string,
+    prepared?: Awaited<ReturnType<AgentService["prepareSession"]>>,
+  ) {
+    const { model, skillConfiguration } =
+      prepared ?? (await this.prepareSession(selection, requestedSkill));
     const integrationConfiguration =
       this.connectors.configurationKey() +
       "|" +
@@ -689,20 +709,144 @@ export class AgentService {
       });
     } else this.publish(id, runtime, event.type);
   }
-  send(input: {
-    conversationId?: string;
-    requestId: string;
-    text: string;
-    images?: ChatImage[];
-    selection: Selection;
-  }): Promise<ConversationView> {
+  private assertEditable(
+    runtime: Runtime,
+    messageId: string,
+    expectedBranchId: string,
+  ) {
+    if (runtime.active) throw new Error("当前会话正在运行，请先停止");
+    if (runtime.manager.getLeafId() !== expectedBranchId)
+      throw new Error("MESSAGE_VERSION_CHANGED");
+    const entry = runtime.manager
+      .getBranch()
+      .find((entry) => entry.id === messageId);
+    if (entry?.type !== "message" || entry.message.role !== "user")
+      throw new Error("MESSAGE_VERSION_MISSING");
+    return entry;
+  }
+  private moveBranch(runtime: Runtime, leaf: string | null) {
+    runtime.session?.dispose();
+    runtime.session = undefined;
+    if (leaf) runtime.manager.branch(leaf);
+    else runtime.manager.resetLeaf();
+    runtime.toolUpdates.clear();
+  }
+  private restoreBranch(runtime: Runtime, leaf: string | null) {
+    this.moveBranch(runtime, leaf);
+    try {
+      runtime.manager.appendCustomEntry("worklens.branch-selection", {
+        version: 1,
+      });
+    } catch {
+      // Pi updates its in-memory leaf before attempting to append to disk.
+      // Never leave a failed marker as the parent of the next user message.
+      this.moveBranch(runtime, leaf);
+      this.diagnostics.push(
+        "会话分支恢复未能写入磁盘，已保留原记录和编辑草稿。",
+      );
+    }
+  }
+  selectMessageVersion(input: Requests["selectMessageVersion"]["input"]) {
     if (this.stopping) return Promise.reject(new Error("应用正在退出"));
-    if (this.requests.has(input.requestId))
-      return this.requests.get(input.requestId)!;
+    return this.operations.run(input.conversationId, async () => {
+      const runtime = await this.get(input.conversationId);
+      this.assertEditable(runtime, input.messageId, input.expectedBranchId);
+      const { roots } = messageVersions(runtime.manager);
+      if (
+        !roots.has(input.targetId) ||
+        roots.get(input.targetId) !== roots.get(input.messageId)
+      )
+        throw new Error("MESSAGE_VERSION_MISSING");
+      if (input.targetId === input.messageId)
+        return this.view(input.conversationId, runtime);
+      return this.selectBranch(input.conversationId, runtime, input.targetId);
+    });
+  }
+  recoverMessageEdit(input: Requests["recoverMessageEdit"]["input"]) {
+    if (this.stopping) return Promise.reject(new Error("应用正在退出"));
+    const recovery = this.recoveries.find((item) => item.runId === input.runId);
+    if (!recovery?.editOf)
+      return Promise.reject(new Error("MESSAGE_VERSION_MISSING"));
+    return this.operations.run(recovery.conversationId, async () => {
+      // The saved marker owns the conversation and target; renderer IDs cannot
+      // navigate arbitrary hidden history or restore a dismissed recovery.
+      if (!this.recoveries.includes(recovery))
+        throw new Error("MESSAGE_VERSION_MISSING");
+      const runtime = await this.get(recovery.conversationId);
+      if (runtime.active) throw new Error("当前会话正在运行，请先停止");
+      if (runtime.manager.getLeafId() !== input.expectedBranchId)
+        throw new Error("MESSAGE_VERSION_CHANGED");
+      const entry = runtime.manager.getEntry(recovery.editOf!);
+      if (entry?.type !== "message" || entry.message.role !== "user")
+        throw new Error("MESSAGE_VERSION_MISSING");
+      return this.selectBranch(recovery.conversationId, runtime, entry.id);
+    });
+  }
+  private selectBranch(id: string, runtime: Runtime, targetId: string) {
+    const previous = runtime.manager.getLeafId();
+    try {
+      this.moveBranch(runtime, versionLeaf(runtime.manager, targetId));
+      // Pi restores the last appended entry as its leaf on open.
+      runtime.manager.appendCustomEntry("worklens.branch-selection", {
+        version: 1,
+      });
+    } catch (error) {
+      this.moveBranch(runtime, previous);
+      throw error;
+    }
+    runtime.phase = "idle";
+    runtime.error = undefined;
+    runtime.statusDetail = undefined;
+    runtime.updated = new Date().toISOString();
+    this.refreshUsage(runtime);
+    return this.view(id, runtime);
+  }
+  send(input: Requests["send"]["input"]) {
+    return this.submit(input);
+  }
+  editMessage(input: Requests["editMessage"]["input"]) {
+    return this.submit({ ...input, images: undefined }, input);
+  }
+  private submit(
+    input: Requests["send"]["input"],
+    edit?: Requests["editMessage"]["input"],
+  ): Promise<ConversationView> {
+    if (this.stopping) return Promise.reject(new Error("应用正在退出"));
+    const requestKey = `${input.conversationId ?? "new"}/${edit ? "edit" : "send"}/${input.requestId}`;
+    if (this.requests.has(requestKey)) return this.requests.get(requestKey)!;
     const task = this.operations.run(
       input.conversationId ?? input.requestId,
       async () => {
-        const images = validateChatImages(input.images ?? []);
+        const editingRuntime = edit
+          ? await this.get(edit.conversationId)
+          : undefined;
+        const original =
+          edit && editingRuntime
+            ? this.assertEditable(
+                editingRuntime,
+                edit.messageId,
+                edit.expectedBranchId,
+              )
+            : undefined;
+        const editedImages = edit?.images.map((image) => {
+          if (!("existingIndex" in image)) return image;
+          const content =
+            original?.message.role === "user"
+              ? original.message.content
+              : undefined;
+          const block = Array.isArray(content)
+            ? content[image.existingIndex]
+            : undefined;
+          if (block?.type !== "image") throw new Error("CHAT_IMAGE_MISSING");
+          return {
+            name:
+              (block as { name?: string }).name ||
+              `image-${image.existingIndex + 1}`,
+            mimeType: block.mimeType,
+            data: block.data,
+          };
+        });
+        const images = validateChatImages(editedImages ?? input.images ?? []);
         if (!input.text.trim() && !images.length)
           throw new Error("消息不能为空");
         if (
@@ -733,12 +877,23 @@ export class AgentService {
         );
         if (input.text.startsWith("/skill:") && !skillCommand)
           throw new Error("该技能未启用或已不存在，请在设置中检查技能");
-        await this.ensureSession(runtime, input.selection, skillCommand?.[1]);
+        const prepared = await this.prepareSession(
+          input.selection,
+          skillCommand?.[1],
+        );
+        if (!edit)
+          await this.ensureSession(
+            runtime,
+            input.selection,
+            skillCommand?.[1],
+            prepared,
+          );
+        const previousLeaf = runtime.manager.getLeafId();
         const prompt = skillCommand
           ? `/skill:${skillCommand[1]}${skillCommand[2] ? ` ${skillCommand[2]}` : ""}`
           : input.text;
         const id = runtime.manager.getSessionId();
-        if (!runtime.manager.getSessionName())
+        if (!runtime.manager.getSessionName() && !edit)
           runtime.session!.setSessionName(
             (input.text.trim() || images[0]?.name || "新会话").slice(0, 48),
           );
@@ -769,6 +924,7 @@ export class AgentService {
             selection: input.selection,
             startedAt: runtime.updated,
             phase: "accepted",
+            editOf: edit?.messageId,
           });
         } catch (error) {
           runtime.active = undefined;
@@ -777,6 +933,19 @@ export class AgentService {
         }
         let runStartEntryId: string;
         try {
+          // The draft is durable before any branch or model metadata changes.
+          if (edit) {
+            this.moveBranch(
+              runtime,
+              editParent(runtime.manager, edit.messageId),
+            );
+            await this.ensureSession(
+              runtime,
+              input.selection,
+              skillCommand?.[1],
+              prepared,
+            );
+          }
           runStartEntryId = runtime.manager.appendCustomEntry(
             "worklens.run-start",
             {
@@ -784,6 +953,7 @@ export class AgentService {
               conversationId: id,
               runId: active.id,
               ...input.selection,
+              editOf: edit?.messageId,
               startedAt: runtime.updated,
             },
           );
@@ -791,6 +961,7 @@ export class AgentService {
         } catch (error) {
           runtime.active = undefined;
           runtime.phase = "failed";
+          if (edit) this.restoreBranch(runtime, previousLeaf);
           // The accepted prompt remains in the recovery marker if attribution fails.
           throw error;
         }
@@ -875,8 +1046,34 @@ export class AgentService {
             } catch {
               this.diagnostics.push("本轮用量归档未完成，已保留恢复记录。");
             }
-            this.publish(id, runtime, "run_end", true);
-            runtime.active = undefined;
+            try {
+              const selectedBranch = runtime.manager.getBranch();
+              const startPosition = selectedBranch.findIndex(
+                (entry) => entry.id === runStartEntryId,
+              );
+              if (
+                edit &&
+                (startPosition < 0 ||
+                  !selectedBranch
+                    .slice(startPosition + 1)
+                    .some(
+                      (entry) =>
+                        entry.type === "message" &&
+                        entry.message.role === "user",
+                    ))
+              ) {
+                this.restoreBranch(runtime, previousLeaf);
+                this.refreshUsage(runtime);
+              }
+              this.publish(id, runtime, "run_end", true);
+            } catch {
+              this.diagnostics.push("会话状态更新未完成，已保留恢复记录。");
+              terminalPersisted = false;
+            } finally {
+              if (runtime.timer) clearTimeout(runtime.timer);
+              runtime.timer = undefined;
+              runtime.active = undefined;
+            }
             if (terminalPersisted) await unlink(pendingPath).catch(() => {});
             else
               await atomicJson(pendingPath, {
@@ -888,6 +1085,7 @@ export class AgentService {
                 selection: input.selection,
                 startedAt: runtime.usage?.run?.startedAt,
                 phase: runtime.phase,
+                editOf: edit?.messageId,
                 endedAt: runtime.updated,
               }).catch(() => {});
           }
@@ -896,7 +1094,7 @@ export class AgentService {
         return this.view(id, runtime);
       },
     );
-    this.requests.set(input.requestId, task);
+    this.requests.set(requestKey, task);
     if (this.requests.size > 2000)
       this.requests.delete(this.requests.keys().next().value!);
     return task;

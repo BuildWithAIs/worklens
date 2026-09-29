@@ -12,7 +12,7 @@ import {
 } from "electron";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import {
   SecureCredentials,
@@ -296,6 +296,15 @@ else {
                 case "send":
                   value = await agents!.send(input);
                   break;
+                case "editMessage":
+                  value = await agents!.editMessage(input);
+                  break;
+                case "selectMessageVersion":
+                  value = await agents!.selectMessageVersion(input);
+                  break;
+                case "recoverMessageEdit":
+                  value = await agents!.recoverMessageEdit(input);
+                  break;
                 case "chatImage":
                   value = await agents!.chatImage(input);
                   break;
@@ -362,6 +371,10 @@ else {
       );
       const createWindow = () => {
         nativeTheme.themeSource = state.value.theme;
+        const rendererUrl =
+          process.env.ELECTRON_RENDERER_URL && !app.isPackaged
+            ? new URL(process.env.ELECTRON_RENDERER_URL).href
+            : pathToFileURL(join(directory, "../renderer/index.html")).href;
         window = new BrowserWindow({
           width: 1260,
           height: 860,
@@ -431,11 +444,30 @@ else {
         window.webContents.on("will-navigate", (event) =>
           event.preventDefault(),
         );
+        const ownedWindow = window;
+        // Only the app document may write standard clipboard content. Embedded
+        // previews, other windows, clipboard reads and other permissions stay denied.
+        const canWriteClipboard = (
+          contents: Electron.WebContents | null,
+          permission: string,
+          details: { isMainFrame: boolean; requestingUrl?: string },
+        ) =>
+          !ownedWindow.isDestroyed() &&
+          window === ownedWindow &&
+          contents === ownedWindow.webContents &&
+          permission === "clipboard-sanitized-write" &&
+          details.isMainFrame &&
+          details.requestingUrl === rendererUrl &&
+          contents.mainFrame.url === rendererUrl;
+        window.webContents.session.setPermissionCheckHandler(
+          (contents, permission, _origin, details) =>
+            canWriteClipboard(contents, permission, details),
+        );
         window.webContents.session.setPermissionRequestHandler(
-          (_contents, _permission, callback) => callback(false),
+          (contents, permission, callback, details) =>
+            callback(canWriteClipboard(contents, permission, details)),
         );
         window.once("ready-to-show", () => window?.show());
-        const ownedWindow = window;
         let closing = false;
         let readyToClose = false;
         ownedWindow.on("closed", () => {
@@ -454,9 +486,7 @@ else {
             ownedWindow.close();
           });
         });
-        if (process.env.ELECTRON_RENDERER_URL && !app.isPackaged)
-          void window.loadURL(process.env.ELECTRON_RENDERER_URL);
-        else void window.loadFile(join(directory, "../renderer/index.html"));
+        void window.loadURL(rendererUrl);
       };
       createWindow();
       app.on("activate", () => {

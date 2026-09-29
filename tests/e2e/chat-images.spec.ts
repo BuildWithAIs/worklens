@@ -1,5 +1,5 @@
 import { test, expect, _electron as electron } from "@playwright/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -56,13 +56,68 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
       }),
     );
     await page.reload();
+    expect(
+      await page.evaluate(async () => {
+        try {
+          await navigator.clipboard.readText();
+          return "allowed";
+        } catch (error) {
+          return (error as Error).name;
+        }
+      }),
+    ).toBe("NotAllowedError");
+    expect(
+      await page.evaluate(
+        async () =>
+          (await navigator.permissions.query({ name: "notifications" })).state,
+      ),
+    ).toBe("denied");
+    await page.evaluate(() => {
+      const frame = document.createElement("iframe");
+      frame.dataset.clipboardTest = "true";
+      frame.allow = "clipboard-write";
+      frame.srcdoc = "<button>Test clipboard boundary</button>";
+      document.body.append(frame);
+    });
+    const embedded = page.frameLocator("iframe[data-clipboard-test]");
+    await embedded.getByRole("button").click();
+    expect(
+      await embedded.locator("body").evaluate(async () => {
+        try {
+          await navigator.clipboard.writeText("synthetic embedded write");
+          return "allowed";
+        } catch (error) {
+          return (error as Error).name;
+        }
+      }),
+    ).toBe("NotAllowedError");
+    await page.evaluate(() =>
+      document.querySelector("iframe[data-clipboard-test]")?.remove(),
+    );
+    expect(
+      await app.evaluate(async ({ BrowserWindow }) => {
+        const main = BrowserWindow.getAllWindows()[0];
+        const other = new BrowserWindow({
+          show: false,
+          webPreferences: { session: main.webContents.session },
+        });
+        try {
+          await other.loadURL(main.webContents.getURL());
+          return await other.webContents.executeJavaScript(
+            'navigator.permissions.query({name:"clipboard-write"}).then(p => p.state)',
+          );
+        } finally {
+          other.destroy();
+        }
+      }),
+    ).toBe("denied");
     const images = await page.evaluate(() => {
       const canvas = document.createElement("canvas");
-      canvas.width = 160;
-      canvas.height = 100;
+      canvas.width = 640;
+      canvas.height = 400;
       const context = canvas.getContext("2d")!;
       context.fillStyle = "#8455ee";
-      context.fillRect(0, 0, 160, 100);
+      context.fillRect(0, 0, 640, 400);
       context.fillStyle = "white";
       context.fillText("WorkLens", 30, 50);
       return ["image/png", "image/jpeg", "image/webp"].map((mimeType) => ({
@@ -98,7 +153,113 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
     const previews = page.locator(".aui-user-message-attachments-end img");
     await expect(previews).toHaveCount(3);
     for (const preview of await previews.all())
-      await expect(preview).toHaveJSProperty("naturalWidth", 160);
+      await expect(preview).toHaveJSProperty("naturalWidth", 256);
+    const tiles = page.locator(
+      '.aui-user-message-attachments-end .aui-attachment-root [role="button"]',
+    );
+    await expect(
+      page
+        .locator(".aui-user-action-bar-root")
+        .getByRole("button", { name: "Copy text", exact: true }),
+    ).toHaveCount(0);
+    for (let index = 0; index < 3; index++) {
+      await app.evaluate(({ clipboard }) =>
+        clipboard.writeText("synthetic clipboard marker"),
+      );
+      await tiles.nth(index).click({ button: "right" });
+      await page
+        .getByRole("menuitem", { name: "Copy image", exact: true })
+        .click();
+      await expect
+        .poll(() =>
+          app.evaluate(async ({ clipboard, nativeImage }) => {
+            const item = (await clipboard.read()).find((item) =>
+              item.types.includes("image/png"),
+            );
+            if (!item) return null;
+            const blob = (await item.getType("image/png")) as Blob;
+            return nativeImage
+              .createFromBuffer(Buffer.from(await blob.arrayBuffer()))
+              .getSize();
+          }),
+        )
+        .toEqual({ width: 640, height: 400 });
+      await page.keyboard.press("Escape");
+    }
+    await tiles.first().click();
+    const previewDialog = page.getByRole("dialog", {
+      name: "Image preview",
+      exact: true,
+    });
+    await app.evaluate(({ clipboard }) =>
+      clipboard.writeText("synthetic preview marker"),
+    );
+    await expect(previewDialog).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(previewDialog.getByRole("status")).toHaveText("2 / 3");
+    await previewDialog.locator("img").click({ button: "right" });
+    await page
+      .getByRole("menuitem", { name: "Copy image", exact: true })
+      .click();
+    await expect
+      .poll(() =>
+        app.evaluate(async ({ clipboard, nativeImage }) => {
+          const item = (await clipboard.read()).find((item) =>
+            item.types.includes("image/png"),
+          );
+          if (!item) return null;
+          const blob = (await item.getType("image/png")) as Blob;
+          return nativeImage
+            .createFromBuffer(Buffer.from(await blob.arrayBuffer()))
+            .getSize();
+        }),
+      )
+      .toEqual({ width: 640, height: 400 });
+    const downloadPath = join(root, "downloaded-image.jpeg");
+    await app.evaluate(({ BrowserWindow }, path) => {
+      (globalThis as any).imageDownload = undefined;
+      BrowserWindow.getAllWindows()[0].webContents.session.once(
+        "will-download",
+        (_event, item) => {
+          item.setSavePath(path);
+          item.once("done", (_event, state) => {
+            (globalThis as any).imageDownload = {
+              state,
+              filename: item.getFilename(),
+              mime: item.getMimeType(),
+            };
+          });
+        },
+      );
+    }, downloadPath);
+    await page
+      .getByRole("menuitem", { name: "Download image", exact: true })
+      .click();
+    await expect
+      .poll(() => app.evaluate(() => (globalThis as any).imageDownload))
+      .toEqual({
+        state: "completed",
+        filename: "image-1.jpeg",
+        mime: "image/jpeg",
+      });
+    const saved = await readFile(downloadPath);
+    expect(saved.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    expect(
+      await app.evaluate(
+        ({ nativeImage }, bytes) =>
+          nativeImage.createFromBuffer(Buffer.from(bytes)).getSize(),
+        [...saved],
+      ),
+    ).toEqual({ width: 640, height: 400 });
+    await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page.locator(".aui-composer-input").focus();
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+V" : "Control+V",
+    );
+    await expect(page.locator(".aui-composer-attachments img")).toHaveCount(1);
+    await page.locator(".aui-attachment-tile-remove").click();
     const bootstrap = await page.evaluate(() =>
       window.worklens.invoke("bootstrap", undefined),
     );
@@ -126,6 +287,48 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
       { id, ref },
     );
     expect(invalid).toContain("CHAT_IMAGE_MISSING");
+    // Exercise the actual IPC/session path for an image edit and version selection.
+    await page.locator(".aui-composer-input").fill("Unsent follow-up");
+    await page.locator('[data-slot="aui_user-message-root"]').first().hover();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const editor = page.locator(".aui-edit-composer-root");
+    await expect(editor.locator("img")).toHaveCount(3);
+    await editor
+      .locator(".aui-edit-composer-input")
+      .fill("Revised image description");
+    await editor.locator(".aui-attachment-tile-remove").nth(1).click();
+    await editor.getByRole("button", { name: "Save and regenerate" }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(page.locator(".aui-composer-cancel")).toHaveCount(0);
+    await expect(page.locator(".aui-branch-picker-state")).toHaveText("2 / 2");
+    await expect(page.locator(".aui-composer-input")).toHaveValue(
+      "Unsent follow-up",
+    );
+    await expect(previews).toHaveCount(2);
+    await expect.poll(() => server.requests.length).toBe(2);
+    const revisedUser = server.requests[1].messages.filter(
+      (message: any) => message.role === "user",
+    );
+    expect(revisedUser).toHaveLength(1);
+    expect(
+      revisedUser[0].content
+        .filter((part: any) => part.type === "image_url")
+        .map((part: any) => part.image_url.url),
+    ).toEqual([images[0].source, images[2].source]);
+    await page
+      .getByRole("button", { name: "Previous version", exact: true })
+      .click();
+    await expect(previews).toHaveCount(3);
+    await page.reload();
+    await expect(page.locator(".aui-branch-picker-state")).toHaveText("1 / 2");
+    await expect(previews).toHaveCount(3);
+    await page
+      .getByRole("button", { name: "Next version", exact: true })
+      .click();
+    await expect(previews).toHaveCount(2);
+    await expect(
+      page.getByText("Revised image description", { exact: true }),
+    ).toBeVisible();
     await page.evaluate((id) => window.worklens.invoke("delete", { id }), id);
     expect(
       (

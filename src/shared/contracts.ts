@@ -1,4 +1,4 @@
-import type { ChatImage, ChatImageRef } from "./chat-images";
+import type { ChatImage, ChatImageRef, EditedChatImage } from "./chat-images";
 
 export type Thinking =
   | "off"
@@ -131,6 +131,8 @@ export interface SkillsSnapshot {
   local: SkillInfo[];
 }
 export interface MessageView {
+  entryId?: string;
+  versions?: string[];
   images?: ChatImageRef[];
   /** Files observed to be created or changed by a successful tool invocation. */
   outputPaths?: string[];
@@ -173,6 +175,7 @@ export interface Conversation {
   revision?: number;
 }
 export interface ConversationView extends Conversation {
+  branchId?: string;
   messages: MessageView[];
   usage?: UsageSnapshot;
   jevConsent?: JevSessionConsent;
@@ -196,6 +199,7 @@ export interface AuthStep {
   placeholder?: string;
 }
 export interface Recovery {
+  editOf?: string;
   imageCount?: number;
   runId: string;
   conversationId: string;
@@ -329,6 +333,27 @@ export interface Requests {
     };
     output: ConversationView;
   };
+  editMessage: {
+    input: {
+      conversationId: string;
+      requestId: string;
+      messageId: string;
+      expectedBranchId: string;
+      text: string;
+      images: EditedChatImage[];
+      selection: Selection;
+    };
+    output: ConversationView;
+  };
+  selectMessageVersion: {
+    input: {
+      conversationId: string;
+      messageId: string;
+      targetId: string;
+      expectedBranchId: string;
+    };
+    output: ConversationView;
+  };
   chatImage: {
     input: {
       conversationId: string;
@@ -340,6 +365,10 @@ export interface Requests {
   };
   prepareChatImage: { input: { images: ChatImage[] }; output: string };
   recoveryImages: { input: { runId: string }; output: ChatImage[] };
+  recoverMessageEdit: {
+    input: { runId: string; expectedBranchId: string };
+    output: ConversationView;
+  };
   cancel: { input: { conversationId: string; runId: string }; output: void };
   model: {
     input: { id: string; selection: Selection };

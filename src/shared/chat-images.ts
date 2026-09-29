@@ -16,6 +16,8 @@ export interface ChatImage {
   data: string;
 }
 
+export type EditedChatImage = ChatImage | { existingIndex: number };
+
 export interface ChatImageRef {
   messageId: string;
   index: number;

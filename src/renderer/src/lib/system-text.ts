@@ -3,6 +3,8 @@ import i18n, { type AppLanguage } from "../i18n";
 // Main-process and provider messages are untrusted runtime data. Translate only
 // known application-owned text and leave conversation/tool content untouched.
 const messages = [
+  ["MESSAGE_VERSION_CHANGED", "MESSAGE_VERSION_CHANGED", "thread.versionChanged"],
+  ["MESSAGE_VERSION_MISSING", "MESSAGE_VERSION_MISSING", "thread.versionMissing"],
   ["CHAT_IMAGE_MODEL", "CHAT_IMAGE_MODEL", "attachments.unsupportedModel"],
   ["CHAT_IMAGE_FORMAT", "CHAT_IMAGE_FORMAT", "attachments.format"],
   ["CHAT_IMAGE_INVALID", "CHAT_IMAGE_INVALID", "attachments.invalid"],

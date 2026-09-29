@@ -30,6 +30,10 @@ export function projectMessages(
       result.push({
         id,
         role: "user",
+        entryId:
+          typeof message.sessionEntryId === "string"
+            ? message.sessionEntryId
+            : undefined,
         ...(typeof message.sessionEntryId === "string" &&
         Array.isArray(message.content)
           ? {
