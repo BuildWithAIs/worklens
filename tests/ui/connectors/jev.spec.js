@@ -254,7 +254,7 @@ for (const language of ["en", "zh"])
       ).toBeVisible();
       await expect(
         page.getByRole("button", {
-          name: t("Add attachment", "添加附件"),
+          name: t("Add images", "添加图片"),
           exact: true,
         }),
       ).toBeVisible();

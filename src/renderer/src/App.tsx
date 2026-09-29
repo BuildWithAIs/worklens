@@ -44,6 +44,7 @@ import { useAppTranslation } from "@/i18n";
 import { UsagePopover } from "@/components/worklens/UsagePopover";
 import { newerGlobalUsage } from "../../shared/usage";
 import { AgentThread } from "@/components/worklens/AgentThread";
+import type { ChatImage } from "../../shared/chat-images";
 import type {
   Bootstrap,
   GlobalUsage,
@@ -100,6 +101,7 @@ export function App() {
   }, [current, page]);
   const [selection, setSelection] = useState<Selection>();
   const [text, setText] = useState("");
+  const [draftImages, setDraftImages] = useState<ChatImage[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<{
     type: "error" | "success";
@@ -283,6 +285,7 @@ export function App() {
       setSelection(view.selection ?? data?.settings.defaults);
       setPage("chat");
       setText("");
+      setDraftImages([]);
     } catch (error) {
       notifyError(String(error));
     }
@@ -293,6 +296,7 @@ export function App() {
     setCurrent(undefined);
     setSelection(data?.settings.defaults);
     setText("");
+    setDraftImages([]);
     setPage("chat");
   }
   async function deleteConversation(id: string) {
@@ -361,10 +365,12 @@ export function App() {
       previous ? { ...previous, settings: result } : previous,
     );
   }
-  async function sendText(nextText: string) {
-    if (!selection || !nextText.trim() || sending || busy) return;
+  async function sendText(nextText: string, images: ChatImage[] = []) {
+    if (!selection || (!nextText.trim() && !images.length) || sending || busy)
+      throw new Error("消息不能为空");
     const submissionKey = current ?? draftId;
-    if (submissionLocks.current.has(submissionKey)) return;
+    if (submissionLocks.current.has(submissionKey))
+      throw new Error("当前会话正在运行，请先停止");
     submissionLocks.current.add(submissionKey);
     setPendingSends((previous) => new Set(previous).add(submissionKey));
     const visit = navigation.current;
@@ -374,16 +380,23 @@ export function App() {
         conversationId: current,
         requestId: crypto.randomUUID(),
         text: nextText,
+        images,
         selection,
       });
       acceptView(view);
       if (visit === navigation.current) {
         setCurrent(view.id);
         setText("");
-        await settings({ lastConversation: view.id });
+        setDraftImages([]);
+        // The prompt is already accepted. A settings failure must not restore
+        // it as an unsent draft and invite a duplicate submission.
+        void settings({ lastConversation: view.id }).catch((error) =>
+          notifyError(String(error)),
+        );
       }
     } catch (error) {
       notifyError(String(error));
+      throw error;
     } finally {
       submissionLocks.current.delete(submissionKey);
       setPendingSends((previous) => {
@@ -682,8 +695,15 @@ export function App() {
             view={currentView}
             onConsentChange={acceptView}
             canSend={!!availableModel?.available && !sending}
+            submitting={sending}
             draft={text}
-            onDraftLoaded={() => setText("")}
+            draftImages={draftImages}
+            supportsImages={!!availableModel?.image}
+            onError={notifyError}
+            onDraftLoaded={() => {
+              setText("");
+              setDraftImages([]);
+            }}
             onSend={sendText}
             onCancel={cancelCurrent}
             modelMenu={{
@@ -739,22 +759,42 @@ export function App() {
           {data.recoveries.map((item) => (
             <div className="recovery-item" key={item.runId}>
               <p>{item.text.slice(0, 180)}</p>
+              {!!item.imageCount && (
+                <p>
+                  {t("attachments.recoveryCount", { count: item.imageCount })}
+                </p>
+              )}
               <div className="actions">
                 <button
-                  onClick={() =>
-                    void (
-                      data.conversations.some(
-                        (c) => c.id === item.conversationId,
-                      )
-                        ? open(item.conversationId)
-                        : Promise.resolve(newConversation())
-                    ).then(() => {
+                  onClick={() => {
+                    const visit = navigation.current;
+                    void (async () => {
+                      const images = item.imageCount
+                        ? await api.invoke("recoveryImages", {
+                            runId: item.runId,
+                          })
+                        : [];
+                      if (visit !== navigation.current) return;
+                      if (
+                        data.conversations.some(
+                          (c) => c.id === item.conversationId,
+                        )
+                      ) {
+                        const view = await api.invoke("open", {
+                          id: item.conversationId,
+                        });
+                        if (visit !== navigation.current) return;
+                        navigation.current++;
+                        acceptView(view);
+                        setCurrent(view.id);
+                      } else newConversation();
                       setText(item.text);
+                      setDraftImages(images);
                       setSelection(item.selection);
                       setPage("chat");
                       setShowRecovery(false);
-                    })
-                  }
+                    })().catch((error) => notifyError(String(error)));
+                  }}
                 >
                   {t("app.loadDraftForReview")}
                 </button>

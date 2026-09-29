@@ -72,6 +72,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type DragEvent,
   type FC,
   type PropsWithChildren,
   type ReactNode,
@@ -276,9 +277,20 @@ const ThreadWelcome: FC = () => {
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const { t } = useAppTranslation();
   const { ComposerInput } = useContext(ThreadComponentsContext);
+  const disabled = useAuiState((s) => s.thread.isDisabled);
+  const preventDisabledDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!disabled || !event.dataTransfer.types.includes("Files")) return;
+    // A disabled dropzone must still prevent file drops from navigating away.
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "none";
+  };
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone
+        disabled={disabled}
+        onDragEnterCapture={preventDisabledDrop}
+        onDragOverCapture={preventDisabledDrop}
+        onDropCapture={preventDisabledDrop}
         render={
           <div
             data-slot="aui_composer-shell"
