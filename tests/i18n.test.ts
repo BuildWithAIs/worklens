@@ -87,7 +87,7 @@ test("connector result translation preserves account names, URLs and unknown det
 
 test("image validation messages use the selected language", () => {
   expect(systemText("CHAT_IMAGE_INVALID", "en")).toBe(
-    "Couldn’t read this image. Choose another file.",
+    "Couldn’t read this image. Try exporting it as PNG or JPEG.",
   );
   expect(systemText("CHAT_IMAGE_MODEL", "zh")).toBe("请选择支持图片的模型。");
 });

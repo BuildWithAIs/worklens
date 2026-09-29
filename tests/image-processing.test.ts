@@ -8,6 +8,7 @@ import {
   thumbnailOptions,
 } from "../src/main/image-processing";
 import { pngHeader, syntheticPng } from "./image-fixtures";
+import sharp from "sharp";
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -84,10 +85,88 @@ function fakeChild() {
   return child;
 }
 
+test("a 24 MP phone photo is resized with EXIF orientation in the isolated decoder", async () => {
+  const bytes = await sharp({
+    create: { width: 5712, height: 4284, channels: 3, background: "#4389ad" },
+  })
+    .jpeg()
+    .withMetadata({ orientation: 6 })
+    .toBuffer();
+  const image = { mimeType: "image/jpeg", data: bytes.toString("base64") };
+  const result = await processChatImage(image, {
+    maxWidth: 2000,
+    maxHeight: 2000,
+    maxBytes: 1875000,
+  });
+  expect([result.width, result.height]).toEqual([1500, 2000]);
+  expect(imageDimensions(Buffer.from(result.data, "base64"))).toEqual({
+    width: 1500,
+    height: 2000,
+  });
+  expect(result.data.length).toBeLessThan(1875000);
+  expect((await processChatImage(image, originalOptions)).data).toBe(
+    image.data,
+  );
+});
+
+test.each(["png", "webp"] as const)(
+  "transparent %s retains alpha when resized",
+  async (format) => {
+    const bytes = await sharp({
+      create: {
+        width: 640,
+        height: 400,
+        channels: 4,
+        background: { r: 200, g: 30, b: 70, alpha: 0.5 },
+      },
+    })
+      .toFormat(format)
+      .toBuffer();
+    const result = await processChatImage(
+      { mimeType: `image/${format}`, data: bytes.toString("base64") },
+      thumbnailOptions,
+    );
+    const { data, info } = await sharp(Buffer.from(result.data, "base64"))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect(info.channels).toBe(4);
+    expect(data[3]).toBeGreaterThanOrEqual(127);
+    expect(data[3]).toBeLessThanOrEqual(128);
+  },
+);
+
+test("output budget reduces noisy images and reports an impossible budget accurately", async () => {
+  const image = input(syntheticPng(640, 640, true));
+  const result = await processChatImage(image, {
+    maxWidth: 640,
+    maxHeight: 640,
+    maxBytes: 8000,
+  });
+  expect(result.data.length).toBeLessThan(8000);
+  expect(result.width).toBeLessThan(640);
+  await expect(
+    processChatImage(image, { maxWidth: 640, maxHeight: 640, maxBytes: 4 }),
+  ).rejects.toThrow("CHAT_IMAGE_REQUEST");
+});
+
+test("a truncated JPEG with valid dimensions is rejected even when no resize is needed", async () => {
+  const bytes = await sharp(syntheticPng(80, 60, true))
+    .jpeg()
+    .toBuffer();
+  const truncated = bytes.subarray(0, Math.floor(bytes.length * 0.8));
+  expect(imageDimensions(truncated)).toEqual({ width: 80, height: 60 });
+  await expect(
+    processChatImage(
+      { data: truncated.toString("base64"), mimeType: "image/jpeg" },
+      originalOptions,
+    ),
+  ).rejects.toThrow("CHAT_IMAGE_INVALID");
+});
+
 test("decoder crashes are contained and never retried in the caller process", async () => {
   const child = fakeChild();
   const task = processChatImage(input(syntheticPng(11, 9)), thumbnailOptions);
-  const rejection = expect(task).rejects.toThrow("CHAT_IMAGE_INVALID");
+  const rejection = expect(task).rejects.toThrow("CHAT_IMAGE_PROCESSING");
   child.emit("exit", 1);
   await rejection;
   expect(childProcess.fork).toHaveBeenCalledTimes(1);
@@ -95,7 +174,7 @@ test("decoder crashes are contained and never retried in the caller process", as
     expect.any(String),
     [],
     expect.objectContaining({
-      execArgv: ["--max-old-space-size=128", "--wasm-max-mem-pages=6144"],
+      execArgv: ["--max-old-space-size=128"],
     }),
   );
   expect(child.kill).toHaveBeenCalledWith("SIGKILL");
@@ -108,7 +187,7 @@ test("stalled decoders time out and running/queued work can be cancelled", async
     input(syntheticPng(12, 9)),
     thumbnailOptions,
   );
-  const timedOut = expect(stalled).rejects.toThrow("CHAT_IMAGE_PROCESSING");
+  const timedOut = expect(stalled).rejects.toThrow("CHAT_IMAGE_TIMEOUT");
   await vi.advanceTimersByTimeAsync(15000);
   await timedOut;
   const controller = new AbortController();

@@ -27,7 +27,7 @@ async function setup(
           (window as any).imageSends.push(input);
           if (fail) {
             fail = false;
-            throw new Error("Fixture rejected submission");
+            throw new Error("CHAT_IMAGE_PROCESSING");
           }
           view = {
             id: "image-session",
@@ -162,6 +162,45 @@ test("IPC rejection restores text and images; a retry sends once more", async ({
   ).toHaveCount(1);
   expect(await page.evaluate(() => (window as any).imageSends.length)).toBe(2);
 });
+
+for (const [language, theme] of [
+  ["en", "light"],
+  ["zh", "dark"],
+]) {
+  test(`image preparation rejection uses a toast and preserves the four-image draft (${language})`, async ({
+    page,
+  }, info) => {
+    await setup(page, { fail: true, vision: true, language, theme });
+    await choose(page, [
+      file("1.png"),
+      file("2.png"),
+      file("3.png"),
+      file("4.png"),
+    ]);
+    await page.locator(".aui-composer-input").fill("Explain these four photos");
+    await page.locator(".aui-composer-send").click();
+    await expect(page.locator('[data-slot="toast-title"]')).toContainText(
+      language === "en"
+        ? "Couldn’t process this image. Restart WorkLens"
+        : "无法处理这张图片，请重启 WorkLens",
+    );
+    await expect(page.locator(".aui-composer-input")).toHaveValue(
+      "Explain these four photos",
+    );
+    await expect(page.locator(".aui-composer-attachments img")).toHaveCount(4);
+    await expect(
+      page.locator(".aui-user-message-attachments-end img"),
+    ).toHaveCount(0);
+    await expect(page.locator(".aui-assistant-message-root")).toHaveCount(0);
+    await page.screenshot({
+      path: info.outputPath("image-processing-toast.png"),
+    });
+    await page.locator(".aui-composer-send").click();
+    await expect(
+      page.locator(".aui-user-message-attachments-end img"),
+    ).toHaveCount(4);
+  });
+}
 
 for (const withImage of [false, true]) {
   test(`pending submission locks editing and restores the rejected ${withImage ? "image" : "text"} draft`, async ({
