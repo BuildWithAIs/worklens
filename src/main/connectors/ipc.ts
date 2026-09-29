@@ -9,9 +9,14 @@ import { connectionSchema as githubSchema } from "./github/connection";
 import type { GitHubService } from "./github/service";
 import { connectionSchema as tavilySchema } from "./tavily/connection";
 import type { TavilyService } from "./tavily/service";
+import { connectionSchema as jevSchema } from "./jev/connection";
+import type { JevService } from "./jev/service";
 
 // Each connector owns its settings schema; the IPC surface remains explicit and typed.
 export const connectorSchemas = {
+  jevSave: jevSchema,
+  jevTest: jevSchema,
+  jevRemove: z.undefined(),
   githubSave: githubSchema,
   githubTest: githubSchema,
   githubRemove: z.undefined(),
@@ -36,12 +41,16 @@ export function connectorRequests(
   jira: JiraService,
   github: GitHubService,
   tavily: TavilyService,
+  jev: JevService,
 ) {
   const handlers: {
     [K in ConnectorRequest]: (
       input: Requests[K]["input"],
     ) => Promise<Requests[K]["output"]>;
   } = {
+    jevSave: (input) => jev.connections.save(input),
+    jevTest: (input) => jev.connections.test(input),
+    jevRemove: () => jev.connections.remove(),
     githubSave: (input) => github.connections.save(input),
     githubTest: (input) => github.test(input),
     githubRemove: () => github.connections.remove(),

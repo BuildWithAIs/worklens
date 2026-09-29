@@ -1,4 +1,7 @@
 import { messageOutputPaths } from "../../../../shared/file-references";
+import { JevUsage, successfulJevCalls } from "./connectors/jev/JevUsage";
+import { JevSessionAccess } from "./connectors/jev/JevSessionAccess";
+import { JevConsentCards } from "./connectors/jev/JevConsentCard";
 import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
 import { createThreadMessageCache } from "@/lib/thread-message-cache";
@@ -58,6 +61,7 @@ import type {
 } from "../../../../shared/contracts";
 
 type Props = {
+  onConsentChange?: (view: ConversationView) => void;
   view?: ConversationView;
   canSend: boolean;
   submitting: boolean;
@@ -287,6 +291,7 @@ function ActivityProgress({
     "compacting",
     "retrying",
     "stopping",
+    "waiting",
   ].includes(kind)
     ? progress
     : (!active && summary) ||
@@ -429,9 +434,11 @@ const threadComponents = {
   ToolFallback: WorkLensTool,
   ProcessGroup: WorkLensToolGroup,
   LiveStatus: WorkLensLiveStatus,
+  MessageFooter: JevUsage,
 };
 
 export function AgentThread({
+  onConsentChange,
   view,
   canSend,
   submitting,
@@ -548,8 +555,10 @@ export function AgentThread({
       const latest = turn.at(-1)!.message;
       const latestTool = latest.role === "tool" ? latest : undefined;
       const phase = view?.phase;
-      const progressKind =
-        phase === "compacting" || phase === "retrying" || phase === "stopping"
+      const awaitingConsent = running && !!view?.jevConsent?.pending.length;
+      const progressKind = awaitingConsent
+        ? "waiting"
+        : phase === "compacting" || phase === "retrying" || phase === "stopping"
           ? phase
           : latestTool
             ? (latestTool.toolName ?? "tool")
@@ -570,12 +579,14 @@ export function AgentThread({
                 : progressKind === "thinking"
                   ? t("activity.thinking")
                   : t("activity.working");
+      if (awaitingConsent) progress = t("connectors.jev.waiting");
       const progressActive =
-        !latestTool ||
-        ["compacting", "retrying", "stopping"].includes(progressKind) ||
-        !["success", "error", "timeout", "cancelled"].includes(
-          latestTool.status ?? "",
-        );
+        !awaitingConsent &&
+        (!latestTool ||
+          ["compacting", "retrying", "stopping"].includes(progressKind) ||
+          !["success", "error", "timeout", "cancelled"].includes(
+            latestTool.status ?? "",
+          ));
       // Keep one stable part so tool/thinking transitions cannot grow the live DOM.
       const visibleActivity: Part[] = running
         ? [{ type: "reasoning", text: progress }]
@@ -683,7 +694,7 @@ export function AgentThread({
           content: answer,
           status,
           metadata: {
-            custom: { sentAt, hasActivity: visibleActivity.length > 0 },
+            custom: { sentAt, hasActivity: visibleActivity.length > 0, jevCalls: successfulJevCalls(turn.map(({ message }) => message)) },
           },
         });
       }
@@ -822,7 +833,21 @@ export function AgentThread({
             running={!!view && activePhases.has(view.phase)}
           >
             <div className="agent-thread">
-              <Thread components={threadComponents} />
+              <Thread
+                components={threadComponents}
+                footer={
+                  <JevSessionAccess
+                    conversation={view}
+                    onChange={onConsentChange}
+                  />
+                }
+                afterMessages={
+                  <JevConsentCards
+                    requests={view?.jevConsent?.pending ?? []}
+                    onChange={onConsentChange}
+                  />
+                }
+              />
             </div>
           </HtmlArtifactWorkspace>
         </ModelMenuContext.Provider>

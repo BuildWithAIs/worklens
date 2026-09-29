@@ -136,6 +136,47 @@ const en = {
     colorPalette: "Color palette",
   },
   connectors: {
+    jev: {
+      tagline: "TypeSafe",
+      description:
+        "Classification, ranking and checks with Jev. You control what is sent; billed to your TypeSafe account.",
+      apiURL: "API URL",
+      enterYourApiKey: "Enter your TypeSafe API key",
+      getApiKey: "Get a TypeSafe API key",
+      jevSettingsSaved: "Jev settings saved",
+      jevDisconnected: "Jev disconnected",
+      approvalTitles: {
+        rank: "Allow Jev to rank these items?",
+        classify: "Allow Jev to classify these items?",
+        check: "Allow Jev to check these items?",
+      },
+      approvalDescription_one:
+        "Sends {{count}} item and its criteria to {{recipient}}.",
+      approvalDescription_other:
+        "Sends {{count}} items and criteria to {{recipient}}.",
+      purposes: {
+        rank: "Ranking",
+        classify: "Classification",
+        check: "Checks",
+      },
+      resultCount_one: "{{count}} item",
+      resultCount_other: "{{count}} items",
+      callCount_one: "{{count}} call",
+      callCount_other: "{{count}} calls",
+      response: "Jev response",
+      viewPayload: "View details",
+      allow: "Allow",
+      deny: "Disable for this chat",
+      consentFailed: "Could not update Jev permission",
+      autoAllow: "Always allow in this chat",
+      autoAllowDescription: "Future content will be sent without asking.",
+      chatAutomatic: "Jev · Auto-allow",
+      chatDisabled: "Jev · Disabled",
+      thisChatOnly: "This chat only",
+      resumeAsking: "Ask again",
+      used: "Used Jev",
+      waiting: "Waiting for your approval",
+    },
     notice: {
       connected: "Connected to {{service}}",
       testFailed: "Couldn’t connect to {{service}}",

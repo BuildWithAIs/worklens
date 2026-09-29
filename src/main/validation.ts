@@ -22,6 +22,13 @@ export const selection = z
   })
   .strict();
 export const schemas = {
+  jevConsentReply: z
+    .object({ conversationId: id, requestId: z.uuid(), allow: z.boolean(), autoAllow: z.boolean().optional() })
+    .strict()
+    .refine((input) => !input.autoAllow || input.allow, "Automatic approval requires Allow"),
+  jevConsentReset: z
+    .object({ conversationId: id, blocked: z.boolean() })
+    .strict(),
   chatImage: z
     .object({
       conversationId: id,

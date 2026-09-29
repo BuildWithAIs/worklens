@@ -148,9 +148,11 @@ test("GitHub settings, encrypted restart, Pi download and file card", async () =
     expect(artifact).toBeTruthy();
     expect(await readFile(artifact!.path, "utf8")).toBe("fixture file bytes");
     await page.reload();
+    await page.getByRole("button", { name: /^File actions:/ }).first().click();
     await expect(
-      page.getByRole("button", { name: "Save as", exact: true }),
+      page.getByRole("menuitem", { name: "Save as", exact: true }),
     ).toBeVisible();
+    await page.keyboard.press("Escape");
     await page.screenshot({
       path: "test-results/github-download.png",
       fullPage: true,

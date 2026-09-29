@@ -19,7 +19,7 @@ for (const theme of ["light", "dark"]) {
       const nav = page.locator(".settings-navigation");
       await nav.getByRole("button", { name: language === "en" ? "Connectors" : "连接器", exact: true }).click();
       const content = page.locator('[data-section="connections"]');
-      await expect(content.getByRole("listitem")).toHaveCount(4);
+      await expect(content.getByRole("listitem")).toHaveCount(5);
       const search = content.getByRole("textbox", { name: language === "en" ? "Search connectors" : "搜索连接器" });
       await search.fill("  GITHUB  ");
       await expect(content.getByRole("listitem")).toHaveCount(1);
@@ -38,7 +38,7 @@ for (const theme of ["light", "dark"]) {
       await expect(content.getByRole("listitem")).toHaveCount(0);
       await expect(content.locator(".settings-empty")).toBeVisible();
       await filter.selectOption("available");
-      await expect(content.getByRole("listitem")).toHaveCount(4);
+      await expect(content.getByRole("listitem")).toHaveCount(5);
       await expect(content.getByRole("heading", { name: language === "en" ? "Available" : "可连接", exact: true })).toBeVisible();
       await filter.selectOption("all");
 

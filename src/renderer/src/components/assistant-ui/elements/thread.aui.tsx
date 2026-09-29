@@ -96,6 +96,7 @@ export type ThreadComponents = {
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
     | undefined;
   LiveStatus?: ComponentType;
+  MessageFooter?: ComponentType;
   ProcessGroup?: ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>;
   ReasoningGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -106,6 +107,7 @@ export type ThreadProps = {
   components?: ThreadComponents | undefined;
   autoFocus?: boolean | undefined;
   footer?: ReactNode;
+  afterMessages?: ReactNode;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -154,12 +156,18 @@ export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
   footer,
+  afterMessages,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
   return (
     <ThreadComponentsContext.Provider value={components}>
-      <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} footer={footer} />
+      <ThreadRoot
+        isEmpty={isEmpty}
+        autoFocus={autoFocus}
+        footer={footer}
+        afterMessages={afterMessages}
+      />
     </ThreadComponentsContext.Provider>
   );
 };
@@ -168,7 +176,8 @@ const ThreadRoot: FC<{
   isEmpty: boolean;
   autoFocus: boolean;
   footer?: ReactNode;
-}> = ({ isEmpty, autoFocus, footer }) => {
+  afterMessages?: ReactNode;
+}> = ({ isEmpty, autoFocus, footer, afterMessages }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
   return (
@@ -206,6 +215,7 @@ const ThreadRoot: FC<{
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
+            {afterMessages}
           </div>
 
           <ThreadPrimitive.ViewportFooter
@@ -421,6 +431,7 @@ const AssistantMessage: FC = () => {
     ReasoningGroup,
     ProcessGroup,
     LiveStatus,
+    MessageFooter,
   } = useContext(ThreadComponentsContext);
 
   const toolOnly = useAuiState(
@@ -436,6 +447,7 @@ const AssistantMessage: FC = () => {
   const hasActivity = useAuiState(
     (s) => s.message.metadata.custom.hasActivity === true,
   );
+  const isLast = useAuiState((s) => s.message.isLast);
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`;
@@ -445,6 +457,7 @@ const AssistantMessage: FC = () => {
       data-slot="aui_assistant-message-root"
       data-role="assistant"
       data-has-activity={hasActivity}
+      data-message-last={isLast}
       className={cn("relative", !toolOnly && !liveSegment && "-mb-7.5 pb-7.5")}
     >
       <div
@@ -537,6 +550,15 @@ const AssistantMessage: FC = () => {
         {LiveStatus && <LiveStatus />}
         <MessageError />
       </div>
+
+      {!toolOnly && !liveSegment && MessageFooter && (
+        <div
+          data-slot="aui_assistant-message-attribution"
+          className="pt-0.5 empty:hidden"
+        >
+          <MessageFooter />
+        </div>
+      )}
 
       {!toolOnly && !liveSegment && (
         <div

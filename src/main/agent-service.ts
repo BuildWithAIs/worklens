@@ -35,6 +35,7 @@ import { resources, toolNames } from "./resources";
 import { worklensTools } from "./tools";
 import { ConnectorRegistry } from "./connectors/registry";
 import type { SkillsService } from "./skills";
+import type { JevConsent } from "./connectors/jev/consent";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import { validateChatImages, validateImageContent } from "./chat-images";
@@ -138,6 +139,7 @@ export class AgentService {
       join(dirname(paths.sessions), "artifacts"),
       paths.sessions,
     ),
+    private jevConsent?: JevConsent,
   ) {}
   async initialize() {
     await Promise.all([
@@ -320,7 +322,12 @@ export class AgentService {
         Object.assign(message, runtime.toolUpdates.get(message.toolId));
     }
     return redactStrings(
-      { ...this.summary(id, runtime), messages, usage: runtime.usage },
+      {
+        ...this.summary(id, runtime),
+        messages,
+        usage: runtime.usage,
+        jevConsent: this.jevConsent?.view(id),
+      },
       this.redact,
     );
   }
@@ -348,6 +355,23 @@ export class AgentService {
       if (runtime.timer) clearTimeout(runtime.timer);
       dispatch();
     } else if (!runtime.timer) runtime.timer = setTimeout(dispatch, 40);
+  }
+  connectorConsentChanged(id: string) {
+    const runtime = this.sessions.get(id);
+    if (runtime) this.publish(id, runtime, "connector_consent", true);
+  }
+  async replyJevConsent(id: string, requestId: string, allow: boolean, autoAllow = false) {
+    const runtime = await this.get(id);
+    if (!this.jevConsent || !runtime.active)
+      throw new Error("Jev approval is no longer pending.");
+    await this.jevConsent.reply(id, requestId, allow, autoAllow);
+    return this.view(id, runtime);
+  }
+  async resetJevConsent(id: string, blocked: boolean) {
+    const runtime = await this.get(id);
+    if (!this.jevConsent) throw new Error("Jev is unavailable.");
+    await this.jevConsent.reset(id, blocked);
+    return this.view(id, runtime);
   }
   async list(): Promise<Conversation[]> {
     const found = await SessionManager.listAll(this.paths.sessions);
@@ -934,6 +958,7 @@ export class AgentService {
       runtime.session?.dispose();
       runtime.session = undefined;
       await this.artifacts.removeSession(id);
+      await this.jevConsent?.forget(id);
       // Accepted prompts can outlive an unflushed Pi session. Delete their image
       // payloads together with the conversation, including markers from this run.
       for (const name of await readdir(join(this.paths.userData, "runs"))) {

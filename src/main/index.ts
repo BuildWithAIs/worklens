@@ -95,6 +95,10 @@ else {
         paths.userData,
         safeStorage,
         artifacts,
+        {
+          redact: (text) => credentials.redact(text),
+          onConsentChange: (id) => agents?.connectorConsentChanged(id),
+        },
       );
       await connectors.registry.initialize();
       const redact = (text: string) =>
@@ -118,6 +122,7 @@ else {
         connectors.registry,
         skills,
         artifacts,
+        connectors.jevConsent,
       );
       await agents.initialize();
       providers = new ProviderService(runtime, credentials, (event) =>
@@ -140,6 +145,20 @@ else {
               value = await connectors.requests(method, input);
             } else
               switch (method) {
+                case "jevConsentReply":
+                  value = await agents!.replyJevConsent(
+                    input.conversationId,
+                    input.requestId,
+                    input.allow,
+                    input.autoAllow,
+                  );
+                  break;
+                case "jevConsentReset":
+                  value = await agents!.resetJevConsent(
+                    input.conversationId,
+                    input.blocked,
+                  );
+                  break;
                 case "artifact": {
                   const artifact = await artifacts.get(input.id);
                   if (input.action === "show")

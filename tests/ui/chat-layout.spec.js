@@ -394,7 +394,7 @@ test("compact tool activity, history actions and fluid message width", async ({
   await response.hover();
   await response.getByRole("button", { name: "Copy", exact: true }).click();
   await expect(page.locator('[data-slot="toast-title"]')).toContainText(
-    "Could not copy",
+    "Couldn’t copy. Select the text and copy it manually.",
   );
   await expect(
     response.getByRole("button", { name: "Copied", exact: true }),

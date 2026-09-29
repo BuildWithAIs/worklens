@@ -136,6 +136,47 @@ const zhCN = {
     colorPalette: "色调",
   },
   connectors: {
+    jev: {
+      tagline: "TypeSafe",
+      description:
+        "使用 Jev 分类、排序和检查。由你决定发送哪些内容，费用计入 TypeSafe 账户。",
+      apiURL: "API 地址",
+      enterYourApiKey: "输入 TypeSafe API key",
+      getApiKey: "获取 TypeSafe API key",
+      jevSettingsSaved: "Jev 设置已保存",
+      jevDisconnected: "已断开 Jev 连接",
+      approvalTitles: {
+        rank: "允许 Jev 对这些内容排序？",
+        classify: "允许 Jev 分类这些内容？",
+        check: "允许 Jev 检查这些内容？",
+      },
+      approvalDescription_one:
+        "将 {{count}} 条内容及判断标准发送至 {{recipient}}。",
+      approvalDescription_other:
+        "将 {{count}} 条内容及判断标准发送至 {{recipient}}。",
+      purposes: {
+        rank: "排序",
+        classify: "分类",
+        check: "检查",
+      },
+      resultCount_one: "{{count}} 条内容",
+      resultCount_other: "{{count}} 条内容",
+      callCount_one: "{{count}} 次调用",
+      callCount_other: "{{count}} 次调用",
+      response: "Jev 返回内容",
+      viewPayload: "查看发送内容",
+      allow: "允许",
+      deny: "本会话不用",
+      consentFailed: "无法更新 Jev 使用权限",
+      autoAllow: "本会话自动允许",
+      autoAllowDescription: "后续内容将直接发送，不再询问。",
+      chatAutomatic: "Jev · 自动允许",
+      chatDisabled: "Jev · 本会话停用",
+      thisChatOnly: "仅限当前会话",
+      resumeAsking: "恢复询问",
+      used: "本轮使用了 Jev",
+      waiting: "等待你确认",
+    },
     notice: {
       connected: "已连接 {{service}}",
       testFailed: "无法连接 {{service}}",

@@ -5,6 +5,7 @@ const names: Record<string, string> = {
   jira: "Jira",
   confluence: "Confluence",
   tavily: "Tavily",
+  jev: "Jev",
 };
 export function connectorName(service: string) {
   return names[service] ?? service;

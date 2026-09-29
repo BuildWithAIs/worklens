@@ -1,4 +1,4 @@
-import { copyFile, readFile } from "node:fs/promises";
+import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { ConnectorRegistry } from "../../src/main/connectors/registry";
@@ -79,3 +79,30 @@ test("composition reuses existing credentials and tools while configuration revi
     "Confluence",
   );
 });
+
+test.each([
+  JSON.stringify({ version: 1, disabled: ["confluence"] }),
+  "invalid legacy settings",
+])(
+  "connected services ignore obsolete global access settings: %s",
+  async (legacy) => {
+    const f = await setup();
+    const path = join(f.root, "confluence.json");
+    await copyFile(join(f.root, "connection.json"), path);
+    const original = await readFile(path, "utf8");
+    await writeFile(join(f.root, "connector-enabled.json"), legacy);
+    const connectors = createConnectors(f.root, f.encryption, f.artifacts);
+    await connectors.registry.initialize();
+    expect(connectors.bootstrap().confluence.configured).toBe(true);
+    expect(connectors.registry.names()).toContain("confluence_read");
+    expect(
+      connectors.registry
+        .tools("session", () => "run")
+        .map((tool) => tool.name),
+    ).toContain("confluence_read");
+    expect(connectors.registry.instructions()).not.toBe("");
+    expect(await readFile(path, "utf8")).toBe(original);
+    await connectors.requests("confluenceRemove", undefined);
+    expect(connectors.registry.names()).not.toContain("confluence_read");
+  },
+);

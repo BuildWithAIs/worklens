@@ -149,9 +149,11 @@ test("Jira settings, encrypted restart, Pi download and file card", async () => 
       "fixture attachment bytes",
     );
     await page.reload();
+    await page.getByRole("button", { name: /^File actions:/ }).first().click();
     await expect(
-      page.getByRole("button", { name: "Save as", exact: true }),
+      page.getByRole("menuitem", { name: "Save as", exact: true }),
     ).toBeVisible();
+    await page.keyboard.press("Escape");
     await page.screenshot({
       path: "test-results/jira-download.png",
       fullPage: true,

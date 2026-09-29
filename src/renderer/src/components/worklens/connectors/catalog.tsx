@@ -1,25 +1,33 @@
 import type { ComponentType } from "react";
 import type { useAppTranslation } from "@/i18n";
-import type { Bootstrap } from "../../../../../shared/contracts";
+import type {
+  Bootstrap,
+  ConnectorId,
+  ConversationView,
+} from "../../../../../shared/contracts";
 import github from "@lobehub/icons-static-svg/icons/github.svg?url";
 import tavily from "@lobehub/icons-static-svg/icons/tavily.svg?url";
+import typesafe from "@/assets/brands/typesafe.svg?url";
 import jira from "@/assets/brands/jira.svg?url";
 import confluence from "@/assets/brands/confluence.svg?url";
 import { JiraSettings } from "./jira/JiraSettings";
 import { ConfluenceSettings } from "./confluence/ConfluenceSettings";
 import { GitHubSettings } from "./github/GitHubSettings";
 import { TavilySettings } from "./tavily/TavilySettings";
+import { JevSettings } from "./jev/JevSettings";
 
 export interface ConnectorSettingsProps {
   data: Bootstrap;
   refresh: () => Promise<unknown>;
   onSuccess: (message: string) => void;
   onClose: () => void;
+  conversation?: ConversationView;
+  onConsentChange?: (view: ConversationView) => void;
 }
 interface CatalogEntry {
-  id: string;
+  id: ConnectorId;
   name: string;
-  icon: string;
+  icon?: string;
   keywords?: string;
   /** Muted text after the name for services whose name does not explain them. */
   tagline?: (t: ReturnType<typeof useAppTranslation>["t"]) => string;
@@ -70,6 +78,17 @@ export const connectorCatalog: readonly CatalogEntry[] = [
     connection: (data) => data.tavily,
     Settings: ({ data, ...props }) => (
       <TavilySettings connection={data.tavily} {...props} />
+    ),
+  },
+  {
+    id: "jev",
+    name: "Jev",
+    icon: typesafe,
+    keywords: "TypeSafe classify rank score 分类 排序 评分",
+    tagline: (t) => t("connectors.jev.tagline"),
+    connection: (data) => data.jev,
+    Settings: ({ data, ...props }) => (
+      <JevSettings connection={data.jev} {...props} />
     ),
   },
 ];

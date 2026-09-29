@@ -15,12 +15,20 @@ import { githubConnector } from "./github";
 import { TavilyConnections } from "./tavily/connection";
 import { TavilyService } from "./tavily/service";
 import { tavilyConnector } from "./tavily";
+import { JevConnections } from "./jev/connection";
+import { JevConsent } from "./jev/consent";
+import { JevService } from "./jev/service";
+import { jevConnector } from "./jev";
 
 /** Explicit composition; no dynamic loading, dependency container or plugin system. */
 export function createConnectors(
   userData: string,
   encryption: Encryption,
   artifacts: LocalArtifacts,
+  options: {
+    redact?: (text: string) => string;
+    onConsentChange?: (sessionId: string) => void;
+  } = {},
 ) {
   const connections = new ConfluenceConnections(
     join(userData, "confluence.json"),
@@ -42,19 +50,40 @@ export function createConnectors(
     encryption,
   );
   const tavily = new TavilyService(tavilyConnections, artifacts);
+  const jevConnections = new JevConnections(
+    join(userData, "jev.json"),
+    encryption,
+  );
+  const jevConsent = new JevConsent(
+    join(userData, "jev-consent.json"),
+    options.onConsentChange,
+    () => jevConnections.consentRevision(),
+  );
+  const jev: JevService = new JevService(
+    jevConnections,
+    jevConsent,
+    (text): string => {
+      const clean = registry.redact(text);
+      return options.redact ? options.redact(clean) : clean;
+    },
+  );
+  const registry: ConnectorRegistry = new ConnectorRegistry([
+    confluenceConnector(confluence),
+    jiraConnector(jira),
+    githubConnector(github),
+    tavilyConnector(tavily),
+    jevConnector(jev),
+  ]);
   return {
-    registry: new ConnectorRegistry([
-      confluenceConnector(confluence),
-      jiraConnector(jira),
-      githubConnector(github),
-      tavilyConnector(tavily),
-    ]),
-    requests: connectorRequests(confluence, jira, github, tavily),
+    registry,
+    jevConsent,
+    requests: connectorRequests(confluence, jira, github, tavily, jev),
     bootstrap: () => ({
       confluence: connections.info(),
       jira: jiraConnections.info(),
       github: githubConnections.info(),
       tavily: tavilyConnections.info(),
+      jev: jevConnections.info(),
     }),
   };
 }

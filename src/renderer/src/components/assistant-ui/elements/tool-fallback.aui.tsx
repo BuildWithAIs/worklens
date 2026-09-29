@@ -2,7 +2,9 @@
 
 import { useShimmer } from "@/hooks/use-shimmer";
 
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import hljs from "highlight.js/lib/core";
+import json from "highlight.js/lib/languages/json";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -34,6 +36,7 @@ import { useAppTranslation } from "@/i18n";
 import type { TFunction } from "i18next";
 
 const ANIMATION_DURATION = 200;
+hljs.registerLanguage("json", json);
 
 const pressable = "active:scale-[0.98]";
 
@@ -49,26 +52,60 @@ function formatToolArgs(value: string) {
   }
 }
 
-function ToolCodeBlock({
+export function ToolCodeBlock({
   text,
   className,
+  variant = "default",
+  language,
 }: {
   text: string;
-  className: string;
+  className?: string;
+  variant?: "default" | "embedded";
+  language?: "json";
 }) {
   const { t } = useAppTranslation();
   const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const highlighted = useMemo(() => {
+    if (!language) return undefined;
+    try {
+      return hljs.highlight(text, { language }).value;
+    } catch {
+      return undefined;
+    }
+  }, [text, language]);
+  const copyButton = (
+    <div
+      className={cn(
+        "absolute right-2 text-muted-foreground transition-opacity [@media(hover:hover)]:opacity-0 group-hover/tool-code:opacity-100 group-focus-within/tool-code:opacity-100",
+        variant === "embedded" ? "top-0" : "top-2",
+      )}
+    >
+      <TooltipIconButton
+        tooltip={isCopied ? t("common.copied") : t("common.copy")}
+        onClick={() => copyToClipboard(text)}
+        disabled={!text}
+      >
+        {isCopied ? <CheckIcon /> : <CopyIcon />}
+      </TooltipIconButton>
+    </div>
+  );
+  if (variant === "embedded") {
+    return (
+      <div className="aui-tool-code-embedded group/tool-code relative flex min-h-0 min-w-0 flex-col">
+        {copyButton}
+        <pre className={className} tabIndex={0}>
+          {highlighted === undefined ? (
+            <code>{text}</code>
+          ) : (
+            <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+          )}
+        </pre>
+      </div>
+    );
+  }
   return (
     <div className="group/tool-code relative min-w-0 w-full max-w-[720px] overflow-hidden rounded-lg border border-border/50 bg-muted/40">
-      <div className="absolute top-2 right-2 text-muted-foreground transition-opacity [@media(hover:hover)]:opacity-0 group-hover/tool-code:opacity-100 group-focus-within/tool-code:opacity-100">
-        <TooltipIconButton
-          tooltip={isCopied ? t("common.copied") : t("common.copy")}
-          onClick={() => copyToClipboard(text)}
-          disabled={!text}
-        >
-          {isCopied ? <CheckIcon /> : <CopyIcon />}
-        </TooltipIconButton>
-      </div>
+      {copyButton}
       <pre
         className={cn(
           toolCodeClassName,
