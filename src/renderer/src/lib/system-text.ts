@@ -14,6 +14,8 @@ const messages = [
   ["CHAT_IMAGE_DIMENSIONS", "CHAT_IMAGE_DIMENSIONS", "attachments.dimensions"],
   ["CHAT_IMAGE_MISSING", "CHAT_IMAGE_MISSING", "attachments.previewFailed"],
   ["CHAT_IMAGE_REQUEST", "CHAT_IMAGE_REQUEST", "attachments.requestLimit"],
+  ["CHAT_IMAGE_TIMEOUT", "CHAT_IMAGE_TIMEOUT", "attachments.processingTimeout"],
+  ["CHAT_IMAGE_BUSY", "CHAT_IMAGE_BUSY", "attachments.processingBusy"],
   [
     "CHAT_IMAGE_PROCESSING",
     "CHAT_IMAGE_PROCESSING",

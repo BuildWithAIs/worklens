@@ -2,8 +2,9 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { mockServer, fixtureModel } from "../mock-server";
+import sharp from "sharp";
+import { imageDimensions } from "../../src/shared/image-dimensions";
 
 test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through validated IPC", async () => {
   const root = await mkdtemp(join(tmpdir(), "worklens-image-e2e-"));
@@ -14,7 +15,8 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
     if (/(?:API_KEY|ACCESS_TOKEN|AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN)$/.test(key))
       delete env[key];
   const app = await electron.launch({
-    args: ["."],
+    executablePath: process.env.WORKLENS_PACKAGED_EXE,
+    args: process.env.WORKLENS_PACKAGED_EXE ? [] : ["."],
     cwd: resolve("."),
     env: env as Record<string, string>,
   });
@@ -22,8 +24,11 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
     const page = await app.firstWindow();
     await expect(page.locator(".sidebar")).toBeVisible();
     await app.evaluate(
-      async (_electron, { uri, url, model }) => {
+      async ({ app }, { url, model }) => {
         const vm = process.getBuiltinModule("node:vm");
+        const uri = process
+          .getBuiltinModule("node:url")
+          .pathToFileURL(app.getAppPath() + "/dist/main/index.js").href;
         const imported = await vm.runInThisContext(
           `import(${JSON.stringify(uri)})`,
           {
@@ -40,7 +45,6 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
         await imported.agents.modelRuntime.refresh({ allowNetwork: false });
       },
       {
-        uri: pathToFileURL(resolve("dist/main/index.js")).href,
         url: server.url,
         model: fixtureModel,
       },
@@ -125,6 +129,16 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
         source: canvas.toDataURL(mimeType),
       }));
     });
+    const phonePhoto = await sharp({
+      create: { width: 5712, height: 4284, channels: 3, background: "#8466aa" },
+    })
+      .jpeg()
+      .withMetadata({ orientation: 6 })
+      .toBuffer();
+    images.push({
+      mimeType: "image/jpeg",
+      source: `data:image/jpeg;base64,${phonePhoto.toString("base64")}`,
+    });
     const chooser = page.waitForEvent("filechooser");
     await page.locator(".aui-composer-add-attachment").click();
     await (
@@ -136,24 +150,29 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
         buffer: Buffer.from(image.source.split(",")[1], "base64"),
       })),
     );
-    await expect(page.locator(".aui-composer-attachments img")).toHaveCount(3);
+    await expect(page.locator(".aui-composer-attachments img")).toHaveCount(4);
     await expect(page.locator(".aui-composer-send")).toBeEnabled();
     await page.locator(".aui-composer-send").click();
     await expect.poll(() => server.requests.length).toBe(1);
     const user = server.requests[0].messages.find(
       (message: any) => message.role === "user",
     );
+    const received = user.content
+      .filter((part: any) => part.type === "image_url")
+      .map((part: any) => part.image_url.url);
+    expect(received.slice(0, 3)).toEqual(
+      images.slice(0, 3).map((image) => image.source),
+    );
     expect(
-      user.content
-        .filter((part: any) => part.type === "image_url")
-        .map((part: any) => part.image_url.url),
-    ).toEqual(images.map((image) => image.source));
+      imageDimensions(Buffer.from(received[3].split(",")[1], "base64")),
+    ).toEqual({ width: 1500, height: 2000 });
     await expect(page.locator(".aui-composer-cancel")).toHaveCount(0);
     await page.reload();
     const previews = page.locator(".aui-user-message-attachments-end img");
-    await expect(previews).toHaveCount(3);
-    for (const preview of await previews.all())
-      await expect(preview).toHaveJSProperty("naturalWidth", 256);
+    await expect(previews).toHaveCount(4);
+    for (let index = 0; index < 3; index++)
+      await expect(previews.nth(index)).toHaveJSProperty("naturalWidth", 256);
+    await expect(previews.nth(3)).toHaveJSProperty("naturalHeight", 256);
     const tiles = page.locator(
       '.aui-user-message-attachments-end .aui-attachment-root [role="button"]',
     );
@@ -196,7 +215,9 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
     );
     await expect(previewDialog).toBeFocused();
     await page.keyboard.press("ArrowRight");
-    await expect(previewDialog.getByRole("status")).toHaveText("2 / 3");
+    await expect(previewDialog.getByRole("status")).toHaveText(
+      `2 / ${images.length}`,
+    );
     await previewDialog.locator("img").click({ button: "right" });
     await page
       .getByRole("menuitem", { name: "Copy image", exact: true })
@@ -292,7 +313,7 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
     await page.locator('[data-slot="aui_user-message-root"]').first().hover();
     await page.getByRole("button", { name: "Edit", exact: true }).click();
     const editor = page.locator(".aui-edit-composer-root");
-    await expect(editor.locator("img")).toHaveCount(3);
+    await expect(editor.locator("img")).toHaveCount(images.length);
     await editor
       .locator(".aui-edit-composer-input")
       .fill("Revised image description");
@@ -304,7 +325,7 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
     await expect(page.locator(".aui-composer-input")).toHaveValue(
       "Unsent follow-up",
     );
-    await expect(previews).toHaveCount(2);
+    await expect(previews).toHaveCount(images.length - 1);
     await expect.poll(() => server.requests.length).toBe(2);
     const revisedUser = server.requests[1].messages.filter(
       (message: any) => message.role === "user",
@@ -314,18 +335,18 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
       revisedUser[0].content
         .filter((part: any) => part.type === "image_url")
         .map((part: any) => part.image_url.url),
-    ).toEqual([images[0].source, images[2].source]);
+    ).toEqual([received[0], received[2], received[3]]);
     await page
       .getByRole("button", { name: "Previous version", exact: true })
       .click();
-    await expect(previews).toHaveCount(3);
+    await expect(previews).toHaveCount(images.length);
     await page.reload();
     await expect(page.locator(".aui-branch-picker-state")).toHaveText("1 / 2");
-    await expect(previews).toHaveCount(3);
+    await expect(previews).toHaveCount(images.length);
     await page
       .getByRole("button", { name: "Next version", exact: true })
       .click();
-    await expect(previews).toHaveCount(2);
+    await expect(previews).toHaveCount(images.length - 1);
     await expect(
       page.getByText("Revised image description", { exact: true }),
     ).toBeVisible();

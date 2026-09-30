@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import * as storage from "../src/main/storage";
 import { AgentService } from "../src/main/agent-service";
+import { CHAT_IMAGE_LIMITS } from "../src/shared/chat-images";
 import { mockServer, fixtureModel } from "./mock-server";
 import type {
   ConversationView,
@@ -174,6 +175,109 @@ test("edits branch before the original prompt, preserve images and continuations
   expect(
     selected.messages.filter((m) => m.role === "user").map((m) => m.text),
   ).toEqual(["Revised prompt", "Revised follow-up"]);
+});
+
+test("image preflight uses the edited branch while ordinary sends and retained history still enforce the request limit", async () => {
+  const f = await setup();
+  const first = await f.send("Original image question", undefined, [image]);
+  const original = first.messages.find((message) => message.role === "user")!;
+  await f.service.shutdown();
+  const info = (await SessionManager.listAll(f.paths.sessions)).find(
+    (session) => session.id === first.id,
+  )!;
+  const manager = SessionManager.open(info.path, f.paths.sessions);
+  // Seed a valid journal at the compatible provider's 100-image boundary,
+  // keeping each individual prompt within the attachment count limit.
+  for (let remaining = 99; remaining > 0; ) {
+    const count = Math.min(remaining, CHAT_IMAGE_LIMITS.count);
+    manager.appendMessage({
+      role: "user",
+      content: [
+        { type: "text", text: "Later synthetic image question" },
+        ...Array.from({ length: count }, () => ({
+          type: "image" as const,
+          ...image,
+        })),
+      ],
+      timestamp: Date.now(),
+    });
+    remaining -= count;
+  }
+  const restarted = await f.create();
+  const current = await restarted.open(first.id);
+  expect(
+    current.messages.reduce(
+      (count, message) => count + (message.images?.length ?? 0),
+      0,
+    ),
+  ).toBe(100);
+  await expect(
+    restarted.send({
+      conversationId: first.id,
+      requestId: randomUUID(),
+      text: "One image too many",
+      images: [image],
+      selection: f.selection,
+    }),
+  ).rejects.toThrow("CHAT_IMAGE_REQUEST");
+  const last = current.messages
+    .filter((message) => message.role === "user")
+    .at(-1)!;
+  await expect(
+    restarted.editMessage({
+      conversationId: first.id,
+      requestId: randomUUID(),
+      messageId: last.entryId!,
+      expectedBranchId: current.branchId!,
+      text: "Too many images with the retained prefix",
+      images: Array.from({ length: 4 }, () => image),
+      selection: f.selection,
+    }),
+  ).rejects.toThrow("CHAT_IMAGE_REQUEST");
+  const unchanged = await restarted.open(first.id);
+  expect(unchanged.branchId).toBe(current.branchId);
+  expect(unchanged.messages).toEqual(current.messages);
+  expect(f.server.requests).toHaveLength(1);
+  const edited = await f.settle(
+    await restarted.editMessage({
+      conversationId: first.id,
+      requestId: randomUUID(),
+      messageId: original.entryId!,
+      expectedBranchId: current.branchId!,
+      text: "Revised image question",
+      images: [{ existingIndex: original.images![0].index }],
+      selection: f.selection,
+    }),
+    restarted,
+  );
+  expect(edited.phase).toBe("completed");
+  const revision = edited.messages.find((message) => message.role === "user")!;
+  expect(revision.images).toHaveLength(1);
+  expect(f.server.requests).toHaveLength(2);
+  const request = f.server.requests.at(-1);
+  expect(JSON.stringify(request.messages)).not.toContain(
+    "Later synthetic image question",
+  );
+  expect(
+    request.messages.flatMap((message: any) =>
+      Array.isArray(message.content)
+        ? message.content.filter((part: any) => part.type === "image_url")
+        : [],
+    ),
+  ).toHaveLength(1);
+  const restored = await f.select(
+    edited,
+    revision.entryId!,
+    original.entryId!,
+    restarted,
+  );
+  expect(restored.messages).toEqual(
+    current.messages.map((message) =>
+      message.entryId === original.entryId
+        ? { ...message, versions: [original.entryId, revision.entryId] }
+        : message,
+    ),
+  );
 });
 
 test("review: an edit validates once and leaves the old branch untouched if draft persistence fails", async () => {
