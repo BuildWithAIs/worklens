@@ -6,6 +6,116 @@ import { mockServer, fixtureModel } from "../mock-server";
 import sharp from "sharp";
 import { imageDimensions } from "../../src/shared/image-dimensions";
 
+test("text-only prompts succeed before and after image history in Electron", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worklens-text-image-e2e-"));
+  const server = await mockServer();
+  const env: NodeJS.ProcessEnv = { ...process.env, WORKLENS_TEST_ROOT: root };
+  delete env.ELECTRON_RUN_AS_NODE;
+  for (const key of Object.keys(env))
+    if (/(?:API_KEY|ACCESS_TOKEN|AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN)$/.test(key))
+      delete env[key];
+  const app = await electron.launch({
+    executablePath: process.env.WORKLENS_PACKAGED_EXE,
+    args: process.env.WORKLENS_PACKAGED_EXE ? [] : ["."],
+    cwd: resolve("."),
+    env: env as Record<string, string>,
+  });
+  try {
+    const page = await app.firstWindow();
+    await expect(page.locator(".sidebar")).toBeVisible();
+    await app.evaluate(
+      async ({ app }, { url, model }) => {
+        const vm = process.getBuiltinModule("node:vm");
+        const uri = process
+          .getBuiltinModule("node:url")
+          .pathToFileURL(app.getAppPath() + "/dist/main/index.js").href;
+        const imported = await vm.runInThisContext(
+          `import(${JSON.stringify(uri)})`,
+          {
+            importModuleDynamically:
+              vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+          },
+        );
+        imported.agents.modelRuntime.registerProvider("worklens-test", {
+          api: "openai-completions",
+          baseUrl: url,
+          apiKey: "fixture",
+          models: [{ ...model, input: ["text", "image"] }],
+        });
+        await imported.agents.modelRuntime.refresh({ allowNetwork: false });
+      },
+      { url: server.url, model: fixtureModel },
+    );
+    await page.evaluate(() =>
+      window.worklens.invoke("settings", {
+        riskAccepted: true,
+        defaults: {
+          provider: "worklens-test",
+          model: "worklens-test",
+          thinking: "off",
+        },
+      }),
+    );
+    await page.reload();
+    const sendText = async (text: string, count: number) => {
+      await page.locator(".aui-composer-input").fill(text);
+      await page.locator(".aui-composer-send").click();
+      await expect.poll(() => server.requests.length).toBe(count);
+      await expect
+        .poll(() =>
+          page.evaluate(async () => {
+            const state = await window.worklens.invoke("bootstrap", undefined);
+            return (
+              await window.worklens.invoke("open", {
+                id: state.conversations[0].id,
+              })
+            ).phase;
+          }),
+        )
+        .toBe("completed");
+      await expect(page.locator(".aui-message-error-root")).toHaveCount(0);
+    };
+    await sendText("A synthetic text question", 1);
+    const picture = await sharp({
+      create: { width: 32, height: 48, channels: 3, background: "#326789" },
+    })
+      .png()
+      .toBuffer();
+    const chooser = page.waitForEvent("filechooser");
+    await page.locator(".aui-composer-add-attachment").click();
+    await (
+      await chooser
+    ).setFiles(
+      Array.from({ length: 5 }, (_, index) => ({
+        name: `sample-${index + 1}.png`,
+        mimeType: "image/png",
+        buffer: picture,
+      })),
+    );
+    await expect(page.locator(".aui-composer-attachments img")).toHaveCount(5);
+    await sendText("Inspect the synthetic pictures", 2);
+    await sendText("Summarize the pictures", 3);
+    const users = server.requests[2].messages.filter(
+      (message: any) => message.role === "user",
+    );
+    expect(users).toHaveLength(3);
+    expect(
+      users.flatMap((message: any) =>
+        Array.isArray(message.content)
+          ? message.content.filter((part: any) => part.type === "image_url")
+          : [],
+      ),
+    ).toHaveLength(5);
+    expect(users.at(-1).content).toEqual([
+      { type: "text", text: "Summarize the pictures" },
+    ]);
+  } finally {
+    await app.close();
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through validated IPC", async () => {
   const root = await mkdtemp(join(tmpdir(), "worklens-image-e2e-"));
   const server = await mockServer();
