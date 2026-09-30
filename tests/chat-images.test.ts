@@ -14,6 +14,7 @@ import { CHAT_IMAGE_LIMITS, type ChatImage } from "../src/shared/chat-images";
 import type { ChatEvent, Selection } from "../src/shared/contracts";
 import { fixtureModel, mockServer } from "./mock-server";
 import { syntheticPng } from "./image-fixtures";
+import * as imageProcessing from "../src/main/image-processing";
 
 const image: ChatImage = {
   name: "screenshot.png",
@@ -190,6 +191,63 @@ test("Pi receives multiple image blocks; events stay small; images survive resta
     (await readdir(paths.sessions)).filter((file) => file.endsWith(".jsonl")),
   ).toHaveLength(0);
 });
+
+test.each([false, true])(
+  "model image preparation fails before accepting a prompt (existing conversation: %s)",
+  async (existing) => {
+    const { service, selection, server, paths, events } = await setup();
+    let conversationId: string | undefined;
+    if (existing) {
+      const first = await service.send({
+        requestId: randomUUID(),
+        text: "First",
+        images: [image],
+        selection,
+      });
+      conversationId = first.id;
+      await expect
+        .poll(() => events.some((event) => event.type === "run_end"))
+        .toBe(true);
+      await expect
+        .poll(() =>
+          readdir(join(paths.userData, "runs")).then((files) => files.length),
+        )
+        .toBe(0);
+    }
+    const before = conversationId
+      ? await service.open(conversationId)
+      : undefined;
+    events.length = 0;
+    const process = vi
+      .spyOn(imageProcessing, "processChatImage")
+      .mockRejectedValue(new Error("CHAT_IMAGE_PROCESSING"));
+    await expect(
+      service.send({
+        conversationId,
+        requestId: randomUUID(),
+        text: "Keep my draft",
+        images: existing ? [] : [image],
+        selection,
+      }),
+    ).rejects.toThrow("CHAT_IMAGE_PROCESSING");
+    expect(process).toHaveBeenCalledWith(
+      expect.objectContaining({ data: image.data }),
+      expect.objectContaining({ maxWidth: 2000 }),
+      undefined,
+    );
+    expect(server.requests).toHaveLength(existing ? 1 : 0);
+    expect(events).toHaveLength(0);
+    expect(await readdir(join(paths.userData, "runs"))).toHaveLength(0);
+    if (conversationId)
+      expect(await service.open(conversationId)).toEqual(before);
+    else
+      expect(
+        (await readdir(paths.sessions)).filter((name) =>
+          name.endsWith(".jsonl"),
+        ),
+      ).toHaveLength(0);
+  },
+);
 
 test("text-only models reject images before accepting or creating a recovery record", async () => {
   const { service, selection, server, paths } = await setup(false);

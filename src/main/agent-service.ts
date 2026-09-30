@@ -5,6 +5,7 @@ import {
 } from "./conversation-files";
 import {
   createAgentSession,
+  convertToLlm,
   SessionManager,
   type AgentSession,
   type AgentSessionEvent,
@@ -44,7 +45,10 @@ import {
   thumbnailOptions,
   originalOptions,
 } from "./image-processing";
-import { installImageRequestGuard } from "./image-requests";
+import {
+  installImageRequestGuard,
+  prepareImageContext,
+} from "./image-requests";
 import type { ChatImage } from "../shared/chat-images";
 import type {
   ChatEvent,
@@ -710,7 +714,6 @@ export class AgentService {
           !this.assertSelection(input.selection).input.includes("image")
         )
           throw new Error("CHAT_IMAGE_MODEL");
-        await validateImageContent(images);
         let runtime: Runtime;
         if (input.conversationId)
           runtime = await this.get(input.conversationId);
@@ -728,6 +731,29 @@ export class AgentService {
           };
         }
         if (runtime.active) throw new Error("当前会话正在运行，请先停止");
+        // Exercise the model image budget before accepting/persisting the prompt.
+        // IPC rejection lets the composer retain its text and attachments. The
+        // stream guard still handles later tool images/context changes.
+        await prepareImageContext(
+          {
+            messages: [
+              ...convertToLlm(
+                runtime.session?.messages ??
+                  runtime.manager.buildSessionContext().messages,
+              ),
+              {
+                role: "user",
+                content: images.map((image) => ({
+                  type: "image" as const,
+                  data: image.data,
+                  mimeType: image.mimeType,
+                })),
+                timestamp: Date.now(),
+              },
+            ],
+          },
+          this.assertSelection(input.selection),
+        );
         const skillCommand = /^\/skill:([^\s]+)(?:\s+([\s\S]*))?$/.exec(
           input.text,
         );

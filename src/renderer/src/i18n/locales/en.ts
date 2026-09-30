@@ -579,7 +579,8 @@ const en = {
     unsupportedModel: "Choose a model that supports images.",
     historyUnsupported: "This model can’t view images in this conversation.",
     format: "Choose a PNG, JPEG, or WebP image.",
-    invalid: "Couldn’t read this image. Choose another file.",
+    invalid:
+      "Couldn’t read this image. Try exporting it as PNG or JPEG.",
     size: "Each image must be 5 MiB or smaller.",
     limits:
       "You can add up to 8 images per message. Remove an image and try again.",
@@ -588,7 +589,12 @@ const en = {
     dimensions: "Choose an image with a resolution of 25 megapixels or less.",
     requestLimit:
       "This conversation exceeds the model provider’s limits. Start a new chat with fewer images or less text.",
-    processingFailed: "Couldn’t process this image. Try a smaller file.",
+    processingFailed:
+      "Couldn’t process this image. Restart WorkLens and try again.",
+    processingTimeout:
+      "Image processing timed out. Try again or choose a smaller image.",
+    processingBusy:
+      "Other images are still processing. Try again later.",
     previewFailed: "Couldn’t load the image preview.",
     retryPreview: "Reload image preview",
     recoveryCount: "Images: {{count}}",
