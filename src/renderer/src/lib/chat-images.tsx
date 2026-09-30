@@ -11,6 +11,8 @@ import {
   imageMimeType,
   base64ImageBytes,
   type ChatImage,
+  type EditedChatImage,
+  chatImageSource,
 } from "../../../shared/chat-images";
 import { imageDimensions } from "../../../shared/image-dimensions";
 import type { ImageLease, ImageVariant } from "./image-loader";
@@ -124,8 +126,12 @@ export function createImageAdapter(
 }
 
 export function submittedImages(message: AppendMessage): ChatImage[] {
-  const images = (message.attachments ?? []).flatMap((attachment) =>
-    attachment.content.flatMap((part) => {
+  return imageAttachments(message.attachments ?? []);
+}
+
+function imageAttachments(attachments: readonly Attachment[]): ChatImage[] {
+  const images = attachments.flatMap((attachment) =>
+    (attachment.content ?? []).flatMap((part) => {
       if (part.type !== "image") return [];
       const match =
         /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+=*)$/.exec(
@@ -149,6 +155,26 @@ export function submittedImages(message: AppendMessage): ChatImage[] {
   )
     throw new Error("CHAT_IMAGE_TOTAL");
   return images;
+}
+
+export function editedImages(
+  attachments: readonly Attachment[],
+  conversationId: string,
+  original: import("../../../shared/contracts").MessageView,
+): EditedChatImage[] {
+  return attachments.flatMap((attachment): EditedChatImage[] => {
+    const source = attachment.content?.find(
+      (part) => part.type === "image",
+    )?.image;
+    if (source?.startsWith("worklens-image:")) {
+      const image = original.images?.find(
+        (image) => chatImageSource(conversationId, image) === source,
+      );
+      if (!image) throw new Error("CHAT_IMAGE_MISSING");
+      return [{ existingIndex: image.index }];
+    }
+    return imageAttachments([attachment]);
+  });
 }
 
 export function useStoredImage(

@@ -1,3 +1,4 @@
+import type { RecoveredEdit } from "./components/worklens/message-editing-context";
 import {
   shortTitle,
   titleCharacters,
@@ -102,6 +103,7 @@ export function App() {
   const [selection, setSelection] = useState<Selection>();
   const [text, setText] = useState("");
   const [draftImages, setDraftImages] = useState<ChatImage[]>([]);
+  const [recoveredEdit, setRecoveredEdit] = useState<RecoveredEdit>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<{
     type: "error" | "success";
@@ -406,6 +408,23 @@ export function App() {
       });
     }
   }
+  async function mutateMessage(action: () => Promise<ConversationView>) {
+    if (!current || busy || submissionLocks.current.has(current))
+      throw new Error("当前会话正在运行，请先停止");
+    const id = current;
+    submissionLocks.current.add(id);
+    setPendingSends((previous) => new Set(previous).add(id));
+    try {
+      acceptView(await action());
+    } finally {
+      submissionLocks.current.delete(id);
+      setPendingSends((previous) => {
+        const next = new Set(previous);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
   async function changeModel(next: Selection) {
     setSelection(next);
     void settings({ defaults: next }).catch(() => {});
@@ -704,7 +723,40 @@ export function App() {
               setText("");
               setDraftImages([]);
             }}
+            recoveredEdit={
+              recoveredEdit?.conversationId === current
+                ? recoveredEdit
+                : undefined
+            }
+            onRecoveredEditLoaded={() => setRecoveredEdit(undefined)}
             onSend={sendText}
+            onEdit={async (messageId, text, images) => {
+              if (!current || !selection || !currentView?.branchId)
+                throw new Error("MESSAGE_VERSION_MISSING");
+              const input = {
+                conversationId: current,
+                messageId,
+                expectedBranchId: currentView.branchId,
+                requestId: crypto.randomUUID(),
+                text,
+                images,
+                selection,
+              };
+              await mutateMessage(() => api.invoke("editMessage", input));
+            }}
+            onSelectVersion={async (messageId, targetId) => {
+              if (!current || !currentView?.branchId)
+                throw new Error("MESSAGE_VERSION_MISSING");
+              const input = {
+                conversationId: current,
+                messageId,
+                targetId,
+                expectedBranchId: currentView.branchId,
+              };
+              await mutateMessage(() =>
+                api.invoke("selectMessageVersion", input),
+              );
+            }}
             onCancel={cancelCurrent}
             modelMenu={{
               data,
@@ -780,16 +832,38 @@ export function App() {
                           (c) => c.id === item.conversationId,
                         )
                       ) {
-                        const view = await api.invoke("open", {
+                        let view = await api.invoke("open", {
                           id: item.conversationId,
                         });
                         if (visit !== navigation.current) return;
+                        if (item.editOf) {
+                          if (!view.branchId)
+                            throw new Error("MESSAGE_VERSION_MISSING");
+                          view = await api.invoke("recoverMessageEdit", {
+                            runId: item.runId,
+                            expectedBranchId: view.branchId,
+                          });
+                          if (visit !== navigation.current) return;
+                          setRecoveredEdit({
+                            conversationId: view.id,
+                            messageId: item.editOf,
+                            text: item.text,
+                            images,
+                            runId: item.runId,
+                          });
+                        }
                         navigation.current++;
                         acceptView(view);
                         setCurrent(view.id);
-                      } else newConversation();
-                      setText(item.text);
-                      setDraftImages(images);
+                      } else {
+                        if (item.editOf)
+                          throw new Error("MESSAGE_VERSION_MISSING");
+                        newConversation();
+                      }
+                      if (!item.editOf) {
+                        setText(item.text);
+                        setDraftImages(images);
+                      }
                       setSelection(item.selection);
                       setPage("chat");
                       setShowRecovery(false);

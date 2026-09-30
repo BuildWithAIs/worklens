@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { connectorSchemas } from "./connectors/ipc";
 import { chatImagesSchema } from "./chat-images";
+import { CHAT_IMAGE_LIMITS } from "../shared/chat-images";
 const id = z
   .string()
   .min(1)
@@ -43,6 +44,7 @@ export const schemas = {
     })
     .strict(),
   recoveryImages: z.object({ runId: id }).strict(),
+  recoverMessageEdit: z.object({ runId: id, expectedBranchId: id }).strict(),
   conversationFile: z
     .object({
       id,
@@ -152,6 +154,38 @@ export const schemas = {
       (value) => value.text.trim().length > 0 || !!value.images?.length,
       "消息不能为空",
     ),
+  editMessage: z
+    .object({
+      conversationId: id,
+      requestId: id,
+      messageId: id,
+      expectedBranchId: id,
+      text: z.string().max(100000),
+      images: z
+        .array(
+          z.union([
+            z
+              .object({ existingIndex: z.number().int().min(0).max(1000) })
+              .strict(),
+            chatImagesSchema.element,
+          ]),
+        )
+        .max(CHAT_IMAGE_LIMITS.count),
+      selection,
+    })
+    .strict()
+    .refine(
+      (value) => value.text.trim().length > 0 || value.images.length > 0,
+      "消息不能为空",
+    ),
+  selectMessageVersion: z
+    .object({
+      conversationId: id,
+      messageId: id,
+      targetId: id,
+      expectedBranchId: id,
+    })
+    .strict(),
   cancel: z.object({ conversationId: id, runId: id }).strict(),
   model: z.object({ id, selection }).strict(),
   external: z.object({ url: z.string().url().max(10000) }).strict(),

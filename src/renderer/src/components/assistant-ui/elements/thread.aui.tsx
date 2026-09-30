@@ -1,3 +1,4 @@
+import { MessageEditingContext } from "@/components/worklens/message-editing-context";
 import { Hint } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { languageTag, useAppTranslation } from "@/i18n";
@@ -88,6 +89,7 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
  * `ToolFallback`.
  */
 export type ThreadComponents = {
+  EditComposer?: ComponentType;
   AssistantMessage?: ComponentType | undefined;
   Welcome?: ComponentType | undefined;
   ComposerInput?: ComponentType<{ autoFocus: boolean }>;
@@ -236,12 +238,17 @@ const ThreadRoot: FC<{
 };
 
 const ThreadMessage: FC = () => {
-  const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
-    useContext(ThreadComponentsContext);
+  const {
+    AssistantMessage: AssistantMessageComponent = AssistantMessage,
+    EditComposer: EditComposerComponent = EditComposer,
+  } = useContext(ThreadComponentsContext);
   const role = useAuiState((s) => s.message.role);
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
 
-  if (isEditing) return <EditComposer />;
+  const id = useAuiState((s) => s.message.id);
+  const editing = useContext(MessageEditingContext);
+  if (isEditing || editing?.editingId === id)
+    return <EditComposerComponent key={editing?.recovered?.runId ?? id} />;
   if (role === "user") return <UserMessage />;
   return <AssistantMessageComponent />;
 };
@@ -577,9 +584,20 @@ const MessageCopy: FC = () => {
   const aui = useAui();
   const { t } = useAppTranslation();
   const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const hasText = useAuiState(
+    (s) =>
+      s.message.content.some(
+        (part) => part.type === "text" && part.text.trim(),
+      ) ||
+      (s.message.role === "assistant" &&
+        s.message.status?.type === "incomplete" &&
+        s.message.status.reason === "error" &&
+        s.message.status.error !== undefined),
+  );
+  if (!hasText) return null;
   return (
     <TooltipIconButton
-      tooltip={isCopied ? t("common.copied") : t("common.copy")}
+      tooltip={isCopied ? t("common.copied") : t("thread.copyText")}
       onClick={() => {
         const message = aui.message();
         const text = message.getCopyText();
@@ -738,40 +756,48 @@ const UserMessageText: FC<TextMessagePartProps> = ({ text }) => {
 };
 
 const UserMessage: FC = () => {
+  const messageId = useAuiState((s) => s.message.id);
+  const hasContent = useAuiState((s) =>
+    s.message.content.some(
+      (part) => part.type !== "text" || part.text.trim().length > 0,
+    ),
+  );
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
+      data-message-id={messageId}
       className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
     >
       <UserMessageAttachments />
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer bg-(--user-message-bg) text-(--user-message-text) rounded-[18px] px-4 py-3 text-[14px] leading-[1.7] font-normal wrap-break-word empty:hidden">
-          <MessagePrimitive.Parts
-            components={{
-              Text: UserMessageText,
-              File: UserFilePart,
-              Image: UserImagePart,
-            }}
-          />
-        </div>
-        <div className="aui-user-action-bar-wrapper mt-1 flex h-7 justify-end peer-empty:hidden">
+        {hasContent && (
+          <div className="aui-user-message-content bg-(--user-message-bg) text-(--user-message-text) rounded-[18px] px-4 py-3 text-[14px] leading-[1.7] font-normal wrap-break-word empty:hidden">
+            <MessagePrimitive.Parts
+              components={{
+                Text: UserMessageText,
+                File: UserFilePart,
+                Image: UserImagePart,
+              }}
+            />
+          </div>
+        )}
+        <div className="aui-user-action-bar-wrapper mt-1 flex h-7 justify-end">
           <UserActionBar />
         </div>
       </div>
 
-      <BranchPicker
-        data-slot="aui_user-branch-picker"
-        className="col-span-full col-start-1 row-start-3 -me-1 justify-end"
-      />
+      <MessageVersionPicker />
     </MessagePrimitive.Root>
   );
 };
 
 const UserActionBar: FC = () => {
   const { t } = useAppTranslation();
-  const aui = useAui();
+  const editing = useContext(MessageEditingContext);
+  const id = useAuiState((s) => s.message.id);
+  const original = editing?.messages.find((message) => message.entryId === id);
   return (
     <ActionBarPrimitive.Root className="aui-user-action-bar-root flex items-center justify-end gap-1 text-muted-foreground">
       <MessageTime className="mr-2" />
@@ -779,16 +805,53 @@ const UserActionBar: FC = () => {
       <TooltipIconButton
         tooltip={t("thread.edit")}
         className="aui-user-action-edit"
-        onClick={() => {
-          aui.thread().composer().setText(aui.message().getCopyText());
-          document
-            .querySelector<HTMLTextAreaElement>(".aui-composer-input")
-            ?.focus();
-        }}
+        disabled={!original || editing?.busy || !!editing?.editingId}
+        onClick={() => editing?.begin(id)}
       >
         <PencilIcon />
       </TooltipIconButton>
     </ActionBarPrimitive.Root>
+  );
+};
+
+const MessageVersionPicker: FC = () => {
+  const editing = useContext(MessageEditingContext);
+  const { t } = useAppTranslation();
+  const id = useAuiState((s) => s.message.id);
+  const message = editing?.messages.find((message) => message.entryId === id);
+  const versions = message?.versions;
+  if (!versions || versions.length < 2) return null;
+  const index = versions.indexOf(id);
+  const disabled = editing?.busy || !!editing?.editingId;
+  return (
+    <div
+      data-slot="aui_user-branch-picker"
+      className="aui-branch-picker-root text-muted-foreground col-span-full col-start-1 row-start-3 -me-1 inline-flex items-center justify-end text-xs"
+    >
+      <TooltipIconButton
+        tooltip={t("thread.previousVersion")}
+        disabled={disabled || index <= 0}
+        onClick={() => void editing?.select(id, versions[index - 1])}
+      >
+        <ChevronLeftIcon />
+      </TooltipIconButton>
+      <span
+        className="aui-branch-picker-state font-medium"
+        aria-label={t("thread.versionPosition", {
+          current: index + 1,
+          total: versions.length,
+        })}
+      >
+        {index + 1} / {versions.length}
+      </span>
+      <TooltipIconButton
+        tooltip={t("thread.nextVersion")}
+        disabled={disabled || index >= versions.length - 1}
+        onClick={() => void editing?.select(id, versions[index + 1])}
+      >
+        <ChevronRightIcon />
+      </TooltipIconButton>
+    </div>
   );
 };
 

@@ -62,6 +62,7 @@ async function setup(
           for (const provider of result.providers)
             for (const model of provider.models) model.image = options.vision;
         }
+        if (name === "settings") result.theme = options.theme;
         return result;
       }) as typeof window.worklens.invoke;
     },
@@ -129,6 +130,12 @@ for (const theme of ["light", "dark"]) {
     await expect(
       page.locator(".aui-user-message-attachments-end img"),
     ).toHaveCount(6);
+    await expect(page.locator(".aui-user-message-content")).toHaveCount(0);
+    await expect(
+      page
+        .locator(".aui-user-action-bar-root")
+        .getByRole("button", { name: /Copy|复制/ }),
+    ).toHaveCount(0);
     const sent = await page.evaluate(() => (window as any).imageSends);
     expect(sent).toHaveLength(1);
     expect(sent[0].text).toBe("");
@@ -137,6 +144,101 @@ for (const theme of ["light", "dark"]) {
     );
     expect(sent[0].images[0].data).toBe(png);
     expect(await page.evaluate(() => (window as any).imageReads)).toBe(6);
+  });
+
+  test(`image-only history has no empty bubble and preserves message layout (${theme})`, async ({
+    page,
+  }, info) => {
+    await setup(page, { fail: false, vision: true, language: "en", theme });
+    await page.evaluate(() => {
+      const invoke = window.worklens.invoke;
+      window.worklens.invoke = (async (name: string, input: any) => {
+        const result = await (invoke as any)(name, input);
+        if (name === "send") {
+          result.messages = [
+            "",
+            " \n\t",
+            "Describe the colors",
+            "A text-only message",
+          ].map((text, index) => ({
+            id: `layout-message-${index}`,
+            role: "user",
+            text,
+            createdAt: "2026-09-01T01:00:00Z",
+            images:
+              index < 3
+                ? [
+                    {
+                      name: "color-sample.png",
+                      mimeType: "image/png",
+                      messageId: `layout-entry-${index}`,
+                      index: 0,
+                    },
+                  ]
+                : [],
+          }));
+        }
+        return result;
+      }) as typeof window.worklens.invoke;
+    });
+    await choose(page, [file("color-sample.png")]);
+    await page.locator(".aui-composer-send").click();
+    const messages = page.locator('[data-slot="aui_user-message-root"]');
+    await expect(messages).toHaveCount(4);
+    for (const width of [1280, 720]) {
+      await page.setViewportSize({ width, height: 1100 });
+      for (const index of [0, 1]) {
+        const message = messages.nth(index);
+        await message.scrollIntoViewIfNeeded();
+        await expect(message.locator(".aui-user-message-content")).toHaveCount(
+          0,
+        );
+        const preview = message.locator('.aui-attachment-root [role="button"]');
+        await preview.focus();
+        await expect(message.locator(".aui-user-action-bar-wrapper")).toHaveCSS(
+          "opacity",
+          "1",
+        );
+        await expect(message.locator("time")).toBeVisible();
+        const imageBox = await preview.boundingBox();
+        const actionBox = await message
+          .locator(".aui-user-action-bar-wrapper")
+          .boundingBox();
+        expect(
+          actionBox!.y - imageBox!.y - imageBox!.height,
+        ).toBeLessThanOrEqual(12);
+        expect(
+          Math.abs(
+            imageBox!.x + imageBox!.width - actionBox!.x - actionBox!.width,
+          ),
+        ).toBeLessThanOrEqual(1);
+      }
+      await expect(
+        messages.nth(2).locator(".aui-user-message-content"),
+      ).toHaveText("Describe the colors");
+      await expect(
+        messages.nth(3).locator(".aui-user-message-content"),
+      ).toHaveText("A text-only message");
+    }
+    const preview = messages
+      .first()
+      .locator('.aui-attachment-root [role="button"]');
+    await preview.focus();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator(".aui-attachment-preview-dialog-content img"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Previous image", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Next image", exact: true }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(preview).toBeFocused();
+    await page.screenshot({
+      path: info.outputPath(`message-layout-${theme}.png`),
+    });
   });
 }
 
@@ -161,6 +263,260 @@ test("IPC rejection restores text and images; a retry sends once more", async ({
     page.locator(".aui-user-message-attachments-end img"),
   ).toHaveCount(1);
   expect(await page.evaluate(() => (window as any).imageSends.length)).toBe(2);
+});
+
+for (const theme of ["light", "dark"]) {
+  test(`sent images copy individually from menus and previews, while message copy stays text (${theme})`, async ({
+    page,
+  }, info) => {
+    await setup(page, {
+      fail: false,
+      vision: true,
+      language: theme === "dark" ? "zh" : "en",
+      theme,
+    });
+    const originals = await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 640;
+      canvas.height = 360;
+      const context = canvas.getContext("2d")!;
+      return ["image/png", "image/jpeg", "image/webp"].map((mime, index) => {
+        context.fillStyle = ["#336699", "#aa6633", "#669933"][index];
+        context.fillRect(0, 0, 640, 360);
+        return canvas.toDataURL(mime);
+      });
+    });
+    await page.evaluate((originals) => {
+      const invoke = window.worklens.invoke;
+      (window as any).originalReads = [];
+      (window as any).clipboardImages = [];
+      (window as any).clipboardText = [];
+      navigator.clipboard.writeText = async (text) => {
+        (window as any).clipboardText.push(text);
+      };
+      navigator.clipboard.write = async (items) => {
+        const blob = await items[0].getType("image/png");
+        const bitmap = await createImageBitmap(blob);
+        (window as any).clipboardImages.push({
+          width: bitmap.width,
+          height: bitmap.height,
+          types: items[0].types,
+        });
+        bitmap.close();
+      };
+      window.worklens.invoke = (async (name: string, input: any) => {
+        if (name === "chatImage" && input.variant === "original") {
+          (window as any).originalReads.push(input.index);
+          return originals[input.index];
+        }
+        return (invoke as any)(name, input);
+      }) as typeof window.worklens.invoke;
+    }, originals);
+    await choose(page, [
+      file("sample-a.png"),
+      file("sample-b.png"),
+      file("sample-c.png"),
+    ]);
+    await page.locator(".aui-composer-input").fill("Compare these colors");
+    await page.locator(".aui-composer-send").click();
+    const tiles = page.locator(
+      '.aui-user-message-attachments-end .aui-attachment-root [role="button"]',
+    );
+    const copyLabel = theme === "dark" ? "复制图片" : "Copy image";
+    const copiedLabel = theme === "dark" ? "图片已复制" : "Image copied";
+    for (let index = 0; index < 3; index++) {
+      await tiles.nth(index).click({ button: "right" });
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      if (index === 0) {
+        const menu = page.getByRole("menu");
+        const metrics = await menu.evaluate((node) => {
+          const row = node.querySelector('[role="menuitem"]')!;
+          const style = getComputedStyle(row);
+          return {
+            width: node.getBoundingClientRect().width,
+            rowHeight: row.getBoundingClientRect().height,
+            fontSize: style.fontSize,
+            lineHeight: style.lineHeight,
+            padding: style.padding,
+            iconSize: row.querySelector("svg")!.getBoundingClientRect().width,
+          };
+        });
+        expect(metrics.width).toBeLessThan(180);
+        expect(metrics).toMatchObject({
+          rowHeight: 28,
+          fontSize: "14px",
+          lineHeight: "20px",
+          padding: "4px 8px",
+          iconSize: 16,
+        });
+        await page.screenshot({
+          path: info.outputPath(`image-copy-menu-${theme}.png`),
+        });
+      }
+      await expect(
+        page.locator(".aui-attachment-preview-dialog-content"),
+      ).toHaveCount(0);
+      await page
+        .getByRole("menuitem", { name: copyLabel, exact: true })
+        .click();
+      await expect
+        .poll(() => page.evaluate(() => (window as any).clipboardImages.length))
+        .toBe(index + 1);
+      await expect(
+        page.getByRole("menuitem", { name: copiedLabel, exact: true }),
+      ).toBeVisible();
+      await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
+      await page.keyboard.press("Escape");
+    }
+    expect(await page.evaluate(() => (window as any).originalReads)).toEqual([
+      0, 1, 2,
+    ]);
+    expect(await page.evaluate(() => (window as any).clipboardImages)).toEqual(
+      Array.from({ length: 3 }, () => ({
+        width: 640,
+        height: 360,
+        types: ["image/png"],
+      })),
+    );
+    await page.setViewportSize({ width: 720, height: 620 });
+    await tiles.first().focus();
+    await page.keyboard.press("Shift+F10");
+    await expect(
+      page.getByRole("menuitem", { name: copyLabel, exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(tiles.first()).toBeFocused();
+    await page.keyboard.press("Enter");
+    const dialog = page.locator(".aui-attachment-preview-dialog-content");
+    await expect(dialog).toBeInViewport({ ratio: 1 });
+    await expect(
+      dialog.getByRole("button", { name: copyLabel, exact: true }),
+    ).toHaveCount(0);
+    await expect(dialog.getByRole("status")).toHaveText("1 / 3");
+    const previous = dialog.getByRole("button", {
+      name: theme === "dark" ? "上一张" : "Previous image",
+      exact: true,
+    });
+    const next = dialog.getByRole("button", {
+      name: theme === "dark" ? "下一张" : "Next image",
+      exact: true,
+    });
+    await expect(previous).toBeDisabled();
+    await page.keyboard.press("ArrowRight");
+    await expect(dialog.getByRole("status")).toHaveText("2 / 3");
+    await expect(dialog.locator("img")).toHaveJSProperty("naturalWidth", 640);
+    await next.click();
+    await expect(dialog.getByRole("status")).toHaveText("3 / 3");
+    await expect(next).toBeDisabled();
+    await page.keyboard.press("ArrowRight");
+    await expect(dialog.getByRole("status")).toHaveText("3 / 3");
+    await page.keyboard.press("ArrowLeft");
+    await expect(dialog.getByRole("status")).toHaveText("2 / 3");
+    await dialog.locator("img").click({ button: "right" });
+    await page.getByRole("menuitem", { name: copyLabel, exact: true }).click();
+    await expect(
+      page.getByRole("menuitem", { name: copiedLabel, exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
+    const download = page.waitForEvent("download");
+    await page
+      .getByRole("menuitem", {
+        name: theme === "dark" ? "下载图片" : "Download image",
+        exact: true,
+      })
+      .click();
+    expect((await download).suggestedFilename()).toBe("sample-b.png");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await page.screenshot({
+      path: info.outputPath(`image-copy-preview-${theme}.png`),
+    });
+    await page.setViewportSize({ width: 390, height: 620 });
+    await expect(dialog.locator("img")).toBeInViewport({ ratio: 1 });
+    await expect(previous).toBeInViewport({ ratio: 1 });
+    await expect(next).toBeInViewport({ ratio: 1 });
+    await page.screenshot({
+      path: info.outputPath(`image-preview-narrow-${theme}.png`),
+    });
+    await page.keyboard.press("Escape");
+    await expect(tiles.first()).toBeFocused();
+    await tiles.last().click();
+    await expect(dialog.getByRole("status")).toHaveText("3 / 3");
+    await expect(next).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(tiles.last()).toBeFocused();
+    const message = page.locator('[data-slot="aui_user-message-root"]');
+    await message.hover();
+    await message
+      .getByRole("button", {
+        name: theme === "dark" ? "复制文字" : "Copy text",
+        exact: true,
+      })
+      .click();
+    expect(await page.evaluate(() => (window as any).clipboardText)).toEqual([
+      "Compare these colors",
+    ]);
+    expect(
+      await page.evaluate(() => (window as any).clipboardImages.length),
+    ).toBe(4);
+  });
+}
+
+test("image copy reports failures, allows retry and cancels a pending history read on navigation", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => {
+    (window as any).imageWrites = 0;
+    (window as any).rejectImageCopy = true;
+    navigator.clipboard.write = async () => {
+      if ((window as any).rejectImageCopy)
+        throw new DOMException("Denied", "NotAllowedError");
+      (window as any).imageWrites++;
+    };
+  });
+  await choose(page, [file("sample.png")]);
+  await page.locator(".aui-composer-send").click();
+  const tile = page.locator(
+    '.aui-user-message-attachments-end .aui-attachment-root [role="button"]',
+  );
+  await tile.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Copy image", exact: true }).click();
+  await expect(
+    page.getByText("Couldn’t copy the image. Try again."),
+  ).toBeVisible();
+  expect(await page.evaluate(() => (window as any).imageWrites)).toBe(0);
+  await page.evaluate(() => {
+    (window as any).rejectImageCopy = false;
+  });
+  await page.getByRole("menuitem", { name: "Copy image", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).imageWrites))
+    .toBe(1);
+  await page.evaluate(() => {
+    const invoke = window.worklens.invoke;
+    window.worklens.invoke = (async (name: string, input: any) => {
+      if (name === "chatImage" && input.variant === "original") {
+        await new Promise<void>((resolve) => {
+          (window as any).finishCopyRead = resolve;
+        });
+      }
+      return (invoke as any)(name, input);
+    }) as typeof window.worklens.invoke;
+  });
+  await page
+    .getByRole("menuitem", { name: "Image copied", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).finishCopyRead))
+    .toBe("function");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /New chat/ }).click();
+  await page.evaluate(() => (window as any).finishCopyRead());
+  await expect
+    .poll(() => page.evaluate(() => (window as any).imageReads))
+    .toBe(4);
+  expect(await page.evaluate(() => (window as any).imageWrites)).toBe(1);
 });
 
 for (const [language, theme] of [

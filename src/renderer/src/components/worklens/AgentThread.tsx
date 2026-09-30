@@ -1,3 +1,8 @@
+import { MessageEditor } from "./MessageEditor";
+import {
+  MessageEditingContext,
+  type RecoveredEdit,
+} from "./message-editing-context";
 import { messageOutputPaths } from "../../../../shared/file-references";
 import { JevUsage, successfulJevCalls } from "./connectors/jev/JevUsage";
 import { JevSessionAccess } from "./connectors/jev/JevSessionAccess";
@@ -9,10 +14,12 @@ import {
   ChatImageContext,
   createImageAdapter,
   submittedImages,
+  editedImages,
 } from "@/lib/chat-images";
 import {
   chatImageSource,
   type ChatImage,
+  type EditedChatImage,
 } from "../../../../shared/chat-images";
 import {
   toolProgress,
@@ -61,6 +68,8 @@ import type {
 } from "../../../../shared/contracts";
 
 type Props = {
+  recoveredEdit?: RecoveredEdit;
+  onRecoveredEditLoaded: () => void;
   onConsentChange?: (view: ConversationView) => void;
   view?: ConversationView;
   canSend: boolean;
@@ -72,6 +81,12 @@ type Props = {
   onDraftLoaded: () => void;
   onSend: (text: string, images: ChatImage[]) => Promise<void>;
   onCancel: () => Promise<void>;
+  onEdit: (
+    messageId: string,
+    text: string,
+    images: EditedChatImage[],
+  ) => Promise<void>;
+  onSelectVersion: (messageId: string, targetId: string) => Promise<void>;
   modelMenu?: ModelMenuProps;
 };
 
@@ -158,7 +173,7 @@ function convertMessage(
   return (message: MessageView, index: number): ThreadMessageLike => {
     if (message.role === "user") {
       return {
-        id: message.id,
+        id: message.entryId ?? message.id,
         role: "user",
         content: message.text,
         attachments: (message.images ?? []).map((image) => ({
@@ -430,6 +445,7 @@ function WorkLensToolGroup({
 }
 
 const threadComponents = {
+  EditComposer: MessageEditor,
   ComposerInput: SkillComposerInput,
   ToolFallback: WorkLensTool,
   ProcessGroup: WorkLensToolGroup,
@@ -438,6 +454,8 @@ const threadComponents = {
 };
 
 export function AgentThread({
+  recoveredEdit,
+  onRecoveredEditLoaded,
   onConsentChange,
   view,
   canSend,
@@ -448,10 +466,16 @@ export function AgentThread({
   onError,
   onDraftLoaded,
   onSend,
+  onEdit,
+  onSelectVersion,
   onCancel,
   modelMenu,
 }: Props) {
   const { t, language } = useAppTranslation();
+  const [editingId, setEditingId] = useState<string>();
+  useEffect(() => {
+    if (recoveredEdit) setEditingId(recoveredEdit.messageId);
+  }, [recoveredEdit]);
   const attachmentState = useRef<Parameters<typeof createImageAdapter>[0]>(
     () => ({ supported: false, disabled: false, attachments: [] }),
   );
@@ -743,7 +767,7 @@ export function AgentThread({
     // send resolves; keep typing and Stop available as soon as the run appears.
     isDisabled:
       submitting && !isRunning && view?.runId === submittedAfterRunId.current,
-    isSendDisabled: !canSend || attachmentsBlocked,
+    isSendDisabled: !canSend || attachmentsBlocked || !!editingId,
     adapters: { attachments: imageAdapter },
     onNew: async (message) => {
       submittedAfterRunId.current = view?.runId;
@@ -815,44 +839,89 @@ export function AgentThread({
   }, [draft, draftImages, onDraftLoaded, runtime]);
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <ChatImageContext.Provider
-        value={{
-          supported: supportsImages,
-          historical: !!view?.messages.some(
-            (message) => message.images?.length,
-          ),
-          load: loadImage,
-          reportError: onError,
-        }}
-      >
-        <ModelMenuContext.Provider value={modelMenu}>
-          <HtmlArtifactWorkspace
-            conversationId={view?.id}
-            outputPaths={messageOutputPaths(view?.messages ?? [])}
-            running={!!view && activePhases.has(view.phase)}
-          >
-            <div className="agent-thread">
-              <Thread
-                components={threadComponents}
-                footer={
-                  <JevSessionAccess
-                    conversation={view}
-                    onChange={onConsentChange}
-                  />
-                }
-                afterMessages={
-                  <JevConsentCards
-                    requests={view?.jevConsent?.pending ?? []}
-                    onChange={onConsentChange}
-                  />
-                }
-              />
-            </div>
-          </HtmlArtifactWorkspace>
-        </ModelMenuContext.Provider>
-      </ChatImageContext.Provider>
-    </AssistantRuntimeProvider>
+    <MessageEditingContext.Provider
+      value={{
+        editingId,
+        recovered: recoveredEdit,
+        busy: isRunning || submitting,
+        canSend,
+        messages: view?.messages ?? [],
+        begin: (id) => {
+          onRecoveredEditLoaded();
+          setEditingId(id);
+        },
+        cancel: () => {
+          onRecoveredEditLoaded();
+          setEditingId(undefined);
+          if (editingId)
+            requestAnimationFrame(() =>
+              document
+                .querySelector<HTMLButtonElement>(
+                  `[data-message-id="${CSS.escape(editingId)}"] .aui-user-action-edit`,
+                )
+                ?.focus(),
+            );
+        },
+        save: async (id, text, attachments) => {
+          const original = view?.messages.find(
+            (message) => (message.entryId ?? message.id) === id,
+          );
+          if (!view || !original?.entryId)
+            throw new Error("MESSAGE_VERSION_MISSING");
+          await onEdit(
+            original.entryId,
+            text,
+            editedImages(attachments, view.id, original),
+          );
+        },
+        select: async (id, targetId) => {
+          try {
+            await onSelectVersion(id, targetId);
+          } catch (error) {
+            onError(String(error));
+          }
+        },
+      }}
+    >
+      <AssistantRuntimeProvider runtime={runtime}>
+        <ChatImageContext.Provider
+          value={{
+            supported: supportsImages,
+            historical: !!view?.messages.some(
+              (message) => message.images?.length,
+            ),
+            load: loadImage,
+            reportError: onError,
+          }}
+        >
+          <ModelMenuContext.Provider value={modelMenu}>
+            <HtmlArtifactWorkspace
+              conversationId={view?.id}
+              outputPaths={messageOutputPaths(view?.messages ?? [])}
+              running={!!view && activePhases.has(view.phase)}
+            >
+              <div className="agent-thread">
+                <Thread
+                  components={threadComponents}
+                  footer={
+                    <JevSessionAccess
+                      conversation={view}
+                      onChange={onConsentChange}
+                    />
+                  }
+                  afterMessages={
+                    <JevConsentCards
+                      requests={view?.jevConsent?.pending ?? []}
+                      onChange={onConsentChange}
+                    />
+                  }
+                />
+              </div>
+            </HtmlArtifactWorkspace>
+          </ModelMenuContext.Provider>
+        </ChatImageContext.Provider>
+      </AssistantRuntimeProvider>
+    </MessageEditingContext.Provider>
   );
 }
 import { SkillComposerInput } from "./skills/SkillComposerInput";

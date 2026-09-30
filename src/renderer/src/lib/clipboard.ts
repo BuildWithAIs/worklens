@@ -1,4 +1,41 @@
-// Copy only in response to a user action; no native bridge or permission changes.
+// Copy only in response to a user action through the browser clipboard API.
+export async function copyImage(source: string, signal: AbortSignal) {
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined")
+    throw new Error("Image clipboard unavailable");
+  const image = new Image();
+  const canvas = document.createElement("canvas");
+  const abort = () => image.removeAttribute("src");
+  signal.throwIfAborted();
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    // Use the image loading path allowed by the renderer's CSP, not fetch.
+    // PNG is the portable clipboard format for all supported image types.
+    image.src = source;
+    await image.decode();
+    signal.throwIfAborted();
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Image conversion unavailable");
+    context.drawImage(image, 0, 0);
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (result) =>
+          result
+            ? resolve(result)
+            : reject(new Error("Image conversion failed")),
+        "image/png",
+      ),
+    );
+    signal.throwIfAborted();
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+    image.removeAttribute("src");
+    canvas.width = canvas.height = 0;
+  }
+}
+
 export async function copyText(text: string) {
   try {
     if (!navigator.clipboard) throw new Error("Clipboard unavailable");

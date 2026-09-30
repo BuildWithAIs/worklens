@@ -43,7 +43,7 @@ test("compact tool activity, history actions and fluid message width", async ({
       updatedAt: new Date().toISOString(),
       selection: { provider: "deepseek", model: "flash", thinking: "medium" },
       messages: [
-        { id: "u1", role: "user", text: Array.from({ length: 16 }, (_, i) => `Review project files, requirement ${i + 1}.`).join("\n") },
+        { id: "u1", entryId: "u1", role: "user", text: Array.from({ length: 16 }, (_, i) => `Review project files, requirement ${i + 1}.`).join("\n") },
         ...Array.from({ length: 5 }, (_, i) => [
           {
             id: `reason${i}`,
@@ -68,7 +68,7 @@ test("compact tool activity, history actions and fluid message width", async ({
           role: "assistant",
           text: "## Review complete\n\nThe project contains five documents. Each has been reviewed.\n\n| File | Result |\n| --- | --- |\n| README.md | Clear setup steps |\n| Guide.md | Needs examples |\n\n### Next steps\n\n- Add an example.\n- Update the guide.",
         },
-        { id: "u2", role: "user", text: "Check another file." },
+        { id: "u2", entryId: "u2", role: "user", text: "Check another file." },
         {
           id: "t6",
           role: "tool",
@@ -261,11 +261,12 @@ test("compact tool activity, history actions and fluid message width", async ({
   const user = page.locator('[data-slot="aui_user-message-root"]').last();
   const actions = user.locator(".aui-user-action-bar-wrapper");
   await expect(actions).toHaveCSS("opacity", "1");
-  await user.getByRole("button", { name: "Copy", exact: true }).click();
+  await user.getByRole("button", { name: "Copy text", exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Check another file.");
   await user.getByRole("button", { name: "Edit", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("Check another file.");
-  await page.getByRole("textbox", { name: "Message", exact: true }).fill("");
+  await expect(page.locator(".aui-edit-composer-input")).toHaveValue("Check another file.");
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("");
+  await page.locator(".aui-edit-composer-root").getByRole("button", { name: "Cancel", exact: true }).click();
   await page.locator(".chat-header").click();
   await expect(actions).toHaveCSS("opacity", "0");
   await page
@@ -285,7 +286,7 @@ test("compact tool activity, history actions and fluid message width", async ({
     .locator('[data-slot="aui_assistant-message-root"]')
     .filter({ hasText: "Review complete" });
   await response.hover();
-  await response.getByRole("button", { name: "Copy", exact: true }).click();
+  await response.getByRole("button", { name: "Copy text", exact: true }).click();
   await expect(
     response.getByRole("button", { name: "Copied", exact: true }),
   ).toBeVisible();
@@ -392,7 +393,7 @@ test("compact tool activity, history actions and fluid message width", async ({
     document.execCommand = () => false;
   });
   await response.hover();
-  await response.getByRole("button", { name: "Copy", exact: true }).click();
+  await response.getByRole("button", { name: "Copy text", exact: true }).click();
   await expect(page.locator('[data-slot="toast-title"]')).toContainText(
     "Couldn’t copy. Select the text and copy it manually.",
   );
