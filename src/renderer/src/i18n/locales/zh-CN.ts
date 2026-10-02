@@ -1,4 +1,35 @@
 const zhCN = {
+  mcp: {
+    title: "MCP 服务器",
+    codemode: "Code Mode",
+    codemodeExplanation:
+      "开启后，WorkLens 可以把多个操作组合起来完成任务，例如汇总招聘信息或整理费用记录。你只需描述想要的结果，无需编程。能完成哪些操作，取决于已连接的服务和可用工具。",
+    codemodeDescription: "让 Agent 使用 JavaScript 组合工具调用。",
+    description:
+      "使用 mcpServers JSON 对象添加 stdio 或 HTTP 服务器。关闭 Code Mode 后，Agent 通过工具搜索发现 MCP 工具。",
+    configuration: "MCP 配置",
+    credentialsHint:
+      "凭据加密保存。保留 <saved> 可继续使用已保存的值。更改服务器地址后需重新填写凭据。",
+    nextMessage: "保存的更改在各会话的下一条消息中生效。",
+    saved: "MCP 设置已保存",
+    saving: "保存中…",
+    enabled: "已启用",
+    disabled: "已停用",
+    test: "测试连接",
+    testing: "测试中…",
+    connected_one: "连接成功，可用工具 {{count}} 个。",
+    connected_other: "连接成功，可用工具 {{count}} 个。",
+    signIn: "登录",
+    signOut: "退出登录",
+    signedIn: "MCP 登录完成",
+    signedOut: "已退出 MCP 登录",
+    signingIn: "等待登录…",
+    openBrowser: "打开浏览器",
+    actionFailed: "无法更新 MCP 设置，请检查配置后重试。",
+    testFailed: "无法连接，请检查服务配置后重试。",
+    loginFailed: "无法登录，请检查服务的 OAuth 配置后重试。",
+    logoutFailed: "无法退出登录，请检查安全存储后重试。",
+  },
   chatLinks: { openFailed: "未能打开链接" },
   settingsFeedback: {
     connectionNeedsAttention: "连接需要检查",
@@ -450,6 +481,7 @@ const zhCN = {
     providers: "供应商",
     models: "模型",
     connectors: "连接器",
+    mcp: "MCP",
     skills: "技能",
     savedCredentialsNeedAttention: "已保存的凭据需要检查",
     backToApp: "返回应用",

@@ -4,6 +4,7 @@ import { toast } from "@/components/ui/toast";
 import { BackgroundEffect } from "./BackgroundEffect";
 import { BackgroundPreferences } from "./BackgroundPreferences";
 import { ConnectionsSettings } from "./connectors/ConnectionsSettings";
+import { McpSettings } from "./McpSettings";
 import { SkillsSettings } from "./skills/SkillsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
@@ -16,6 +17,7 @@ import {
   Info,
   Globe,
   LoaderCircle,
+  Network,
   Plus,
   RefreshCw,
   Settings2,
@@ -62,6 +64,7 @@ export type SettingsSection =
   | "providers"
   | "models"
   | "connections"
+  | "mcp"
   | "skills";
 type Props = {
   conversation?: ConversationView;
@@ -224,6 +227,7 @@ export function SettingsPage({
     { id: "providers" as const, label: t("settings.providers"), icon: Globe },
     { id: "models" as const, label: t("settings.models"), icon: Cpu },
     { id: "connections" as const, label: t("settings.connectors"), icon: Plug },
+    { id: "mcp" as const, label: t("settings.mcp"), icon: Network },
     { id: "skills" as const, label: t("settings.skills"), icon: Sparkles },
   ];
   function providerRows(items: ProviderInfo[], isConnected: boolean) {
@@ -619,6 +623,14 @@ export function SettingsPage({
                 data={data}
                 conversation={conversation}
                 onConsentChange={onConsentChange}
+                refresh={refresh}
+                onSuccess={onSuccess}
+              />
+            )}
+            {section === "mcp" && (
+              <McpSettings
+                data={data}
+                save={save}
                 refresh={refresh}
                 onSuccess={onSuccess}
               />

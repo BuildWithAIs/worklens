@@ -27,6 +27,12 @@ test("PRD 063, 17.5: packaged Windows ASAR runtime and PowerShell smoke", async 
   });
   try {
     const page = await application.firstWindow();
+    await application.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.show();
+      window.focus();
+    });
+    await page.bringToFront();
     await expect(page.locator(".sidebar")).toBeVisible();
     await expect(
       page.getByRole("dialog", { name: "Settings", exact: true }),
@@ -39,7 +45,16 @@ test("PRD 063, 17.5: packaged Windows ASAR runtime and PowerShell smoke", async 
     expect(
       bootstrap.providers.find((provider) => provider.id === "openai")
         ?.credentialError,
-    ).toContain("原文件尚未修改");
+    ).toBeTruthy();
+    expect(
+      await readFile(
+        join(
+          vault,
+          createHash("sha256").update("openai").digest("hex") + ".json",
+        ),
+        "utf8",
+      ),
+    ).toBe("{corrupt-packaged-vault");
     const runtimeInfo = await application.evaluate(
       async ({ app }, { url, model }) => {
         const vm = process.getBuiltinModule("node:vm");
@@ -112,12 +127,27 @@ test("PRD 063, 17.5: packaged Windows ASAR runtime and PowerShell smoke", async 
       )
       .toBe("completed");
     expect(await readFile(target, "utf8")).toContain("PACKAGED_OK");
-    await page.getByRole("button", { name: "返回对话" }).click();
+    const completed = await page.evaluate(
+      (id) => window.worklens.invoke("open", { id }),
+      conversation.id,
+    );
+    expect(
+      completed.messages.find((message) => message.toolName === "powershell"),
+    ).toMatchObject({
+      status: "success",
+      timeoutSeconds: 10,
+      exitCode: 0,
+    });
     await page.locator(".conversation-open").first().click();
-    await expect(page.locator(".tool-card.success")).toBeVisible();
-    await page.locator(".tool-card.success summary").click();
-    await expect(page.getByText("命令初始目录", { exact: true })).toBeVisible();
-    await expect(page.getByText("超时：10 秒 · 退出码：0")).toBeVisible();
+    await page
+      .locator('.worklens-activity-section [data-slot="reasoning-trigger"]')
+      .click();
+    const tool = page.locator('[data-slot="tool-fallback-trigger"]');
+    await expect(tool).toBeVisible();
+    await tool.click();
+    await expect(
+      page.locator('[data-slot="tool-fallback-content"]'),
+    ).toContainText("PACKAGED_OK");
     await page.screenshot({
       path: "test-results/packaged-windows.png",
       fullPage: true,

@@ -19,6 +19,7 @@ for (const theme of ["light", "dark"]) {
       const nav = page.locator(".settings-navigation");
       await nav.getByRole("button", { name: language === "en" ? "Connectors" : "连接器", exact: true }).click();
       const content = page.locator('[data-section="connections"]');
+      await expect(content.locator('[data-mcp-settings]')).toHaveCount(0);
       await expect(content.getByRole("listitem")).toHaveCount(5);
       const search = content.getByRole("textbox", { name: language === "en" ? "Search connectors" : "搜索连接器" });
       await search.fill("  GITHUB  ");
@@ -55,6 +56,16 @@ for (const theme of ["light", "dark"]) {
         await expect(content.getByText("GitHub", { exact: true })).toBeVisible();
         expect(await content.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
         await page.screenshot({ path: info.outputPath(`connections-${width}.png`) });
+        await nav.getByRole("button", { name: "MCP", exact: true }).click();
+        const mcp = page.locator('[data-section="mcp"]');
+        await expect(mcp).toBeVisible();
+        await expect(nav.getByRole("button", { name: "MCP", exact: true })).toHaveAttribute("aria-current", "page");
+        await expect(mcp.getByRole("switch", { name: "Code Mode", exact: true })).toBeChecked();
+        await expect(mcp.getByText(language === "en" ? /no programming is needed/ : /无需编程/)).toBeVisible();
+        await expect(mcp.getByText(language === "en" ? "Let the agent combine tool calls in JavaScript workflows." : "让 Agent 使用 JavaScript 组合工具调用。", { exact: true })).toBeVisible();
+        expect(await mcp.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`mcp-${width}.png`) });
+        await nav.getByRole("button", { name: language === "en" ? "Connectors" : "连接器", exact: true }).click();
       }
       await nav.getByRole("button", { name: language === "en" ? "General" : "通用", exact: true }).click();
       await expect(page.locator('[data-section="general"]')).toBeVisible();

@@ -20,11 +20,11 @@ export function imageRequestLimits(
   };
 }
 
-export async function prepareImageContext(
-  context: Context,
+export async function prepareImageContext<T extends Context>(
+  context: T,
   model: Model<Api>,
   signal?: AbortSignal,
-): Promise<Context> {
+): Promise<T> {
   if (!model.input.includes("image")) return context;
   const limits = imageRequestLimits(model);
   let count = 0;
@@ -41,7 +41,11 @@ export async function prepareImageContext(
   );
   const messages: Context["messages"] = [];
   for (const message of context.messages) {
-    if (message.role === "assistant" || typeof message.content === "string") {
+    if (
+      message.role === "system" ||
+      message.role === "assistant" ||
+      typeof message.content === "string"
+    ) {
       messages.push(message);
       continue;
     }

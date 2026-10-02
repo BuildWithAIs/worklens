@@ -110,6 +110,7 @@ export interface Settings {
   /** Legacy names, migrated by SkillsService when matching files are found. */
   disabledSkills?: string[];
   disabledSkillIds?: string[];
+  codemodeEnabled?: boolean;
   [key: string]: unknown;
 }
 export interface SkillInfo {
@@ -131,6 +132,7 @@ export interface SkillsSnapshot {
   local: SkillInfo[];
 }
 export interface MessageView {
+  parentToolCallId?: string;
   entryId?: string;
   versions?: string[];
   images?: ChatImageRef[];
@@ -208,6 +210,7 @@ export interface Recovery {
   startedAt: string;
 }
 export interface Bootstrap {
+  mcp?: McpSnapshot;
   confluence?: ConfluenceConnection;
   jira?: JiraConnection;
   github?: GitHubConnection;
@@ -239,6 +242,10 @@ export interface ConversationFile {
 }
 
 export interface Requests {
+  mcpSave: { input: { config: string }; output: McpSnapshot };
+  mcpTest: { input: { name: string }; output: { tools: number } };
+  mcpLogin: { input: { name: string; loginId: string }; output: void };
+  mcpLogout: { input: { name: string }; output: McpSnapshot };
   jevSave: { input: JevSettingsInput; output: JevConnection };
   jevTest: { input: JevSettingsInput; output: string };
   jevRemove: { input: undefined; output: void };
@@ -388,6 +395,18 @@ export interface Requests {
     output: SkillsSnapshot;
   };
   skillsReveal: { input: { id: string }; output: void };
+}
+export interface McpSnapshot {
+  config: string;
+  servers: {
+    name: string;
+    transport: "stdio" | "http";
+    enabled: boolean;
+    exposure: string;
+    oauth: boolean;
+    signedIn: boolean;
+  }[];
+  error?: string;
 }
 export interface ConfluenceSettingsInput {
   url: string;

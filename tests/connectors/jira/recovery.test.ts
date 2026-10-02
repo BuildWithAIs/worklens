@@ -62,7 +62,9 @@ test("output persistence failure preserves remote success and long content remai
       timestamp: 0,
     },
   ]);
-  expect(compacted).toContain(result.data.resultPath);
+  expect(compacted).toContain(
+    JSON.stringify(result.data.resultPath).slice(1, -1),
+  );
   const stored = JSON.parse(await readFile(result.data.resultPath, "utf8"));
   expect(stored.data.fields.description).toBe(
     s.fixture.state.issues.get("TEST-1").fields.description,

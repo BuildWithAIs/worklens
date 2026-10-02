@@ -22,6 +22,12 @@ test("text-only prompts succeed before and after image history in Electron", asy
   });
   try {
     const page = await app.firstWindow();
+    await app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.show();
+      window.focus();
+    });
+    await page.bringToFront();
     await expect(page.locator(".sidebar")).toBeVisible();
     await app.evaluate(
       async ({ app }, { url, model }) => {
@@ -93,6 +99,7 @@ test("text-only prompts succeed before and after image history in Electron", asy
       })),
     );
     await expect(page.locator(".aui-composer-attachments img")).toHaveCount(5);
+    await expect(page.locator(".aui-attachment-tile-uploading")).toHaveCount(0);
     await sendText("Inspect the synthetic pictures", 2);
     await sendText("Summarize the pictures", 3);
     const users = server.requests[2].messages.filter(
@@ -132,6 +139,12 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
   });
   try {
     const page = await app.firstWindow();
+    await app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.show();
+      window.focus();
+    });
+    await page.bringToFront();
     await expect(page.locator(".sidebar")).toBeVisible();
     await app.evaluate(
       async ({ app }, { url, model }) => {
@@ -261,6 +274,7 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
       })),
     );
     await expect(page.locator(".aui-composer-attachments img")).toHaveCount(4);
+    await expect(page.locator(".aui-attachment-tile-uploading")).toHaveCount(0);
     await expect(page.locator(".aui-composer-send")).toBeEnabled();
     await page.locator(".aui-composer-send").click();
     await expect.poll(() => server.requests.length).toBe(1);
@@ -385,6 +399,23 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
     await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
+    // Restore focus and seed this paste independently of the download interaction.
+    await app.evaluate(
+      async (
+        { BrowserWindow, clipboard, nativeImage, ClipboardItem },
+        bytes,
+      ) => {
+        BrowserWindow.getAllWindows()[0].focus();
+        const png = nativeImage.createFromBuffer(Buffer.from(bytes)).toPNG();
+        await clipboard.write([
+          new ClipboardItem({
+            "image/png": new Blob([new Uint8Array(png)], { type: "image/png" }),
+          }),
+        ]);
+      },
+      [...saved],
+    );
+    await page.bringToFront();
     await page.locator(".aui-composer-input").focus();
     await page.keyboard.press(
       process.platform === "darwin" ? "Meta+V" : "Control+V",
