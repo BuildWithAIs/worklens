@@ -55,7 +55,7 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
     await page.evaluate(() =>
       window.worklens.invoke("settings", { riskAccepted: true }),
     );
-    const text = "SLOW 保留这条已提交但尚未落盘的任务 " + "处理中 ".repeat(120);
+    const text = "SLOW 保留这条已提交但尚未完成的任务 " + "处理中 ".repeat(120);
     const view = await page.evaluate(
       (text) =>
         window.worklens.invoke("send", {
@@ -77,11 +77,23 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
       text,
     );
     await expect.poll(() => server.requests.length).toBe(1);
+    // Pi now flushes the first user message before starting the model request.
+    const sessions = (await readdir(join(root, "sessions"))).filter((file) =>
+      file.endsWith(".jsonl"),
+    );
+    expect(sessions).toHaveLength(1);
+    const entries = (
+      await readFile(join(root, "sessions", sessions[0]), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
     expect(
-      (await readdir(join(root, "sessions"))).filter((file) =>
-        file.endsWith(".jsonl"),
-      ),
-    ).toHaveLength(0);
+      entries.filter((entry) => entry.message?.role === "user"),
+    ).toHaveLength(1);
+    expect(entries.some((entry) => entry.message?.role === "assistant")).toBe(
+      false,
+    );
     const pending = JSON.parse(
       await readFile(
         join(root, "app", "runs", `${view.runId}.pending.json`),
@@ -122,6 +134,13 @@ test("PRD 033, 063: forced process death preserves first input without replay", 
       restored.locator(".aui-composer-attachments img"),
     ).toHaveJSProperty("naturalWidth", 4);
     expect(server.requests.length).toBe(1);
+    const reopened = await restored.evaluate(
+      (id) => window.worklens.invoke("open", { id }),
+      view.id,
+    );
+    expect(
+      reopened.messages.filter((message) => message.role === "user"),
+    ).toHaveLength(1);
     await restored.screenshot({
       path: "test-results/recovered-draft.png",
       fullPage: true,

@@ -7,6 +7,7 @@ import type { OAuthCredential } from "@earendil-works/pi-ai";
 import { ProviderService } from "../src/main/providers";
 import { SecureCredentials } from "../src/main/storage";
 import type { AuthStep } from "../src/shared/contracts";
+import { installationId } from "../src/main/installation-id";
 
 const services: ProviderService[] = [];
 afterEach(() => {
@@ -166,3 +167,28 @@ test("a failed credential deletion remains visible to the caller and can be retr
   await service.logout("openrouter");
   expect(await credentials.read("openrouter")).toBeUndefined();
 }, 5000);
+
+test("provider login supplies a persistent installation ID to Pi OAuth", async () => {
+  const { runtime, credentials } = await setup();
+  const directory = await mkdtemp(join(tmpdir(), "worklens-device-id-"));
+  const getDeviceId = installationId(join(directory, "installation-id"));
+  const login = vi.spyOn(runtime, "login").mockResolvedValue({
+    type: "oauth",
+    access: "isolated-device-access",
+    refresh: "isolated-device-refresh",
+    expires: Date.now() + 3600000,
+  });
+  const service = new ProviderService(
+    runtime,
+    credentials,
+    () => {},
+    getDeviceId,
+  );
+  services.push(service);
+  await service.login("openai-codex", "oauth", "identity");
+  const options = login.mock.calls[0][3];
+  expect(options?.getDeviceId?.()).toBe(
+    installationId(join(directory, "installation-id"))(),
+  );
+  expect(options?.getDeviceId?.()).toMatch(/^[0-9a-f-]{36}$/);
+});

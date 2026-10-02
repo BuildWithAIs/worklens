@@ -28,6 +28,7 @@ export class ProviderService {
     readonly runtime: ModelRuntime,
     private credentials: SecureCredentials,
     private emit: (step: AuthStep) => void,
+    private getDeviceId?: () => string,
   ) {}
   async list(): Promise<ProviderInfo[]> {
     const available = await this.runtime.getAvailable(undefined, {
@@ -112,66 +113,71 @@ export class ProviderService {
     this.logins.set(loginId, login);
     const timeout = setTimeout(() => login.controller.abort(), 10 * 60 * 1000);
     try {
-      await this.runtime.login(provider, type, {
-        signal: login.controller.signal,
-        prompt: (prompt: AuthPrompt) =>
-          new Promise<string>((resolve, reject) => {
-            const promptId = randomUUID();
-            const signal = prompt.signal
-              ? AbortSignal.any([prompt.signal, login.controller.signal])
-              : login.controller.signal;
-            const abort = () => {
-              login.pending.delete(promptId);
-              this.emit({ loginId, promptId, type: "prompt_cancelled" });
-              reject(new Error("认证已取消"));
-            };
-            if (signal.aborted) {
-              abort();
-              return;
-            }
-            signal.addEventListener("abort", abort, { once: true });
-            login.pending.set(promptId, {
-              resolve: (value) => {
-                signal.removeEventListener("abort", abort);
-                resolve(value);
-              },
-              reject,
-            });
-            this.emit({
-              loginId,
-              promptId,
-              type: prompt.type,
-              message: prompt.message,
-              ...("options" in prompt
-                ? { options: [...prompt.options] }
-                : { placeholder: prompt.placeholder }),
-            });
-          }),
-        notify: (event: AuthEvent) => {
-          if (event.type === "auth_url")
-            this.emit({
-              loginId,
-              type: event.type,
-              url: event.url,
-              message: event.instructions,
-            });
-          else if (event.type === "device_code")
-            this.emit({
-              loginId,
-              type: event.type,
-              url: event.verificationUri,
-              userCode: event.userCode,
-              message: "在浏览器中输入设备码完成登录",
-            });
-          else
-            this.emit({
-              loginId,
-              type: event.type,
-              message: this.credentials.redact(event.message),
-              url: event.type === "info" ? event.links?.[0]?.url : undefined,
-            });
+      await this.runtime.login(
+        provider,
+        type,
+        {
+          signal: login.controller.signal,
+          prompt: (prompt: AuthPrompt) =>
+            new Promise<string>((resolve, reject) => {
+              const promptId = randomUUID();
+              const signal = prompt.signal
+                ? AbortSignal.any([prompt.signal, login.controller.signal])
+                : login.controller.signal;
+              const abort = () => {
+                login.pending.delete(promptId);
+                this.emit({ loginId, promptId, type: "prompt_cancelled" });
+                reject(new Error("认证已取消"));
+              };
+              if (signal.aborted) {
+                abort();
+                return;
+              }
+              signal.addEventListener("abort", abort, { once: true });
+              login.pending.set(promptId, {
+                resolve: (value) => {
+                  signal.removeEventListener("abort", abort);
+                  resolve(value);
+                },
+                reject,
+              });
+              this.emit({
+                loginId,
+                promptId,
+                type: prompt.type,
+                message: prompt.message,
+                ...("options" in prompt
+                  ? { options: [...prompt.options] }
+                  : { placeholder: prompt.placeholder }),
+              });
+            }),
+          notify: (event: AuthEvent) => {
+            if (event.type === "auth_url")
+              this.emit({
+                loginId,
+                type: event.type,
+                url: event.url,
+                message: event.instructions,
+              });
+            else if (event.type === "device_code")
+              this.emit({
+                loginId,
+                type: event.type,
+                url: event.verificationUri,
+                userCode: event.userCode,
+                message: "在浏览器中输入设备码完成登录",
+              });
+            else
+              this.emit({
+                loginId,
+                type: event.type,
+                message: this.credentials.redact(event.message),
+                url: event.type === "info" ? event.links?.[0]?.url : undefined,
+              });
+          },
         },
-      });
+        { getDeviceId: this.getDeviceId },
+      );
       this.connections.delete(provider);
       this.emit({
         loginId,

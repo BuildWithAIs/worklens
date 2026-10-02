@@ -20,6 +20,31 @@ Connect one GitHub site in **Settings → Connections** by entering its URL and 
 
 Connect Tavily in **Settings → Connectors** with an API key to give the agent `web_search`, `web_fetch`, and Tavily deep research.
 
+## MCP and Code Mode
+
+In **Settings → MCP**, add an `mcpServers` JSON configuration, save it, and use **Test connection**. WorkLens supports stdio and streamable HTTP servers, HTTP headers or provider credentials, and browser OAuth with a loopback callback. Saved settings and OAuth credentials use OS encryption. The editor shows `<saved>` for stored values; keep the placeholder to reuse a credential for the same server. Use `${ENV_NAME}` in headers and environment values to read an environment variable when connecting.
+
+```json
+{
+  "mcpServers": {
+    "local": {
+      "command": "node",
+      "args": ["/absolute/path/to/server.mjs"],
+      "exposure": "codemode"
+    },
+    "remote": {
+      "url": "https://your-server.example/mcp",
+      "headers": { "Authorization": "Bearer ${MCP_TOKEN}" },
+      "exposure": "deferred"
+    }
+  }
+}
+```
+
+Code Mode is enabled by default. It lets the agent combine existing tools in JavaScript, including parallel calls and filtering results. Nested calls keep the same tool validation, connector consent, file scheduling and cancellation behavior; their results remain visible in the conversation after restart. JavaScript runs in a QuickJS sandbox; calls to file, command and MCP tools can still affect your computer and external services. Install and configure servers you trust. Put credentials in `env`, `headers` or OAuth settings rather than command arguments or URLs.
+
+`exposure` accepts `codemode`, `deferred` (loaded through `tool_search`), `direct` (declared immediately), or `hidden`. `toolExposure` overrides individual tools, and `enabled: false` disables a server. MCP resources are available through the resource tools. Disabling Code Mode changes `codemode` exposure to `deferred`; MCP tools remain available. Changes apply to each conversation on its next message. HTTP requires HTTPS, with HTTP allowed for loopback servers. Legacy SSE transport is not supported.
+
 ## Local development
 
 Requires Node.js 24 and npm.

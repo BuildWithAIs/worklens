@@ -30,6 +30,8 @@ import { createConnectors } from "./connectors";
 import { isConnectorRequest } from "./connectors/ipc";
 import { LocalArtifacts } from "./local-artifacts";
 import { SkillsService } from "./skills";
+import { McpService } from "./mcp-service";
+import { installationId } from "./installation-id";
 
 // Keep the original safeStorage identity: changing case selects a different
 // macOS Keychain key. The application bundle controls the Dock display name.
@@ -53,6 +55,7 @@ const paths = {
 let window: BrowserWindow | undefined;
 export let agents: AgentService | undefined;
 let providers: ProviderService | undefined;
+let mcp: McpService | undefined;
 let quitting = false;
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -75,6 +78,16 @@ else {
       );
       const state = new StateStore(join(paths.userData, "app-state.json"));
       await state.load();
+      mcp = new McpService(
+        join(paths.userData, "pi"),
+        safeStorage,
+        (event) => {
+          if (window && !window.isDestroyed())
+            window.webContents.send("worklens:auth", event);
+        },
+        (url) => shell.openExternal(externalUrl(url)),
+      );
+      mcp.initialize();
       const bundledSkills = app.isPackaged
         ? join(process.resourcesPath, "skills")
         : join(app.getAppPath(), "resources/skills");
@@ -102,7 +115,7 @@ else {
       );
       await connectors.registry.initialize();
       const redact = (text: string) =>
-        credentials.redact(connectors.registry.redact(text));
+        credentials.redact(connectors.registry.redact(mcp!.redact(text)));
       const runtime = await ModelRuntime.create({
         credentials,
         modelsPath: null,
@@ -123,10 +136,15 @@ else {
         skills,
         artifacts,
         connectors.jevConsent,
+        mcp,
+        () => state.value.codemodeEnabled !== false,
       );
       await agents.initialize();
-      providers = new ProviderService(runtime, credentials, (event) =>
-        broadcast("worklens:auth", event),
+      providers = new ProviderService(
+        runtime,
+        credentials,
+        (event) => broadcast("worklens:auth", event),
+        installationId(join(paths.userData, "installation-id")),
       );
       ipcMain.handle(
         "worklens:request",
@@ -145,6 +163,18 @@ else {
               value = await connectors.requests(method, input);
             } else
               switch (method) {
+                case "mcpSave":
+                  value = mcp!.save(input.config);
+                  break;
+                case "mcpTest":
+                  value = await mcp!.test(input.name, paths.runtime, runtime);
+                  break;
+                case "mcpLogin":
+                  await mcp!.login(input.name, input.loginId);
+                  break;
+                case "mcpLogout":
+                  value = await mcp!.logout(input.name);
+                  break;
                 case "jevConsentReply":
                   value = await agents!.replyJevConsent(
                     input.conversationId,
@@ -186,13 +216,21 @@ else {
                   );
                   value = {
                     settings: state.value,
+                    mcp: mcp!.snapshot(),
                     ...connectors.bootstrap(),
                     providers: catalog,
                     conversations: await agents!.list(),
                     globalUsage: agents!.getGlobalUsage(),
                     paths,
                     version: app.getVersion(),
-                    tools: [...toolNames, ...connectors.registry.names()],
+                    tools: [
+                      ...toolNames,
+                      ...connectors.registry.names(),
+                      "tool_search",
+                      ...(state.value.codemodeEnabled !== false
+                        ? ["codemode"]
+                        : []),
+                    ],
                     diagnostics: agents!.diagnostics,
                     recoveries: agents!.recoveries,
                   };
@@ -222,6 +260,7 @@ else {
                   break;
                 case "authCancel":
                   providers!.cancel(input.loginId);
+                  mcp!.cancel(input.loginId);
                   break;
                 case "logout":
                   await providers!.logout(input.provider);
@@ -480,6 +519,7 @@ else {
           event.preventDefault();
           if (closing) return;
           closing = true;
+          mcp?.cancelLogins();
           providers?.shutdown();
           void (agents?.cancelAll() ?? Promise.resolve()).finally(() => {
             readyToClose = true;
@@ -505,7 +545,9 @@ else {
     event.preventDefault();
     quitting = true;
     providers?.shutdown();
-    void (agents?.shutdown() ?? Promise.resolve()).finally(() => app.quit());
+    void Promise.allSettled([agents?.shutdown(), mcp?.shutdown()]).finally(() =>
+      app.quit(),
+    );
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();

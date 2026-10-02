@@ -1,4 +1,39 @@
 const en = {
+  mcp: {
+    title: "MCP servers",
+    codemode: "Code Mode",
+    codemodeExplanation:
+      "WorkLens can combine several steps to complete a task, such as gathering recruiting information or organizing expense records. Describe the result you want; no programming is needed. Available actions depend on your connected services and tools.",
+    codemodeDescription:
+      "Let the agent combine tool calls in JavaScript workflows.",
+    description:
+      "Add stdio or HTTP servers using an mcpServers JSON object. With Code Mode off, the agent discovers MCP tools through tool search.",
+    configuration: "MCP configuration",
+    credentialsHint:
+      "Credentials are stored encrypted. Keep <saved> to reuse a saved value. Changing a server address requires new credentials.",
+    nextMessage: "Saved changes apply to each chat on its next message.",
+    saved: "MCP settings saved",
+    saving: "Saving…",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    test: "Test connection",
+    testing: "Testing…",
+    connected_one: "Connected. {{count}} tool available.",
+    connected_other: "Connected. {{count}} tools available.",
+    signIn: "Sign in",
+    signOut: "Sign out",
+    signedIn: "MCP sign-in complete",
+    signedOut: "MCP signed out",
+    signingIn: "Waiting for sign-in…",
+    openBrowser: "Open browser",
+    actionFailed:
+      "Couldn’t update MCP settings. Check the configuration and try again.",
+    testFailed:
+      "Couldn’t connect. Check the server configuration and try again.",
+    loginFailed:
+      "Couldn’t sign in. Check the server’s OAuth settings and try again.",
+    logoutFailed: "Couldn’t sign out. Check secure storage and try again.",
+  },
   chatLinks: { openFailed: "Couldn’t open the link" },
   settingsFeedback: {
     connectionNeedsAttention: "Connection needs attention",
@@ -477,6 +512,7 @@ const en = {
     providers: "Providers",
     models: "Models",
     connectors: "Connectors",
+    mcp: "MCP",
     skills: "Skills",
     savedCredentialsNeedAttention: "Saved credentials need attention",
     backToApp: "Back to app",

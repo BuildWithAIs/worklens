@@ -16,6 +16,31 @@ WorkLens 是一款本地优先的工作 Agent，面向中大型企业的员工�
 
 在 **设置 → 连接器** 中填入 Tavily API key，助手即可使用 `web_search`、`web_fetch` 和 Tavily 深度研究。
 
+## MCP 与 Code Mode
+
+在 **设置 → MCP** 中填写 `mcpServers` JSON 配置，保存后点击「测试连接」。支持 stdio、Streamable HTTP、HTTP 请求头、已配置的模型服务商凭据，以及浏览器 OAuth 登录。配置和 OAuth 凭据使用操作系统加密存储；编辑器中的 `<saved>` 表示沿用同一服务已保存的值。请求头或环境变量中的 `${ENV_NAME}` 会在连接时读取对应环境变量。
+
+```json
+{
+  "mcpServers": {
+    "local": {
+      "command": "node",
+      "args": ["C:/absolute/path/to/server.mjs"],
+      "exposure": "codemode"
+    },
+    "remote": {
+      "url": "https://your-server.example/mcp",
+      "headers": { "Authorization": "Bearer ${MCP_TOKEN}" },
+      "exposure": "deferred"
+    }
+  }
+}
+```
+
+Code Mode 默认开启，助手可以用 JavaScript 组合已有工具，执行并行调用和结果筛选。子调用继续经过工具校验、连接器授权、文件操作调度和取消流程；调用结果在会话重启后仍可查看。JavaScript 在 QuickJS 沙箱中运行，但调用文件、命令和 MCP 工具仍会影响电脑与外部服务。请配置可信的服务器，将凭据放在 `env`、`headers` 或 OAuth 配置中。
+
+`exposure` 可设置为 `codemode`、`deferred`（通过 `tool_search` 加载）、`direct`（直接提供给模型）或 `hidden`；`toolExposure` 可覆盖单个工具，`enabled: false` 可禁用服务。支持 MCP 资源工具。关闭 Code Mode 后，`codemode` 工具改为 `deferred`，MCP 仍可使用。保存的变更在每个会话的下一条消息生效。HTTP 服务需使用 HTTPS，本机回环地址允许 HTTP；暂不支持旧版 SSE 传输。
+
 ## 本地运行
 
 需要 Node.js 24 和 npm。

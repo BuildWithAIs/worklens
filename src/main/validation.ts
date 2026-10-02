@@ -23,10 +23,28 @@ export const selection = z
   })
   .strict();
 export const schemas = {
+  mcpSave: z.object({ config: z.string().max(256000) }).strict(),
+  mcpTest: z
+    .object({ name: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/) })
+    .strict(),
+  mcpLogin: z
+    .object({ name: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), loginId: id })
+    .strict(),
+  mcpLogout: z
+    .object({ name: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/) })
+    .strict(),
   jevConsentReply: z
-    .object({ conversationId: id, requestId: z.uuid(), allow: z.boolean(), autoAllow: z.boolean().optional() })
+    .object({
+      conversationId: id,
+      requestId: z.uuid(),
+      allow: z.boolean(),
+      autoAllow: z.boolean().optional(),
+    })
     .strict()
-    .refine((input) => !input.autoAllow || input.allow, "Automatic approval requires Allow"),
+    .refine(
+      (input) => !input.autoAllow || input.allow,
+      "Automatic approval requires Allow",
+    ),
   jevConsentReset: z
     .object({ conversationId: id, blocked: z.boolean() })
     .strict(),
@@ -90,6 +108,7 @@ export const schemas = {
   settings: z
     .object({
       theme: z.enum(["light", "dark", "system"]).optional(),
+      codemodeEnabled: z.boolean().optional(),
       backgroundEffect: z
         .enum(["none", "surface", "fluid", "aurora"])
         .optional(),

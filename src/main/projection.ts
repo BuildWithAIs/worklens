@@ -24,6 +24,16 @@ export function projectMessages(
     const message = raw as RecordValue;
     const id = `m-${index}`;
     const firstNew = result.length;
+    if (
+      message.role === "worklensNestedTool" &&
+      message.view?.parentToolCallId
+    ) {
+      const previous = result.findIndex(
+        (item) => item.toolId === message.view.toolId,
+      );
+      if (previous >= 0) result[previous] = message.view;
+      else result.push(message.view);
+    }
     if (message.role === "user") {
       const text = textContent(message.content);
       const skill = parseSkillBlock(text);
@@ -134,7 +144,8 @@ export function projectMessages(
         textContent(message.content) +
           (message.details?.diff ? "\n" + message.details.diff : ""),
       );
-      if (Array.isArray(message.details?.artifacts)) tool.artifacts = message.details.artifacts;
+      if (Array.isArray(message.details?.artifacts))
+        tool.artifacts = message.details.artifacts;
       tool.status = message.isError
         ? /\babort(?:ed)?\b|\bcancell?ed\b|已取消/i.test(tool.text)
           ? "cancelled"
@@ -172,9 +183,16 @@ export function projectMessages(
         text: bounded(message.summary ?? textContent(message.content)),
       });
     for (const item of result.slice(firstNew)) {
-      if (typeof message.timestamp === "number" && Number.isFinite(message.timestamp) && !Number.isNaN(new Date(message.timestamp).getTime())) item.createdAt = new Date(message.timestamp).toISOString();
-      if (typeof message.runStartedAt === "string") item.runStartedAt = message.runStartedAt;
-      if (typeof message.runElapsedMs === "number") item.runElapsedMs = message.runElapsedMs;
+      if (
+        typeof message.timestamp === "number" &&
+        Number.isFinite(message.timestamp) &&
+        !Number.isNaN(new Date(message.timestamp).getTime())
+      )
+        item.createdAt = new Date(message.timestamp).toISOString();
+      if (typeof message.runStartedAt === "string")
+        item.runStartedAt = message.runStartedAt;
+      if (typeof message.runElapsedMs === "number")
+        item.runElapsedMs = message.runElapsedMs;
     }
   }
   return result;
@@ -182,12 +200,18 @@ export function projectMessages(
 
 // Run markers are persisted alongside messages, so timing survives navigation and restart.
 export function withRunTiming(branch: readonly unknown[]): unknown[] {
-  const runs = new Map<string, { runStartedAt: string; runElapsedMs?: number }>();
+  const runs = new Map<
+    string,
+    { runStartedAt: string; runElapsedMs?: number }
+  >();
   for (const raw of branch) {
     const entry = raw as RecordValue;
     const data = entry.data;
     if (entry.type !== "custom" || typeof data?.runId !== "string") continue;
-    if (entry.customType === "worklens.run-start" && Number.isFinite(Date.parse(data.startedAt))) {
+    if (
+      entry.customType === "worklens.run-start" &&
+      Number.isFinite(Date.parse(data.startedAt))
+    ) {
       runs.set(data.runId, { runStartedAt: data.startedAt });
     }
     if (entry.customType === "worklens.run-end") {
@@ -199,12 +223,39 @@ export function withRunTiming(branch: readonly unknown[]): unknown[] {
     }
   }
   let timing: { runStartedAt: string; runElapsedMs?: number } | undefined;
+  let imageNames: string[] | undefined;
   return branch.flatMap((raw) => {
     const entry = raw as RecordValue;
-    if (entry.type === "custom" && entry.customType === "worklens.run-start") timing = runs.get(entry.data?.runId);
-    if (entry.type === "custom" && entry.customType === "worklens.run-end") timing = undefined;
-    if (entry.type === "message") return [{ ...entry.message, sessionEntryId: entry.id, ...timing }];
-    if (entry.type === "compaction") return [{ role: "compactionSummary", summary: entry.summary }];
+    if (entry.type === "custom" && entry.customType === "worklens.run-start") {
+      timing = runs.get(entry.data?.runId);
+      imageNames = entry.data?.imageNames;
+    }
+    if (entry.type === "custom" && entry.customType === "worklens.run-end")
+      timing = undefined;
+    if (entry.type === "custom" && entry.customType === "worklens.nested-tool")
+      return [{ role: "worklensNestedTool", view: entry.data?.message }];
+    if (entry.type === "message") {
+      let message = entry.message;
+      if (
+        message.role === "user" &&
+        imageNames &&
+        Array.isArray(message.content)
+      ) {
+        let index = 0;
+        message = {
+          ...message,
+          content: message.content.map((block: RecordValue) =>
+            block.type === "image"
+              ? { ...block, name: imageNames?.[index++] ?? block.name }
+              : block,
+          ),
+        };
+        imageNames = undefined;
+      }
+      return [{ ...message, sessionEntryId: entry.id, ...timing }];
+    }
+    if (entry.type === "compaction")
+      return [{ role: "compactionSummary", summary: entry.summary }];
     return [];
   });
 }

@@ -39,6 +39,7 @@ import { worklensTools } from "./tools";
 import { ConnectorRegistry } from "./connectors/registry";
 import type { SkillsService } from "./skills";
 import type { JevConsent } from "./connectors/jev/consent";
+import type { McpService } from "./mcp-service";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import { validateChatImages, validateImageContent } from "./chat-images";
@@ -151,6 +152,8 @@ export class AgentService {
       paths.sessions,
     ),
     private jevConsent?: JevConsent,
+    private mcp?: McpService,
+    private codemodeEnabled: () => boolean = () => true,
   ) {}
   async initialize() {
     await Promise.all([
@@ -379,7 +382,12 @@ export class AgentService {
     const runtime = this.sessions.get(id);
     if (runtime) this.publish(id, runtime, "connector_consent", true);
   }
-  async replyJevConsent(id: string, requestId: string, allow: boolean, autoAllow = false) {
+  async replyJevConsent(
+    id: string,
+    requestId: string,
+    allow: boolean,
+    autoAllow = false,
+  ) {
     const runtime = await this.get(id);
     if (!this.jevConsent || !runtime.active)
       throw new Error("Jev approval is no longer pending.");
@@ -532,11 +540,14 @@ export class AgentService {
       this.connectors.configurationKey() +
       "|" +
       (skillConfiguration?.key ?? "");
-    if (
-      runtime.session &&
-      runtime.integrationConfiguration !== integrationConfiguration
-    ) {
-      runtime.session.dispose();
+    const configuration =
+      integrationConfiguration +
+      "|" +
+      (this.mcp?.configurationKey() ?? "") +
+      "|" +
+      this.codemodeEnabled();
+    if (runtime.session && runtime.integrationConfiguration !== configuration) {
+      await this.disposeSession(runtime);
       runtime.session = undefined;
     }
     if (!runtime.session) {
@@ -553,6 +564,11 @@ export class AgentService {
           instructions: this.connectors.instructions(),
         },
         skillConfiguration?.resources,
+        {
+          mcp: this.mcp,
+          codemode: this.codemodeEnabled(),
+          redact: this.redact,
+        },
       );
       const customTools = worklensTools(cwd, (toolId, status) => {
         runtime.toolUpdates.set(toolId, {
@@ -583,6 +599,13 @@ export class AgentService {
         })
       ).session;
       installImageRequestGuard(runtime.session.agent);
+      await runtime.session.bindExtensions({
+        uiContext: {
+          ...runtime.session.extensionRunner.getUIContext(),
+          notify: (message) => this.diagnostics.push(this.redact(message)),
+        },
+        onError: (error) => this.diagnostics.push(this.redact(error.error)),
+      });
       if (
         previous.model &&
         (previous.model.provider !== model.provider ||
@@ -594,7 +617,7 @@ export class AgentService {
         previous.thinkingLevel !== selection.thinking
       )
         runtime.session.setThinkingLevel(selection.thinking);
-      runtime.integrationConfiguration = integrationConfiguration;
+      runtime.integrationConfiguration = configuration;
       runtime.session.subscribe((event) => this.onPiEvent(runtime, event));
     } else {
       if (
@@ -607,6 +630,19 @@ export class AgentService {
     runtime.session.setActiveToolsByName([
       ...toolNames,
       ...this.connectors.names(),
+      "tool_search",
+      ...(this.codemodeEnabled() ? ["codemode"] : []),
+      ...runtime.session
+        .getActiveToolNames()
+        .filter(
+          (name) =>
+            name.startsWith("mcp__") ||
+            [
+              "list_mcp_resources",
+              "list_mcp_resource_templates",
+              "read_mcp_resource",
+            ].includes(name),
+        ),
     ]);
   }
   private onPiEvent(runtime: Runtime, event: AgentSessionEvent) {
@@ -619,7 +655,33 @@ export class AgentService {
       runtime.toolUpdates.set(event.toolCallId, {
         status: "running",
         startedAt,
+        ...(event.parentToolCallId
+          ? {
+              ...projectMessages(
+                [
+                  {
+                    role: "assistant",
+                    content: [
+                      {
+                        type: "toolCall",
+                        id: event.toolCallId,
+                        name: event.toolName,
+                        arguments: event.args,
+                      },
+                    ],
+                  },
+                ],
+                sessionWorkspace(this.paths.sessions, id),
+              )[0],
+              status: "running" as const,
+              parentToolCallId: event.parentToolCallId,
+            }
+          : {}),
       });
+      if (event.parentToolCallId)
+        runtime.manager.appendCustomEntry("worklens.nested-tool", {
+          message: this.redactView(runtime.toolUpdates.get(event.toolCallId)),
+        });
       runtime.manager.appendCustomEntry("worklens.tool-timing", {
         version: 1,
         conversationId: id,
@@ -663,6 +725,33 @@ export class AgentService {
               : "success",
         elapsed,
       });
+      if (event.parentToolCallId) {
+        const projected = projectMessages(
+          [
+            {
+              role: "worklensNestedTool",
+              view: { ...previous },
+            },
+            {
+              role: "toolResult",
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+              ...event.result,
+              isError: event.isError,
+            },
+          ],
+          sessionWorkspace(this.paths.sessions, id),
+        ).find((message) => message.role === "tool")!;
+        const message = {
+          ...projected,
+          ...runtime.toolUpdates.get(event.toolCallId),
+          parentToolCallId: event.parentToolCallId,
+        };
+        runtime.toolUpdates.set(event.toolCallId, message);
+        runtime.manager.appendCustomEntry("worklens.nested-tool", {
+          message: this.redactView(message),
+        });
+      }
       if (previous?.startedAt)
         runtime.manager.appendCustomEntry("worklens.tool-timing", {
           version: 1,
@@ -701,8 +790,8 @@ export class AgentService {
       event.type === "compaction_end" ||
       event.type === "auto_retry_end"
     ) {
-      // Locked Pi 0.85.1 emits message_end BEFORE synchronous appendMessage.
-      // U0 integration test proves this microtask observes the corresponding append.
+      // Observe the durable append after Pi's synchronous message notifications.
+      // The usage integration test also covers the upgraded transcript pipeline.
       queueMicrotask(() => {
         if (runtime.active !== active) return;
         try {
@@ -729,15 +818,15 @@ export class AgentService {
       throw new Error("MESSAGE_VERSION_MISSING");
     return entry;
   }
-  private moveBranch(runtime: Runtime, leaf: string | null) {
-    runtime.session?.dispose();
+  private async moveBranch(runtime: Runtime, leaf: string | null) {
+    await this.disposeSession(runtime);
     runtime.session = undefined;
     if (leaf) runtime.manager.branch(leaf);
     else runtime.manager.resetLeaf();
     runtime.toolUpdates.clear();
   }
-  private restoreBranch(runtime: Runtime, leaf: string | null) {
-    this.moveBranch(runtime, leaf);
+  private async restoreBranch(runtime: Runtime, leaf: string | null) {
+    await this.moveBranch(runtime, leaf);
     try {
       runtime.manager.appendCustomEntry("worklens.branch-selection", {
         version: 1,
@@ -745,7 +834,7 @@ export class AgentService {
     } catch {
       // Pi updates its in-memory leaf before attempting to append to disk.
       // Never leave a failed marker as the parent of the next user message.
-      this.moveBranch(runtime, leaf);
+      await this.moveBranch(runtime, leaf);
       this.diagnostics.push(
         "会话分支恢复未能写入磁盘，已保留原记录和编辑草稿。",
       );
@@ -787,16 +876,16 @@ export class AgentService {
       return this.selectBranch(recovery.conversationId, runtime, entry.id);
     });
   }
-  private selectBranch(id: string, runtime: Runtime, targetId: string) {
+  private async selectBranch(id: string, runtime: Runtime, targetId: string) {
     const previous = runtime.manager.getLeafId();
     try {
-      this.moveBranch(runtime, versionLeaf(runtime.manager, targetId));
+      await this.moveBranch(runtime, versionLeaf(runtime.manager, targetId));
       // Pi restores the last appended entry as its leaf on open.
       runtime.manager.appendCustomEntry("worklens.branch-selection", {
         version: 1,
       });
     } catch (error) {
-      this.moveBranch(runtime, previous);
+      await this.moveBranch(runtime, previous);
       throw error;
     }
     runtime.phase = "idle";
@@ -845,6 +934,13 @@ export class AgentService {
           if (block?.type !== "image") throw new Error("CHAT_IMAGE_MISSING");
           return {
             name:
+              (editingRuntime &&
+                this.view(edit.conversationId, editingRuntime)
+                  .messages.find(
+                    (message) => message.entryId === edit.messageId,
+                  )
+                  ?.images?.find((ref) => ref.index === image.existingIndex)
+                  ?.name) ||
               (block as { name?: string }).name ||
               `image-${image.existingIndex + 1}`,
             mimeType: block.mimeType,
@@ -968,7 +1064,7 @@ export class AgentService {
         try {
           // The draft is durable before any branch or model metadata changes.
           if (edit) {
-            this.moveBranch(
+            await this.moveBranch(
               runtime,
               editParent(runtime.manager, edit.messageId),
             );
@@ -987,6 +1083,7 @@ export class AgentService {
               runId: active.id,
               ...input.selection,
               editOf: edit?.messageId,
+              imageNames: images.map((image) => image.name),
               startedAt: runtime.updated,
             },
           );
@@ -994,7 +1091,7 @@ export class AgentService {
         } catch (error) {
           runtime.active = undefined;
           runtime.phase = "failed";
-          if (edit) this.restoreBranch(runtime, previousLeaf);
+          if (edit) await this.restoreBranch(runtime, previousLeaf);
           // The accepted prompt remains in the recovery marker if attribution fails.
           throw error;
         }
@@ -1002,6 +1099,9 @@ export class AgentService {
           try {
             if (active.cancelled) return;
             await runtime.session!.prompt(prompt, {
+              preflightResult: () => {
+                if (active.cancelled) throw new Error("Run cancelled");
+              },
               expandPromptTemplates: !!skillCommand,
               images: images.map((image) => ({
                 type: "image" as const,
@@ -1095,7 +1195,7 @@ export class AgentService {
                         entry.message.role === "user",
                     ))
               ) {
-                this.restoreBranch(runtime, previousLeaf);
+                await this.restoreBranch(runtime, previousLeaf);
                 this.refreshUsage(runtime);
               }
               this.publish(id, runtime, "run_end", true);
@@ -1186,7 +1286,7 @@ export class AgentService {
           sessionFile = actual;
         }
       }
-      runtime.session?.dispose();
+      await this.disposeSession(runtime);
       runtime.session = undefined;
       await this.artifacts.removeSession(id);
       await this.jevConsent?.forget(id);
@@ -1226,6 +1326,24 @@ export class AgentService {
   async shutdown() {
     this.stopping = true;
     await this.cancelAll();
-    for (const runtime of this.sessions.values()) runtime.session?.dispose();
+    await Promise.allSettled(
+      [...this.sessions.values()].map((runtime) =>
+        this.disposeSession(runtime),
+      ),
+    );
+  }
+  private redactView<T>(value: T) {
+    return redactStrings(value, this.redact);
+  }
+  private async disposeSession(runtime: Runtime) {
+    if (!runtime.session) return;
+    try {
+      await runtime.session.extensionRunner.emit({
+        type: "session_shutdown",
+        reason: "quit",
+      });
+    } finally {
+      runtime.session.dispose();
+    }
   }
 }
