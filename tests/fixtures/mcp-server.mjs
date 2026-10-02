@@ -83,6 +83,40 @@ createInterface({ input: process.stdin })
         );
         return;
       }
+      if (
+        request.params.name === "echo" &&
+        ["RETURN_STRUCTURED", "RETURN_STRUCTURED_ERROR"].includes(
+          request.params.arguments.text,
+        )
+      ) {
+        send({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: `MCP_STRUCTURED_SUMMARY ${process.env.TOKEN}`,
+              },
+            ],
+            structuredContent: {
+              rows: [
+                {
+                  name: "招聘费用",
+                  amount: 125.5,
+                  active: true,
+                  note: null,
+                  credentials: { token: process.env.TOKEN },
+                },
+              ],
+              count: 1,
+            },
+            isError:
+              request.params.arguments.text === "RETURN_STRUCTURED_ERROR",
+          },
+        });
+        return;
+      }
       result = {
         content: [
           {

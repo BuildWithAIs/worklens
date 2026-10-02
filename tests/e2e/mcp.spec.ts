@@ -154,7 +154,7 @@ for (const packaged of [false, true])
               JSON.stringify({
                 name: "codemode",
                 args: {
-                  code: 'await describeNamespace("mcp__fixture"); text(await tools.mcp__fixture__echo({text:"PACKAGED_MCP_OK"})); text(await tools.write({path:"codemode-output.txt",content:"PACKAGED_CODEMODE_OK"})); store("answer",42);',
+                  code: 'await describeNamespace("mcp__fixture"); text(await tools.mcp__fixture__echo({text:"PACKAGED_MCP_OK"})); const result = await tools.mcp__fixture__echo({text:"RETURN_STRUCTURED"}); text("STRUCTURED_TOTAL " + result.structuredContent.rows.filter(row=>row.active).reduce((total,row)=>total+row.amount,0)); text("STRUCTURED_SECRET " + result.structuredContent.rows[0].credentials.token); text(await tools.write({path:"codemode-output.txt",content:"PACKAGED_CODEMODE_OK"})); store("answer",42);',
                 },
               }),
           }),
@@ -180,6 +180,12 @@ for (const packaged of [false, true])
         opened.messages.find((message) => message.toolName === "codemode")
           ?.status,
       ).toBe("success");
+      const output = opened.messages.find(
+        (message) => message.toolName === "codemode",
+      )?.text;
+      expect(output).toContain("STRUCTURED_TOTAL 125.5");
+      expect(output).toContain("STRUCTURED_SECRET [redacted]");
+      expect(output).not.toContain("synthetic-mcp-secret");
       expect(
         opened.messages.find(
           (message) => message.toolName === "mcp__fixture__echo",

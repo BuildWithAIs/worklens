@@ -180,6 +180,54 @@ test("Code Mode composes MCP and file tools, persists nested history and store a
   expect(f.server.requests).toHaveLength(4);
 });
 
+test.each([
+  ["RETURN_STRUCTURED", false],
+  ["RETURN_STRUCTURED_ERROR", true],
+])(
+  "Code Mode preserves MCP structured results and redacts their strings (%s)",
+  async (text, isError) => {
+    const f = await setup();
+    const view = await f.send("codemode", {
+      code: `await describeNamespace("mcp__fixture"); const result = await tools.mcp__fixture__echo({text:${JSON.stringify(text)}}); text(JSON.stringify({content:result.content, rows:result.structuredContent.rows.filter(row=>row.active), count:result.structuredContent.count, isError:result.isError}));`,
+    });
+    const expected = JSON.stringify({
+      content: [{ type: "text", text: "MCP_STRUCTURED_SUMMARY [redacted]" }],
+      rows: [
+        {
+          name: "招聘费用",
+          amount: 125.5,
+          active: true,
+          note: null,
+          credentials: { token: "[redacted]" },
+        },
+      ],
+      count: 1,
+      isError,
+    });
+    expect(view.phase).toBe("completed");
+    const parent = view.messages.find(
+      (message) => message.toolName === "codemode",
+    )!;
+    expect(parent.status).toBe("success");
+    expect(parent.text).toContain(expected);
+    expect(
+      view.messages.find(
+        (message) => message.parentToolCallId === parent.toolId,
+      ),
+    ).toMatchObject({
+      toolName: "mcp__fixture__echo",
+      status: isError ? "error" : "success",
+      text: "MCP_STRUCTURED_SUMMARY [redacted]",
+    });
+    const transcript = (await readdir(f.paths.sessions)).find((file) =>
+      file.endsWith(`_${view.id}.jsonl`),
+    )!;
+    expect(
+      await readFile(join(f.paths.sessions, transcript), "utf8"),
+    ).not.toContain("synthetic-MCP-credential");
+  },
+);
+
 test("Code Mode propagates nested errors and cancellation; disabling it preserves deferred MCP discovery", async () => {
   const f = await setup();
   const failed = await f.send("codemode", {

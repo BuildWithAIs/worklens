@@ -78,6 +78,7 @@ export async function resources(
           if (redact) {
             // Sanitize text before Pi writes tool results to the canonical transcript,
             // including nested calls returned through Code Mode. Keep image bytes intact.
+            // Pi drops structuredContent when content is replaced without it.
             return {
               ...status,
               content: event.content.map((part) =>
@@ -86,6 +87,7 @@ export async function resources(
                   : part,
               ),
               details: redactStrings(event.details, redact),
+              structuredContent: redactStrings(event.structuredContent, redact),
             };
           }
           return status;
