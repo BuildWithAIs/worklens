@@ -159,7 +159,7 @@ export const ThreadLoadingIndicator: FC<{ startedAt?: number }> = ({
     >
       <LoaderCircleIcon
         aria-hidden="true"
-        className="size-4 animate-spin motion-reduce:animate-none"
+        className="size-6 animate-spin motion-reduce:animate-none"
       />
       <span className="sr-only">{t("thread.loadingConversation")}</span>
     </div>
