@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { useAppTranslation } from "@/i18n";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { inspectConversationFile } from "@/lib/file-inspection-queue";
 
 hljs.registerLanguage("xml", xml);
 hljs.registerLanguage("css", css);
@@ -123,20 +124,19 @@ function ArtifactCard({
   const filename = path?.split(/[\\/]/).pop() || "web-preview.html";
   const [resolvedPath, setResolvedPath] = useState(path);
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     if (path && context?.conversationId)
-      void window.worklens
-        .invoke("conversationFile", {
-          id: context.conversationId,
-          path,
-          action: "inspect",
-        })
+      void inspectConversationFile(
+        context.conversationId,
+        path,
+        controller.signal,
+      )
         .then((file) => {
-          if (active && file) setResolvedPath(file.path);
+          if (!controller.signal.aborted && file) setResolvedPath(file.path);
         })
         .catch(() => {});
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [path, context?.conversationId]);
   const title = useMemo(

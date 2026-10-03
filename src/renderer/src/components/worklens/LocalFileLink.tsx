@@ -15,6 +15,7 @@ import { toast } from "@/components/ui/toast";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useAppTranslation } from "@/i18n";
 import { useArtifactWorkspace } from "./HtmlArtifact";
+import { inspectConversationFile } from "@/lib/file-inspection-queue";
 
 type Action = Requests["conversationFile"]["input"]["action"];
 
@@ -40,14 +41,14 @@ export function LocalFileLink({
   const generation = useRef(0);
   const acting = useRef(false);
   useEffect(() => {
+    const controller = new AbortController();
     const current = ++generation.current;
     setFile(undefined);
     setImage(undefined);
     setBusy(false);
     acting.current = false;
     if (id)
-      void window.worklens
-        .invoke("conversationFile", { id, path, action: "inspect" })
+      void inspectConversationFile(id, path, controller.signal)
         .then((value) => {
           if (current === generation.current) setFile(value);
         })
@@ -55,6 +56,7 @@ export function LocalFileLink({
           /* Retry on interaction, without noisy render-time toasts. */
         });
     return () => {
+      controller.abort();
       generation.current++;
     };
   }, [id, path]);

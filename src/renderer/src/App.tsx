@@ -22,7 +22,13 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Plus,
   MoreHorizontal,
@@ -45,6 +51,7 @@ import { useAppTranslation } from "@/i18n";
 import { UsagePopover } from "@/components/worklens/UsagePopover";
 import { newerGlobalUsage } from "../../shared/usage";
 import { AgentThread } from "@/components/worklens/AgentThread";
+import { ThreadLoadingIndicator } from "@/components/assistant-ui/elements/thread.aui";
 import type { ChatImage } from "../../shared/chat-images";
 import type {
   Bootstrap,
@@ -60,6 +67,12 @@ const isMac = /Mac/i.test(navigator.platform);
 const active = (phase?: Phase) =>
   !!phase &&
   ["generating", "tool", "compacting", "retrying", "stopping"].includes(phase);
+// Paint the selected row and loading shell before requesting history.
+const afterPaint = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+
 export function App() {
   const { t, i18n, language } = useAppTranslation();
   const [settingsSection, setSettingsSection] =
@@ -84,6 +97,11 @@ export function App() {
   const [data, setData] = useState<Bootstrap>();
   const [views, setViews] = useState<Record<string, ConversationView>>({});
   const [current, setCurrent] = useState<string>();
+  const [historyStartedAt, setHistoryStartedAt] = useState<number>();
+  const [historyLoad, setHistoryLoad] = useState<{
+    id: string;
+    failed: boolean;
+  }>();
   const [page, setPage] = useState<"chat" | "settings">("chat");
   const pinSaving = useRef(false);
   const [pinPending, setPinPending] = useState(false);
@@ -175,6 +193,9 @@ export function App() {
   const latestRuns = useRef(new Map<string, string>());
   const globalUsage = useRef<GlobalUsage | undefined>(undefined);
   const currentView = current ? views[current] : undefined;
+  const loadingHistory = historyLoad?.id === current ? historyLoad : undefined;
+  const currentConversation =
+    data?.conversations.find((item) => item.id === current) ?? currentView;
   const busy = active(currentView?.phase);
   const sending = pendingSends.has(current ?? draftId);
   const refresh = useCallback(async () => {
@@ -215,18 +236,14 @@ export function App() {
   }, []);
   useEffect(() => {
     let alive = true;
+    const visit = navigation.current;
     void refresh()
       .then(async (next) => {
-        if (!alive) return;
+        if (!alive || visit !== navigation.current) return;
         setSelection(next.settings.defaults);
         const last = next.settings.lastConversation;
         if (last && next.conversations.some((c) => c.id === last)) {
-          const view = await api.invoke("open", { id: last });
-          if (alive) {
-            acceptView(view);
-            setCurrent(last);
-            setSelection(view.selection ?? next.settings.defaults);
-          }
+          await open(last, next.settings.defaults);
         }
       })
       .catch((error) => setError(String(error)));
@@ -277,25 +294,39 @@ export function App() {
     preference.addEventListener("change", apply);
     return () => preference.removeEventListener("change", apply);
   }, [data?.settings.theme]);
-  async function open(id: string) {
+  async function open(id: string, defaults = data?.settings.defaults) {
+    if (id === current && page === "chat" && !loadingHistory?.failed) return;
     const visit = ++navigation.current;
+    setCurrent(id);
+    setPage("chat");
+    setHistoryLoad({ id, failed: false });
+    setHistoryStartedAt(performance.now());
+    setSelection(
+      data?.conversations.find((item) => item.id === id)?.selection ?? defaults,
+    );
+    setText("");
+    setDraftImages([]);
     try {
-      const view = await api.invoke("open", { id });
-      acceptView(view);
+      await afterPaint();
       if (visit !== navigation.current) return;
-      setCurrent(id);
-      setSelection(view.selection ?? data?.settings.defaults);
-      setPage("chat");
-      setText("");
-      setDraftImages([]);
-    } catch (error) {
-      notifyError(String(error));
+      const view = await api.invoke("open", { id });
+      if (visit !== navigation.current) return;
+      // History can render in the background; selection already painted above.
+      startTransition(() => {
+        acceptView(view);
+        setSelection(view.selection ?? defaults);
+        setHistoryLoad(undefined);
+      });
+    } catch {
+      if (visit !== navigation.current) return;
+      setHistoryLoad({ id, failed: true });
     }
   }
   function newConversation() {
     navigation.current++;
     setDraftId(crypto.randomUUID());
     setCurrent(undefined);
+    setHistoryLoad(undefined);
     setSelection(data?.settings.defaults);
     setText("");
     setDraftImages([]);
@@ -686,19 +717,19 @@ export function App() {
         <>
           <header className="chat-header">
             <div>
-              {currentView && (
-                <Hint content={currentView.title}>
+              {currentConversation && (
+                <Hint content={currentConversation.title}>
                   <h1
                     data-slot="chat-title"
                     tabIndex={0}
-                    aria-label={currentView.title}
+                    aria-label={currentConversation.title}
                   >
-                    {shortTitle(currentView.title)}
+                    {shortTitle(currentConversation.title)}
                   </h1>
                 </Hint>
               )}
             </div>
-            {currentView && (
+            {currentView && !loadingHistory && (
               <div className="chat-header-actions">
                 <UsagePopover
                   global={data.globalUsage}
@@ -709,69 +740,97 @@ export function App() {
               </div>
             )}
           </header>
-          <AgentThread
-            key={current ?? draftId}
-            view={currentView}
-            onConsentChange={acceptView}
-            canSend={!!availableModel?.available && !sending}
-            submitting={sending}
-            draft={text}
-            draftImages={draftImages}
-            supportsImages={!!availableModel?.image}
-            onError={notifyError}
-            onDraftLoaded={() => {
-              setText("");
-              setDraftImages([]);
-            }}
-            recoveredEdit={
-              recoveredEdit?.conversationId === current
-                ? recoveredEdit
-                : undefined
-            }
-            onRecoveredEditLoaded={() => setRecoveredEdit(undefined)}
-            onSend={sendText}
-            onEdit={async (messageId, text, images) => {
-              if (!current || !selection || !currentView?.branchId)
-                throw new Error("MESSAGE_VERSION_MISSING");
-              const input = {
-                conversationId: current,
-                messageId,
-                expectedBranchId: currentView.branchId,
-                requestId: crypto.randomUUID(),
-                text,
-                images,
-                selection,
-              };
-              await mutateMessage(() => api.invoke("editMessage", input));
-            }}
-            onSelectVersion={async (messageId, targetId) => {
-              if (!current || !currentView?.branchId)
-                throw new Error("MESSAGE_VERSION_MISSING");
-              const input = {
-                conversationId: current,
-                messageId,
-                targetId,
-                expectedBranchId: currentView.branchId,
-              };
-              await mutateMessage(() =>
-                api.invoke("selectMessageVersion", input),
-              );
-            }}
-            onCancel={cancelCurrent}
-            modelMenu={{
-              data,
-              selection,
-              onChange: changeModel,
-              onManage: () => {
-                setPage("settings");
-                setSettingsSection(
-                  data.providers.some((p) => p.configured)
-                    ? "models"
-                    : "providers",
+          {loadingHistory ? (
+            <div
+              className="agent-thread relative"
+              data-slot="conversation-loading"
+              aria-busy={!loadingHistory.failed}
+            >
+              {loadingHistory.failed ? (
+                <div className="mx-auto w-full max-w-[880px] px-6 py-6 md:px-10">
+                  <p
+                    role="alert"
+                    className="text-muted-foreground mb-6 text-sm"
+                  >
+                    {t("thread.conversationLoadFailed")}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => void open(loadingHistory.id)}
+                  >
+                    {t("thread.retryLoad")}
+                  </Button>
+                </div>
+              ) : (
+                <ThreadLoadingIndicator startedAt={historyStartedAt} />
+              )}
+            </div>
+          ) : (
+            <AgentThread
+              key={current ?? draftId}
+              historyStartedAt={historyStartedAt}
+              view={currentView}
+              onConsentChange={acceptView}
+              canSend={!!availableModel?.available && !sending}
+              submitting={sending}
+              draft={text}
+              draftImages={draftImages}
+              supportsImages={!!availableModel?.image}
+              onError={notifyError}
+              onDraftLoaded={() => {
+                setText("");
+                setDraftImages([]);
+              }}
+              recoveredEdit={
+                recoveredEdit?.conversationId === current
+                  ? recoveredEdit
+                  : undefined
+              }
+              onRecoveredEditLoaded={() => setRecoveredEdit(undefined)}
+              onSend={sendText}
+              onEdit={async (messageId, text, images) => {
+                if (!current || !selection || !currentView?.branchId)
+                  throw new Error("MESSAGE_VERSION_MISSING");
+                const input = {
+                  conversationId: current,
+                  messageId,
+                  expectedBranchId: currentView.branchId,
+                  requestId: crypto.randomUUID(),
+                  text,
+                  images,
+                  selection,
+                };
+                await mutateMessage(() => api.invoke("editMessage", input));
+              }}
+              onSelectVersion={async (messageId, targetId) => {
+                if (!current || !currentView?.branchId)
+                  throw new Error("MESSAGE_VERSION_MISSING");
+                const input = {
+                  conversationId: current,
+                  messageId,
+                  targetId,
+                  expectedBranchId: currentView.branchId,
+                };
+                await mutateMessage(() =>
+                  api.invoke("selectMessageVersion", input),
                 );
-              },
-            }}
-          />
+              }}
+              onCancel={cancelCurrent}
+              modelMenu={{
+                data,
+                selection,
+                onChange: changeModel,
+                onManage: () => {
+                  setPage("settings");
+                  setSettingsSection(
+                    data.providers.some((p) => p.configured)
+                      ? "models"
+                      : "providers",
+                  );
+                },
+              }}
+            />
+          )}
         </>
       </main>
       <Dialog

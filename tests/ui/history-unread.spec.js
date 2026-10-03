@@ -85,6 +85,7 @@ test("history scrolls long titles with hints and marks only unseen completed rep
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(first.locator(".history-title-text")).toHaveCSS("animation-name", "none");
   await page.getByRole("button", { name: "Other history", exact: true }).click();
+  await expect(short).toHaveAttribute("aria-current", "page");
   await page.evaluate(() => window.historyEvent("a", "run-1", 1, "completed"));
   await expect(first.getByRole("img", { name: "Unread reply" })).toHaveCount(1);
   await page.locator(".chat-header").hover();
@@ -102,6 +103,7 @@ test("history scrolls long titles with hints and marks only unseen completed rep
   await first.locator(".conversation-open").click();
   await expect(page.locator(".conversation-unread")).toHaveCount(0);
   await page.getByRole("button", { name: "Other history", exact: true }).click();
+  await expect(short).toHaveAttribute("aria-current", "page");
   await page.evaluate(() => window.historyEvent("a", "run-1", 2, "completed"));
   await expect(page.locator(".conversation-unread")).toHaveCount(0);
   await page.evaluate(() => {
@@ -110,6 +112,7 @@ test("history scrolls long titles with hints and marks only unseen completed rep
   });
   await expect(page.locator(".conversation-unread")).toHaveCount(0);
   await first.locator(".conversation-open").click();
+  await expect(first.locator(".conversation-open")).toHaveAttribute("aria-current", "page");
   await page.evaluate(() => {
     window.historyEvent("a", "run-3", 1, "generating");
     window.historyEvent("a", "run-3", 2, "completed");
