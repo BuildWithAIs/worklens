@@ -4,12 +4,15 @@
 
 WorkLens is a desktop working agent built with Electron, React, TypeScript, Tailwind CSS, and Pi Agent.
 
-- `src/main/`: lifecycle, authentication, sessions, storage, and validation; service integrations live in `connectors/<service>/`.
-- `src/preload/`: typed Electron bridge; `src/shared/`: IPC and UI contracts.
-- `src/renderer/src/`: React components, styles, brand assets, and `i18n/locales/` translations.
-- `tests/`: unit/integration tests; `tests/e2e/`: Electron acceptance; `tests/ui/`: browser UI checks.
-- `resources/skills/`: bundled agent skills; `build/`: installer icons.
-- `website/`: separate website package with its own scripts and README.
+- `src/main/`: Electron lifecycle, providers and authentication, agent sessions, storage, validation, files and images, usage, skills, MCP, and Code Mode integration. Built-in service integrations live in `src/main/connectors/<service>/`.
+- `src/preload/`: typed Electron bridge; `src/shared/`: IPC and UI contracts plus shared data utilities.
+- `src/renderer/src/`: React UI, hooks, utilities, styles, brand assets, and `i18n/locales/` translations. Product components live in `components/worklens/`, with reusable UI in `components/ui/` and chat elements in `components/assistant-ui/`.
+- `tests/`: Vitest unit/integration tests and fixtures; `tests/connectors/`: service integration tests; `tests/e2e/`: Electron acceptance; `tests/ui/`: browser UI checks.
+- `resources/skills/`: resource directory for bundled agent skills; currently no skills are bundled. `build/`: application and installer icons.
+- `scripts/`: desktop development and production launch helpers.
+- `website/`: separate website package with its own dependencies, scripts, tests, and README.
+- `.github/workflows/`: CI workflows. Root configuration files define Electron/Vite builds, TypeScript, Vitest, and Playwright.
+- `dist/`, `release/`, and test-report directories are generated outputs; `reference/` contains ignored local reference clones.
 
 ## Build, Test, and Development Commands
 
@@ -32,7 +35,7 @@ Prettier is installed: `npx prettier --write <file>`. No dedicated lint script i
 
 ## UI Writing
 
-- Keep contributor and agent instructions here. `docs/` is for user-facing documentation; do not add internal writing guides or review reports there.
+- Keep contributor and agent instructions here.
 - Use concise, natural language and sentence case. Buttons use action verbs (`Save`, `Select models`); routine errors use `Couldn’t [action]` with a known recovery step. Do not invent causes or recovery guarantees.
 - Use periods for explanatory sentences, none for buttons/headings/short status labels, and `…` for ongoing actions. Preserve product names, interpolation variables, and locale plural forms.
 - Keep terminology consistent with the actual UI: `Choose model` selects the current chat model; the provider-level `Manage` button opens its model selection dialog (accessible name: `Manage models: {{provider}}`); `Manage models` in chat opens Models settings. Prefer `Select models to use in chats.` in instructions over introducing `chat menu` or `model picker`.
