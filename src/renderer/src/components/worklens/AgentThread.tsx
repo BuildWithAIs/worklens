@@ -68,6 +68,7 @@ import type {
 } from "../../../../shared/contracts";
 
 type Props = {
+  historyStartedAt?: number;
   recoveredEdit?: RecoveredEdit;
   onRecoveredEditLoaded: () => void;
   onConsentChange?: (view: ConversationView) => void;
@@ -454,6 +455,7 @@ const threadComponents = {
 };
 
 export function AgentThread({
+  historyStartedAt,
   recoveredEdit,
   onRecoveredEditLoaded,
   onConsentChange,
@@ -718,7 +720,11 @@ export function AgentThread({
           content: answer,
           status,
           metadata: {
-            custom: { sentAt, hasActivity: visibleActivity.length > 0, jevCalls: successfulJevCalls(turn.map(({ message }) => message)) },
+            custom: {
+              sentAt,
+              hasActivity: visibleActivity.length > 0,
+              jevCalls: successfulJevCalls(turn.map(({ message }) => message)),
+            },
           },
         });
       }
@@ -902,6 +908,7 @@ export function AgentThread({
             >
               <div className="agent-thread">
                 <Thread
+                  loadingStartedAt={historyStartedAt}
                   components={threadComponents}
                   footer={
                     <JevSessionAccess

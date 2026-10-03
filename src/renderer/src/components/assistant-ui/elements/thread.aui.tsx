@@ -29,7 +29,6 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { ModelMenu } from "@/components/worklens/ModelMenu";
 import { useModelMenuContext } from "@/components/worklens/model-menu-context";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -59,6 +58,7 @@ import {
   ChevronRightIcon,
   CopyIcon,
   DownloadIcon,
+  LoaderCircleIcon,
   MicIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -66,6 +66,7 @@ import {
   SquareIcon,
 } from "lucide-react";
 import {
+  startTransition,
   createContext,
   useContext,
   useEffect,
@@ -106,6 +107,7 @@ export type ThreadComponents = {
 };
 
 export type ThreadProps = {
+  loadingStartedAt?: number;
   components?: ThreadComponents | undefined;
   autoFocus?: boolean | undefined;
   footer?: ReactNode;
@@ -123,38 +125,49 @@ const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
   (!s.thread.isLoading || s.threads.isLoading);
 
-// A switched thread that is still fetching its history: skeleton, not welcome.
+// A switched thread that is still fetching its history must not show welcome.
 const isHistoryLoadingView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
   s.thread.isLoading &&
   !s.thread.isDisabled &&
   !s.threads.isLoading;
 
-const ThreadHistorySkeleton: FC = () => {
+export const ThreadLoadingIndicator: FC<{ startedAt?: number }> = ({
+  startedAt,
+}) => {
   const { t } = useAppTranslation();
+  const [mountedAt] = useState(() => performance.now());
+  const start = startedAt ?? mountedAt;
+  const [visibleFor, setVisibleFor] = useState(() =>
+    performance.now() - start >= 200 ? start : undefined,
+  );
+  useEffect(() => {
+    // Use the same deadline for history fetching and preparation so the icon
+    // does not disappear and reappear between those stages.
+    const timer = setTimeout(
+      () => setVisibleFor(start),
+      Math.max(0, start + 200 - performance.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [start]);
+  if (visibleFor !== start) return null;
   return (
     <div
-      data-slot="aui_thread-history-skeleton"
+      data-slot="thread-loading-indicator"
       role="status"
-      className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
+      className="text-muted-foreground absolute inset-0 flex items-center justify-center"
     >
+      <LoaderCircleIcon
+        aria-hidden="true"
+        className="size-4 animate-spin motion-reduce:animate-none"
+      />
       <span className="sr-only">{t("thread.loadingConversation")}</span>
-      <Skeleton className="ml-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
-      <div className="flex flex-col gap-y-2">
-        <Skeleton className="h-4 w-11/12 motion-reduce:animate-none" />
-        <Skeleton className="h-4 w-4/5 motion-reduce:animate-none" />
-        <Skeleton className="h-4 w-3/5 motion-reduce:animate-none" />
-      </div>
-      <Skeleton className="ml-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
-      <div className="flex flex-col gap-y-2">
-        <Skeleton className="h-4 w-10/12 motion-reduce:animate-none" />
-        <Skeleton className="h-4 w-2/3 motion-reduce:animate-none" />
-      </div>
     </div>
   );
 };
 
 export const Thread: FC<ThreadProps> = ({
+  loadingStartedAt,
   components = EMPTY_COMPONENTS,
   autoFocus = true,
   footer,
@@ -165,6 +178,7 @@ export const Thread: FC<ThreadProps> = ({
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadRoot
+        loadingStartedAt={loadingStartedAt}
         isEmpty={isEmpty}
         autoFocus={autoFocus}
         footer={footer}
@@ -175,16 +189,23 @@ export const Thread: FC<ThreadProps> = ({
 };
 
 const ThreadRoot: FC<{
+  loadingStartedAt?: number;
   isEmpty: boolean;
   autoFocus: boolean;
   footer?: ReactNode;
   afterMessages?: ReactNode;
-}> = ({ isEmpty, autoFocus, footer, afterMessages }) => {
+}> = ({ loadingStartedAt, isEmpty, autoFocus, footer, afterMessages }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
+  const messages = useAuiState((s) => s.thread.messages);
+  const fetchingHistory = useAuiState(isHistoryLoadingView);
+  const viewport = useRef<HTMLDivElement>(null);
+  const { first, ready } = useProgressiveHistory(messages.length, viewport);
+  const loading = fetchingHistory || !ready;
 
   return (
     <ThreadPrimitive.Root
-      className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
+      className="aui-root aui-thread-root bg-background @container relative flex h-full flex-col"
+      aria-busy={loading}
       style={{
         ["--thread-max-width" as string]: isEmpty ? "760px" : "880px",
         ["--composer-bg" as string]: "var(--color-card)",
@@ -192,10 +213,17 @@ const ThreadRoot: FC<{
         ["--composer-padding" as string]: "8px",
       }}
     >
+      {loading && <ThreadLoadingIndicator startedAt={loadingStartedAt} />}
       <ThreadPrimitive.Viewport
+        ref={viewport}
         turnAnchor="top"
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+        inert={loading}
+        aria-hidden={loading || undefined}
+        className={cn(
+          "relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll",
+          loading && "invisible",
+        )}
       >
         <div
           className={cn(
@@ -206,17 +234,12 @@ const ThreadRoot: FC<{
           <AuiIf condition={isNewChatView}>
             <Welcome />
           </AuiIf>
-          <AuiIf condition={isHistoryLoadingView}>
-            <ThreadHistorySkeleton />
-          </AuiIf>
 
           <div
             data-slot="aui_message-group"
             className="messages mb-14 flex w-full min-w-0 flex-col gap-y-6 empty:hidden"
           >
-            <ThreadPrimitive.Messages>
-              {() => <ThreadMessage />}
-            </ThreadPrimitive.Messages>
+            <ProgressiveThreadMessages first={first} />
             {afterMessages}
           </div>
 
@@ -252,6 +275,67 @@ const ThreadMessage: FC = () => {
   if (role === "user") return <UserMessage />;
   return <AssistantMessageComponent />;
 };
+
+const messageComponents = { Message: ThreadMessage };
+
+function useProgressiveHistory(
+  messageCount: number,
+  viewport: { current: HTMLDivElement | null },
+) {
+  const [start, setStart] = useState<number>();
+  const [ready, setReady] = useState(messageCount === 0);
+  const initialStart = Math.max(0, messageCount - 2);
+  const first = Math.min(start ?? initialStart, initialStart);
+  useEffect(() => {
+    if (start === undefined && messageCount) setStart(first);
+  }, [start, messageCount, first]);
+  useEffect(() => {
+    if (!first) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(() => {
+        startTransition(() => setStart(Math.max(0, first - 2)));
+      }, 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [first]);
+  useEffect(() => {
+    if (first || ready) return;
+    let frame = requestAnimationFrame(() => {
+      // Lay out and position hidden history before revealing it. Never animate
+      // the initial scroll through a conversation's old messages.
+      const element = viewport.current;
+      element?.scrollTo({ top: element.scrollHeight, behavior: "instant" });
+      frame = requestAnimationFrame(() => setReady(true));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [first, ready, viewport]);
+  return { first, ready };
+}
+
+function ProgressiveThreadMessages({ first }: { first: number }) {
+  const messages = useAuiState((s) => s.thread.messages);
+  // Start with the latest turn. Stable indices keep existing messages mounted
+  // as older turns are prepended, and leaving the thread cancels the next batch.
+  return (
+    <div
+      className="contents"
+      data-slot="progressive-history"
+      aria-busy={first > 0}
+    >
+      {messages.slice(first).map((_message, offset) => (
+        <ThreadPrimitive.MessageByIndex
+          key={first + offset}
+          index={first + offset}
+          components={messageComponents}
+        />
+      ))}
+    </div>
+  );
+}
 
 const ThreadScrollToBottom: FC = () => {
   const { t } = useAppTranslation();
@@ -766,7 +850,7 @@ const UserMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
       data-message-id={messageId}
-      className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
+      className="grid auto-rows-auto content-start gap-y-2 px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
     >
       <UserMessageAttachments />
