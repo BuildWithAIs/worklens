@@ -53,7 +53,9 @@ for (const language of ["en", "zh"])
       await expect(save).toBeDisabled();
       // New users are pointed at where keys come from; the link opens externally.
       await dialog
-        .getByRole("link", { name: t("Get a free API key", "免费获取 API key") })
+        .getByRole("link", {
+          name: t("Get a free API key", "免费获取 API key"),
+        })
         .click();
       expect(
         await page.evaluate(() =>
@@ -101,7 +103,10 @@ for (const language of ["en", "zh"])
       ).toBeVisible();
       await page.screenshot({ path: info.outputPath("tavily-connected.png") });
       await manage.click();
-      await expect(dialog.getByText(`${t("Plan", "套餐")}: dev`)).toBeVisible();
+      await expect(dialog.getByText("dev", { exact: true })).toBeVisible();
+      await expect(
+        dialog.getByText("56 / 1,000 Credits", { exact: true }),
+      ).toBeVisible();
       // A saved key can be re-tested without retyping it, but there is nothing
       // to save until something changes.
       await expect(dialog.locator("#tavily-token")).toHaveValue("");

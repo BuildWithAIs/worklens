@@ -124,10 +124,65 @@ test("exhausted body read failures are network errors", async () => {
   await expect(
     new TavilyHttp(snapshot(), fetcher as unknown as typeof fetch).request(
       "GET",
-      "/usage",
+      "/research/task-id",
     ),
   ).rejects.toMatchObject({ code: "network" });
   expect(fetcher).toHaveBeenCalledTimes(3);
+});
+
+test.each(["network", "body", "server"])(
+  "usage never retries a %s failure",
+  async (failure) => {
+    const fetcher = vi.fn(async () => {
+      if (failure === "network") throw new Error("offline");
+      if (failure === "body") return brokenBody();
+      return new Response(null, { status: 503 });
+    });
+    await expect(
+      new TavilyHttp(snapshot(), fetcher).request("GET", "/usage"),
+    ).rejects.toBeInstanceOf(Error);
+    expect(fetcher).toHaveBeenCalledOnce();
+  },
+);
+
+test.each(["120", null, "invalid", "0"])(
+  "usage rate limits preserve cooldown without retries: %s",
+  async (retryAfter) => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 429,
+          headers: retryAfter ? { "retry-after": retryAfter } : {},
+        }),
+    );
+    await expect(
+      new TavilyHttp(snapshot(), fetcher).request("GET", "/usage"),
+    ).rejects.toMatchObject({
+      code: "rate_limit",
+      data: {
+        status: 429,
+        retryAfterMs: retryAfter === "120" ? 120_000 : 600_000,
+      },
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+  },
+);
+
+test("usage accepts an HTTP-date Retry-After", async () => {
+  const now = Date.now();
+  const fetcher = vi.fn(
+    async () =>
+      new Response(null, {
+        status: 429,
+        headers: { "retry-after": new Date(now + 120_000).toUTCString() },
+      }),
+  );
+  const error = await new TavilyHttp(snapshot(), fetcher)
+    .request("GET", "/usage")
+    .catch((error) => error);
+  expect(error.data.retryAfterMs).toBeGreaterThan(118_000);
+  expect(error.data.retryAfterMs).toBeLessThanOrEqual(120_000);
+  expect(fetcher).toHaveBeenCalledOnce();
 });
 
 test("research creation body failure never retries", async () => {

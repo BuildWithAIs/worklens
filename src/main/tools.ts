@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { resolve, dirname, basename, join } from "node:path";
 import { homedir } from "node:os";
 import { Type } from "typebox";
+import { trackToolTask, waitForTool } from "./tool-wait";
 import { observeFileOutputs } from "./file-outputs";
 import {
   createWriteTool,
@@ -48,41 +49,47 @@ export class FileScheduler {
     waiting: () => void,
     execute: () => Promise<T>,
   ): Promise<T> {
-    const key = await this.key(path);
-    signal?.throwIfAborted();
-    await new Promise<void>((resolveWait, reject) => {
-      const queue = this.locks.get(key);
-      if (!queue) {
-        this.locks.set(key, []);
-        resolveWait();
-        return;
-      }
-      const waiter: Waiter = {
-        signal,
-        enter: () => {
-          signal?.removeEventListener("abort", waiter.abort);
-          resolveWait();
-        },
-        abort: () => {
-          const current = this.locks.get(key);
-          const index = current?.indexOf(waiter) ?? -1;
-          if (index >= 0) current!.splice(index, 1);
-          reject(new Error("等待文件资源时已取消"));
-        },
-      };
-      queue.push(waiter);
-      signal?.addEventListener("abort", waiter.abort, { once: true });
-      waiting();
-    });
-    try {
+    return trackToolTask(async () => {
+      const key = await this.key(path);
       signal?.throwIfAborted();
-      return await execute();
-    } finally {
-      const queue = this.locks.get(key);
-      const next = queue?.shift();
-      if (next) next.enter();
-      else this.locks.delete(key);
-    }
+      await waitForTool(
+        "resource",
+        () =>
+          new Promise<void>((resolveWait, reject) => {
+            const queue = this.locks.get(key);
+            if (!queue) {
+              this.locks.set(key, []);
+              resolveWait();
+              return;
+            }
+            const waiter: Waiter = {
+              signal,
+              enter: () => {
+                signal?.removeEventListener("abort", waiter.abort);
+                resolveWait();
+              },
+              abort: () => {
+                const current = this.locks.get(key);
+                const index = current?.indexOf(waiter) ?? -1;
+                if (index >= 0) current!.splice(index, 1);
+                reject(new Error("等待文件资源时已取消"));
+              },
+            };
+            queue.push(waiter);
+            signal?.addEventListener("abort", waiter.abort, { once: true });
+            waiting();
+          }),
+      );
+      try {
+        signal?.throwIfAborted();
+        return await execute();
+      } finally {
+        const queue = this.locks.get(key);
+        const next = queue?.shift();
+        if (next) next.enter();
+        else this.locks.delete(key);
+      }
+    });
   }
 }
 const scheduler = new FileScheduler();

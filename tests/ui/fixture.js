@@ -249,6 +249,7 @@ export async function mockWorklens(page, options = {}) {
           return structuredClone(data.tavily);
         }
         if (name === "tavilyRemove") { data.tavily = undefined; return; }
+        if (name === "tavilyUsage") return { usage: { plan: "dev", included: { used: 56, limit: 1000 }, fetchedAt: Date.now(), expiresAt: Date.now() + 300000 }, refreshAfter: Date.now() + 60000 };
         if (name === "tavilyTest") {
           if (!input.token) throw Error("请填写 Tavily API key");
           return "Tavily 已连接：dev";

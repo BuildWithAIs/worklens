@@ -109,6 +109,8 @@ export function toolProgress(
 ): string {
   const t = i18n.getFixedT(language);
   const name = message.toolName ?? "tool";
+  if (message.status === "waiting")
+    return t("activity.progress.waiting", { name });
   let args: Record<string, unknown> = {};
   try {
     args = JSON.parse(message.args ?? "{}");
@@ -145,6 +147,34 @@ export function toolProgress(
       ? `${compactDetail.slice(0, limit)}…`
       : compactDetail;
   return visibleDetail ? `${verb} · ${visibleDetail}` : verb;
+}
+
+export function toolWaitHint(
+  message: MessageView | undefined,
+  language: AppLanguage,
+) {
+  if (message?.status !== "waiting") return undefined;
+  return i18n.getFixedT(language)(
+    `activity.wait.${message.waitReason ?? "queue"}`,
+  );
+}
+
+/** Prefer real work over a queued sibling, including nested Code Mode calls. */
+export function activeProgressTool(messages: MessageView[]) {
+  const active = messages.filter(
+    (message) =>
+      message.role === "tool" &&
+      ["running", "waiting", "pending"].includes(message.status ?? ""),
+  );
+  const parents = new Set(
+    active.map((message) => message.parentToolCallId).filter(Boolean),
+  );
+  const leaves = active.filter(
+    (message) => !parents.has(message.toolId ?? message.id),
+  );
+  return (
+    leaves.findLast((message) => message.status !== "waiting") ?? leaves.at(-1)
+  );
 }
 
 // Presentation labels only; full arguments remain in toolProgress and tool details.
