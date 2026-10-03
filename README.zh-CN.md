@@ -18,7 +18,11 @@ WorkLens 是一款本地优先的工作 Agent，面向中大型企业的员工�
 
 ## MCP 与 Code Mode
 
-在 **设置 → MCP** 中填写 `mcpServers` JSON 配置，保存后点击「测试连接」。支持 stdio、Streamable HTTP、HTTP 请求头、已配置的模型服务商凭据，以及浏览器 OAuth 登录。配置和 OAuth 凭据使用操作系统加密存储；编辑器中的 `<saved>` 表示沿用同一服务已保存的值。请求头或环境变量中的 `${ENV_NAME}` 会在连接时读取对应环境变量。
+在 **设置 → 连接器 → MCP** 中点击「添加连接」。选择「手动配置」输入名称以及服务的 MCP 地址或本地程序信息，也可以选择「导入 JSON」导入 `mcpServers` 配置。名称使用 1–80 个英文字母、数字、`-` 或 `_`。导入会添加连接并保留已有连接，名称须对应不同的工具命名空间。添加后如需登录，请先登录，再打开「管理」并点击「测试连接」，每个连接可单独管理或删除。全局 Code Mode 开关位于「设置 → 通用 → 工具执行」，适用于内置工具和 MCP 工具。
+
+选择**远程服务**后，可从 Atlassian（Jira / Confluence 云版）、Notion、Linear、GitHub、Sentry 中选择，自动填入名称和官方 MCP 地址；**其他服务**支持手动填写地址。预设不代表已连接成功。[GitHub](https://github.com/github/github-mcp-server) 请在 Authorization 字段填写 `Bearer <个人访问令牌>`。其他预设在服务支持时使用浏览器登录，组织策略仍可能限制访问。
+
+支持 stdio、Streamable HTTP、HTTP 请求头、已配置的模型服务商凭据，以及浏览器 OAuth 登录。配置和 OAuth 凭据使用操作系统加密存储；JSON 编辑器中的 `<saved>` 表示沿用同一服务已保存的值。请求头或环境变量中的 `${ENV_NAME}` 会在连接时读取对应环境变量。
 
 ```json
 {

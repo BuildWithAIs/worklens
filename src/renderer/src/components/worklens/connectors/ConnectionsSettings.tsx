@@ -5,7 +5,7 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { BrandIcon, ProviderIcon } from "../ProviderIcon";
-import { Plus, Settings2 } from "lucide-react";
+import { CircleAlert, Plus, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,15 +34,15 @@ export function ConnectionsSettings({
   )?.Settings;
   const search = query.trim().toLocaleLowerCase();
   const groups = [
-    { id: "connected", label: t("common.connected"), connected: true },
-    { id: "available", label: t("common.available"), connected: false },
+    { id: "connected", label: t("common.connected"), added: true },
+    { id: "available", label: t("common.available"), added: false },
   ]
     .map((group) => ({
       ...group,
       platforms: connectorCatalog.filter((platform) => {
-        const configured = !!platform.connection?.(data)?.configured;
+        const added = !!platform.connection?.(data)?.url;
         return (
-          configured === group.connected &&
+          added === group.added &&
           `${platform.name} ${platform.keywords ?? ""}`
             .toLocaleLowerCase()
             .includes(search)
@@ -103,11 +103,17 @@ export function ConnectionsSettings({
                       {tagline && <Badge variant="outline">{tagline(t)}</Badge>}
                     </ItemTitle>
                     {connection?.(data)?.error && (
-                      <ItemDescription>
-                        {t("settingsFeedback.connectionNeedsAttention")}
+                      <ItemDescription className="text-[var(--warning)]">
+                        <span className="inline-flex items-center gap-1.5">
+                          <CircleAlert
+                            className="size-3.5 shrink-0"
+                            aria-hidden="true"
+                          />
+                          {t("settingsFeedback.connectionNeedsAttention")}
+                        </span>
                       </ItemDescription>
                     )}
-                    {group.connected && (
+                    {group.added && (
                       <ItemDescription className="settings-entry-description">
                         {connection?.(data)?.url}
                       </ItemDescription>
@@ -119,9 +125,9 @@ export function ConnectionsSettings({
                       size="sm"
                       disabled={!Settings}
                       onClick={() => setEditing(id)}
-                      aria-label={`${group.connected ? t("common.manage") : t("common.connect")} ${name}`}
+                      aria-label={`${group.added ? t("common.manage") : t("common.connect")} ${name}`}
                     >
-                      {group.connected ? (
+                      {group.added ? (
                         <Settings2
                           data-icon="inline-start"
                           aria-hidden="true"
@@ -129,9 +135,7 @@ export function ConnectionsSettings({
                       ) : (
                         <Plus data-icon="inline-start" aria-hidden="true" />
                       )}
-                      {group.connected
-                        ? t("common.manage")
-                        : t("common.connect")}
+                      {group.added ? t("common.manage") : t("common.connect")}
                     </Button>
                   </ItemActions>
                 </Item>

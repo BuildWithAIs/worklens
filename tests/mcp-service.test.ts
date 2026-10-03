@@ -7,6 +7,7 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { McpService } from "../src/main/mcp-service";
 import { installationId } from "../src/main/installation-id";
 import { schemas } from "../src/main/validation";
+import { requiredMcpCredentials } from "../src/renderer/src/components/worklens/mcp-configuration";
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -30,6 +31,80 @@ async function setup() {
   cleanup.push(() => service.shutdown());
   return { directory, service };
 }
+
+test("MCP editor credential checks match service rules for remote and local target changes", async () => {
+  const { service } = await setup();
+  service.save(
+    JSON.stringify({
+      mcpServers: {
+        remote: {
+          url: "https://example.invalid/mcp",
+          headers: {
+            Authorization: "Bearer synthetic",
+            "X-Workspace": "synthetic",
+          },
+          oauth: { clientId: "client", clientSecret: "synthetic" },
+        },
+        local: {
+          command: "node",
+          args: ["server.mjs"],
+          cwd: "/tmp",
+          env: { TOKEN: "synthetic" },
+        },
+      },
+    }),
+  );
+  const original = JSON.parse(service.snapshot().config);
+  const cases = [
+    {
+      name: "remote",
+      patch: { url: "https://example.invalid/new" },
+      fields: [
+        "headers.Authorization",
+        "headers.X-Workspace",
+        "oauth.clientSecret",
+      ],
+    },
+    {
+      name: "remote",
+      patch: { oauth: { clientId: "other", clientSecret: "<saved>" } },
+      fields: ["oauth.clientSecret"],
+    },
+    { name: "local", patch: { args: ["other.mjs"] }, fields: ["env.TOKEN"] },
+    { name: "local", patch: { cwd: "/tmp/other" }, fields: ["env.TOKEN"] },
+  ];
+  for (const { name, patch, fields } of cases) {
+    const next = structuredClone(original);
+    Object.assign(next.mcpServers[name], patch);
+    expect(
+      requiredMcpCredentials(next.mcpServers[name], original.mcpServers[name]),
+    ).toEqual(fields);
+    expect(() => service.save(JSON.stringify(next))).toThrow(/Re-enter/);
+  }
+  const unchanged = structuredClone(original);
+  unchanged.mcpServers.remote.url = "https://example.invalid:443/mcp";
+  expect(
+    requiredMcpCredentials(
+      unchanged.mcpServers.remote,
+      original.mcpServers.remote,
+    ),
+  ).toEqual([]);
+  expect(() => service.save(JSON.stringify(unchanged))).not.toThrow();
+  const replaced = structuredClone(original);
+  replaced.mcpServers.remote.url = "https://example.invalid/new";
+  replaced.mcpServers.remote.headers = {
+    Authorization: "Bearer synthetic-new",
+    "X-Workspace": "synthetic-new",
+  };
+  replaced.mcpServers.remote.oauth.clientSecret = "synthetic-new";
+  expect(
+    requiredMcpCredentials(
+      replaced.mcpServers.remote,
+      original.mcpServers.remote,
+    ),
+  ).toEqual([]);
+  expect(() => service.save(JSON.stringify(replaced))).not.toThrow();
+});
 
 test("MCP settings encrypt secrets, mask the editor and restore only for the same target", async () => {
   const { directory, service } = await setup();

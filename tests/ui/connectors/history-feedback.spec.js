@@ -33,7 +33,7 @@ for (const [service, name] of [
       .getByRole("button", { name: "Connectors", exact: true })
       .click();
     await page
-      .getByRole("button", { name: `Connect ${name}`, exact: true })
+      .getByRole("button", { name: `Manage ${name}`, exact: true })
       .click();
     await expect(page.getByRole("dialog", { name, exact: true })).toBeVisible();
     await expect(page.locator('[data-slot="toast-title"]')).toHaveCount(0);

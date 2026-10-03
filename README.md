@@ -22,7 +22,11 @@ Connect Tavily in **Settings → Connectors** with an API key to give the agent 
 
 ## MCP and Code Mode
 
-In **Settings → MCP**, add an `mcpServers` JSON configuration, save it, and use **Test connection**. WorkLens supports stdio and streamable HTTP servers, HTTP headers or provider credentials, and browser OAuth with a loopback callback. Saved settings and OAuth credentials use OS encryption. The editor shows `<saved>` for stored values; keep the placeholder to reuse a credential for the same server. Use `${ENV_NAME}` in headers and environment values to read an environment variable when connecting.
+In **Settings → Connectors → MCP**, choose **Add connection**. Use **Manual setup** to enter a name and the service’s MCP address or local program details, or use **Import JSON** to import an `mcpServers` configuration. Names use 1–80 letters, numbers, `-` or `_`. Importing adds connections and keeps existing ones; names must have distinct tool namespaces. After adding a connection, sign in if required, then open **Manage** and use **Test connection**. Each connection can be managed or deleted separately. The global Code Mode switch is in **Settings → General → Tool execution** and applies to built-in and MCP tools.
+
+For **Remote service**, choose Atlassian (Jira / Confluence Cloud), Notion, Linear, GitHub, or Sentry to prefill the name and official MCP address. **Other service** lets you enter a custom address. Presets do not confirm connectivity. For [GitHub](https://github.com/github/github-mcp-server), enter `Bearer <personal-access-token>` in the Authorization field. Other presets use browser sign-in where available; organization policies may apply.
+
+WorkLens supports stdio and streamable HTTP servers, HTTP headers or provider credentials, and browser OAuth with a loopback callback. Saved settings and OAuth credentials use OS encryption. The JSON editor shows `<saved>` for stored values; keep the placeholder to reuse a credential for the same server. Use `${ENV_NAME}` in headers and environment values to read an environment variable when connecting.
 
 ```json
 {

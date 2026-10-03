@@ -3,8 +3,11 @@ import { DisconnectConfirmation } from "./DisconnectConfirmation";
 import { toast } from "@/components/ui/toast";
 import { BackgroundEffect } from "./BackgroundEffect";
 import { BackgroundPreferences } from "./BackgroundPreferences";
-import { ConnectionsSettings } from "./connectors/ConnectionsSettings";
-import { McpSettings } from "./McpSettings";
+import {
+  ConnectorSettingsTabs,
+  type ConnectionTab,
+} from "./ConnectorSettingsTabs";
+import { CodeModeSetting } from "./CodeModeSetting";
 import { SkillsSettings } from "./skills/SkillsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
@@ -17,7 +20,6 @@ import {
   Info,
   Globe,
   LoaderCircle,
-  Network,
   Plus,
   RefreshCw,
   Settings2,
@@ -53,6 +55,7 @@ import { systemText } from "@/lib/system-text";
 import { languageTag, useAppTranslation } from "@/i18n";
 import type {
   Bootstrap,
+  McpSnapshot,
   ProviderInfo,
   Settings,
   ConversationView,
@@ -64,13 +67,13 @@ export type SettingsSection =
   | "providers"
   | "models"
   | "connections"
-  | "mcp"
   | "skills";
 type Props = {
   conversation?: ConversationView;
   onConsentChange?: (view: ConversationView) => void;
   data: Bootstrap;
   initialSection?: SettingsSection;
+  onMcpChange: (snapshot: McpSnapshot) => void;
   save: (patch: Partial<Settings>) => Promise<void>;
   refresh: () => Promise<Bootstrap>;
   onBack: () => void;
@@ -84,6 +87,7 @@ export function SettingsPage({
   data,
   initialSection = "general",
   save,
+  onMcpChange,
   refresh,
   onBack,
   onError,
@@ -94,6 +98,7 @@ export function SettingsPage({
     null,
   );
   const [section, setSection] = useState<SettingsSection>(initialSection);
+  const [connectionTab, setConnectionTab] = useState<ConnectionTab>("builtin");
   const [query, setQuery] = useState("");
   const [providerScope, setProviderScope] = useState("all");
   const [modelQuery, setModelQuery] = useState("");
@@ -224,10 +229,9 @@ export function SettingsPage({
       : t("settings.notConnected"));
   const nav = [
     { id: "general" as const, label: t("settings.general"), icon: Settings2 },
+    { id: "connections" as const, label: t("settings.connectors"), icon: Plug },
     { id: "providers" as const, label: t("settings.providers"), icon: Globe },
     { id: "models" as const, label: t("settings.models"), icon: Cpu },
-    { id: "connections" as const, label: t("settings.connectors"), icon: Plug },
-    { id: "mcp" as const, label: t("settings.mcp"), icon: Network },
     { id: "skills" as const, label: t("settings.skills"), icon: Sparkles },
   ];
   function providerRows(items: ProviderInfo[], isConnected: boolean) {
@@ -312,7 +316,10 @@ export function SettingsPage({
           settings={data.settings}
           edge
         />
-        <header className="settings-page-heading">
+        <header
+          className="settings-page-heading"
+          data-settings-section={section}
+        >
           <h1 data-slot="settings-page-title">
             {nav.find((n) => n.id === section)?.label}
           </h1>
@@ -619,18 +626,13 @@ export function SettingsPage({
               </>
             )}
             {section === "connections" && (
-              <ConnectionsSettings
+              <ConnectorSettingsTabs
+                tab={connectionTab}
+                onTabChange={setConnectionTab}
+                onMcpChange={onMcpChange}
                 data={data}
                 conversation={conversation}
                 onConsentChange={onConsentChange}
-                refresh={refresh}
-                onSuccess={onSuccess}
-              />
-            )}
-            {section === "mcp" && (
-              <McpSettings
-                data={data}
-                save={save}
                 refresh={refresh}
                 onSuccess={onSuccess}
               />
@@ -706,6 +708,10 @@ export function SettingsPage({
                     />
                   </ItemGroup>
                 </section>
+                <CodeModeSetting
+                  enabled={data.settings.codemodeEnabled !== false}
+                  save={save}
+                />
                 <section className="settings-section">
                   <h2
                     data-slot="settings-section-title"
