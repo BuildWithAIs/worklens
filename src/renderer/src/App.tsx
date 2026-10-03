@@ -794,6 +794,9 @@ export function App() {
               onConsentChange={acceptView}
               initialSection={settingsSection}
               save={settings}
+              onMcpChange={(mcp) =>
+                setData((current) => (current ? { ...current, mcp } : current))
+              }
               refresh={refresh}
               onBack={() => setPage("chat")}
               onError={notifyError}

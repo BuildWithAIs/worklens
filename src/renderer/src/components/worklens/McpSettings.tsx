@@ -1,30 +1,81 @@
 import { useEffect, useRef, useState } from "react";
+import { LoaderCircle, Network, Plus, Settings2 } from "lucide-react";
+import { toast } from "@/components/ui/toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item";
 import { useAppTranslation } from "@/i18n";
-import type { Bootstrap, Settings } from "../../../../shared/contracts";
+import type { Bootstrap, McpSnapshot } from "../../../../shared/contracts";
+import { SearchInput } from "./SearchInput";
+import { McpConnectionDialog } from "./McpConnectionDialog";
+import { settingsFailure } from "./settings-notification";
+import {
+  mcpEndpoint,
+  parseMcpImport,
+  readMcpConfiguration,
+  type McpConnectionConfig,
+} from "./mcp-configuration";
 
-const empty = '{\n  "mcpServers": {}\n}';
 export function McpSettings({
   data,
-  save,
-  refresh,
+  onMcpChange,
   onSuccess,
 }: {
   data: Bootstrap;
-  save: (patch: Partial<Settings>) => Promise<void>;
-  refresh: () => Promise<unknown>;
+  onMcpChange: (snapshot: McpSnapshot) => void;
   onSuccess: (message: string) => void;
 }) {
-  const { t } = useAppTranslation();
-  const [config, setConfig] = useState(data.mcp?.config ?? empty);
+  const { t, language } = useAppTranslation();
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState<{ id: string; adding: boolean }>();
   const [busy, setBusy] = useState<string>();
-  const [error, setError] = useState("");
+  const acting = useRef(false);
+  const cancelRequested = useRef(false);
+  const [results, setResults] = useState<
+    Record<string, { config: string; tools: number }>
+  >({});
   const [url, setUrl] = useState("");
   const loginId = useRef<string | undefined>(undefined);
+  const reportedError = useRef<string | undefined>(undefined);
+  const servers = data.mcp?.servers ?? [];
+  const configuration = readMcpConfiguration(data.mcp?.config);
+
+  const search = query.trim().toLocaleLowerCase();
+  const filteredServers = servers.filter((server) =>
+    `${server.name} ${mcpEndpoint(configuration.mcpServers[server.name])}`
+      .toLocaleLowerCase()
+      .includes(search),
+  );
+
   useEffect(() => {
-    setConfig(data.mcp?.config ?? empty);
-  }, [data.mcp?.config]);
+    const error = data.mcp?.error;
+    if (error && error !== reportedError.current)
+      toast.add(
+        settingsFailure(
+          t("mcp.loadFailed"),
+          error,
+          language,
+          false,
+          t("settingsFeedback.mcpUnknown"),
+        ),
+      );
+    reportedError.current = error;
+  }, [data.mcp?.error, language, t]);
+
   useEffect(
     () =>
       window.worklens.onAuth((step) => {
@@ -42,202 +93,392 @@ export function McpSettings({
     },
     [],
   );
+
   async function act(
     key: string,
     operation: () => Promise<unknown>,
     message?: string,
   ) {
-    if (busy) return;
+    if (acting.current) return false;
+    acting.current = true;
+    cancelRequested.current = false;
     setBusy(key);
-    setError("");
     try {
       await operation();
-      await refresh();
       if (message) onSuccess(message);
-    } catch (failure) {
+      return true;
+    } catch (error) {
       const operation = key.split(":")[0];
-      setError(
-        `${t(operation === "test" ? "mcp.testFailed" : operation === "login" ? "mcp.loginFailed" : operation === "logout" ? "mcp.logoutFailed" : "mcp.actionFailed")} ${String(failure)}`,
+      if (operation === "login" && cancelRequested.current) return false;
+      toast.add(
+        settingsFailure(
+          t(
+            operation === "test"
+              ? "mcp.testFailed"
+              : operation === "login"
+                ? "mcp.loginFailed"
+                : operation === "logout"
+                  ? "mcp.logoutFailed"
+                  : "mcp.actionFailed",
+            { name: key.slice(key.indexOf(":") + 1) },
+          ),
+          String(error),
+          language,
+          false,
+          t("settingsFeedback.mcpUnknown"),
+        ),
       );
+      return false;
     } finally {
+      acting.current = false;
       setBusy(undefined);
       setUrl("");
       loginId.current = undefined;
     }
   }
-  return (
-    <section className="settings-section" data-mcp-settings>
-      <h2 data-slot="settings-section-title" className="settings-group-bar">
-        {t("mcp.title")}
-      </h2>
-      <div className="py-3">
-        <div className="flex items-center justify-between gap-4">
-          <label htmlFor="codemode-enabled" className="text-sm font-medium">
-            {t("mcp.codemode")}
-          </label>
-          <Switch
-            id="codemode-enabled"
-            aria-label={t("mcp.codemode")}
-            checked={data.settings.codemodeEnabled !== false}
-            disabled={!!busy}
-            onCheckedChange={(enabled) =>
-              void act("codemode", () => save({ codemodeEnabled: enabled }))
-            }
-          />
-        </div>
-        <p className="text-sm leading-6 text-muted-foreground mt-2">
-          {t("mcp.codemodeExplanation")}
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          {t("mcp.codemodeDescription")}
-        </p>
-      </div>
-      <p className="text-sm text-muted-foreground mb-3">
-        {t("mcp.description")}
-      </p>
-      <label htmlFor="mcp-config" className="text-sm font-medium">
-        {t("mcp.configuration")}
-      </label>
-      <textarea
-        id="mcp-config"
-        className="w-full min-h-56 rounded-md border bg-background p-3 font-mono text-xs my-2"
-        value={config}
-        spellCheck={false}
-        disabled={!!busy}
-        onChange={(event) => setConfig(event.target.value)}
-      />
-      <p className="text-sm text-muted-foreground mb-3">
-        {t("mcp.credentialsHint")}
-      </p>
-      <Button
-        variant="outline"
-        disabled={!!busy || config === (data.mcp?.config ?? empty)}
-        onClick={() =>
-          void act(
-            "save",
-            () => window.worklens.invoke("mcpSave", { config }),
-            t("mcp.saved"),
-          )
-        }
-      >
-        {busy === "save" ? t("mcp.saving") : t("common.save")}
+  const openEditor = (id?: string) => {
+    setEditing({ id: id ?? `mcp-${crypto.randomUUID()}`, adding: !id });
+  };
+  async function importConnections(raw: string, operationId: string) {
+    return act(
+      `import:${operationId}`,
+      async () => {
+        const next = readMcpConfiguration(data.mcp?.config);
+        const imported = parseMcpImport(raw, Object.keys(next.mcpServers));
+        if ("error" in imported)
+          throw new Error(
+            t(`mcp.${imported.error}`, { name: imported.name ?? "" }),
+          );
+        next.mcpServers = { ...next.mcpServers, ...imported.servers };
+        onMcpChange(
+          await window.worklens.invoke("mcpSave", {
+            config: JSON.stringify(next),
+          }),
+        );
+      },
+      t("mcp.saved"),
+    );
+  }
+  const clearResult = (id: string) =>
+    setResults((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  async function saveConnection(
+    id: string,
+    connection: McpConnectionConfig,
+    operationId = id,
+  ) {
+    let saved: McpConnectionConfig | undefined;
+    await act(
+      `save:${operationId}`,
+      async () => {
+        const next = readMcpConfiguration(data.mcp?.config);
+        next.mcpServers = { ...next.mcpServers, [id]: connection };
+        const snapshot = await window.worklens.invoke("mcpSave", {
+          config: JSON.stringify(next),
+        });
+        onMcpChange(snapshot);
+        saved = readMcpConfiguration(snapshot.config).mcpServers[id];
+        clearResult(id);
+      },
+      t("mcp.saved"),
+    );
+    return saved;
+  }
+  async function removeConnection(id: string) {
+    return act(
+      `remove:${id}`,
+      async () => {
+        const next = readMcpConfiguration(data.mcp?.config);
+        delete next.mcpServers[id];
+        // Removing a configuration does not revoke the account's OAuth login.
+        onMcpChange(
+          await window.worklens.invoke("mcpSave", {
+            config: JSON.stringify(next),
+          }),
+        );
+        clearResult(id);
+      },
+      t("mcp.removed"),
+    );
+  }
+  function testConnection(id: string) {
+    return act(
+      `test:${id}`,
+      async () => {
+        clearResult(id);
+        const result = await window.worklens.invoke("mcpTest", { name: id });
+        setResults((current) => ({
+          ...current,
+          [id]: {
+            config: JSON.stringify(configuration.mcpServers[id]),
+            tools: result.tools,
+          },
+        }));
+      },
+      t("settingsFeedback.modelConnected", { service: id }),
+    );
+  }
+  function signIn(id: string) {
+    return act(
+      `login:${id}`,
+      async () => {
+        const login = crypto.randomUUID();
+        loginId.current = login;
+        await window.worklens.invoke("mcpLogin", { name: id, loginId: login });
+        if (data.mcp)
+          onMcpChange({
+            ...data.mcp,
+            servers: servers.map((server) =>
+              configuration.mcpServers[server.name]?.url &&
+              new URL(configuration.mcpServers[server.name].url!).href ===
+                new URL(configuration.mcpServers[id].url!).href
+                ? { ...server, signedIn: true }
+                : server,
+            ),
+          });
+        clearResult(id);
+      },
+      t("mcp.signedIn"),
+    );
+  }
+  const resultFor = (id: string) => {
+    const result = results[id];
+    return result &&
+      result.config === JSON.stringify(configuration.mcpServers[id])
+      ? t("mcp.tested", { count: result.tools })
+      : undefined;
+  };
+  function cancelSignIn() {
+    if (!loginId.current || cancelRequested.current) return;
+    cancelRequested.current = true;
+    void window.worklens
+      .invoke("authCancel", { loginId: loginId.current })
+      .catch((error) => {
+        cancelRequested.current = false;
+        toast.add(
+          settingsFailure(
+            t("mcp.cancelFailed"),
+            String(error),
+            language,
+            false,
+            t("settingsFeedback.mcpUnknown"),
+          ),
+        );
+      });
+  }
+  const loginButtons = (
+    <>
+      <Button variant="outline" onClick={cancelSignIn}>
+        {t("common.cancel")}
       </Button>
-      <p className="text-sm text-muted-foreground mt-2">
-        {t("mcp.nextMessage")}
-      </p>
-      {(error || data.mcp?.error) && (
-        <p role="alert" className="text-sm text-destructive mt-3">
-          {error || data.mcp?.error}
-        </p>
+      {url && (
+        <Button
+          onClick={() =>
+            void window.worklens
+              .invoke("external", { url })
+              .catch((error) =>
+                toast.add(
+                  settingsFailure(
+                    t("settingsFeedback.browserFailed"),
+                    String(error),
+                    language,
+                    false,
+                    t("settingsFeedback.mcpUnknown"),
+                  ),
+                ),
+              )
+          }
+        >
+          {t("mcp.openBrowser")}
+        </Button>
       )}
-      <ul className="divide-y mt-4">
-        {(data.mcp?.servers ?? []).map((server) => (
-          <li
-            key={server.name}
-            className="py-3 flex flex-wrap items-center justify-between gap-3"
-          >
-            <div>
-              <span className="text-sm font-medium">{server.name}</span>
-              <p className="text-xs text-muted-foreground">
-                {server.enabled ? t("mcp.enabled") : t("mcp.disabled")} ·{" "}
-                {server.transport === "http" ? "HTTP" : "stdio"} ·{" "}
-                {server.exposure}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!!busy}
-                onClick={() =>
-                  void act(`test:${server.name}`, async () => {
-                    const result = await window.worklens.invoke("mcpTest", {
-                      name: server.name,
-                    });
-                    onSuccess(t("mcp.connected", { count: result.tools }));
-                  })
-                }
-              >
-                {busy === `test:${server.name}`
-                  ? t("mcp.testing")
-                  : t("mcp.test")}
-              </Button>
-              {server.oauth && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!!busy}
-                  onClick={() =>
-                    void act(
-                      `login:${server.name}`,
-                      () => {
-                        const id = crypto.randomUUID();
-                        loginId.current = id;
-                        return window.worklens.invoke("mcpLogin", {
-                          name: server.name,
-                          loginId: id,
-                        });
-                      },
-                      t("mcp.signedIn"),
-                    )
-                  }
-                >
-                  {t("mcp.signIn")}
-                </Button>
-              )}
-              {server.signedIn && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!!busy}
-                  onClick={() =>
-                    void act(
-                      `logout:${server.name}`,
-                      () =>
-                        window.worklens.invoke("mcpLogout", {
-                          name: server.name,
-                        }),
-                      t("mcp.signedOut"),
-                    )
-                  }
-                >
-                  {t("mcp.signOut")}
-                </Button>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-      {busy?.startsWith("login:") && (
-        <div className="flex items-center gap-2 mt-3">
-          <span className="text-sm">{t("mcp.signingIn")}</span>
-          {url && (
+    </>
+  );
+  const loginActions = busy?.startsWith("login:") && (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) cancelSignIn();
+      }}
+    >
+      <DialogContent className="settings-dialog settings-disconnect-dialog">
+        <DialogHeader>
+          <DialogTitle>
+            {t("mcp.signInTitle", { name: busy.slice("login:".length) })}
+          </DialogTitle>
+          <DialogDescription className="flex items-center gap-2">
+            <LoaderCircle
+              className="size-4 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            {t("mcp.signingIn")}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>{loginButtons}</DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  return (
+    <div data-mcp-settings>
+      <div className="settings-toolbar">
+        <SearchInput
+          value={query}
+          onValueChange={setQuery}
+          placeholder={t("mcp.searchPlaceholder")}
+          aria-label={t("mcp.search")}
+        />
+      </div>
+      <section className="settings-section">
+        <div className="settings-mcp-heading">
+          <h2 className="settings-group-bar" data-slot="settings-section-title">
+            {t("common.connected")}
+            <span className="settings-group-count" aria-hidden="true">
+              {filteredServers.length}
+            </span>
+          </h2>
+          {servers.length > 0 && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                void window.worklens
-                  .invoke("external", { url })
-                  .catch((failure) => setError(String(failure)))
-              }
+              disabled={!!busy}
+              onClick={() => openEditor()}
             >
-              {t("mcp.openBrowser")}
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              {t("mcp.add")}
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (loginId.current)
-                void window.worklens
-                  .invoke("authCancel", { loginId: loginId.current })
-                  .catch((failure) => setError(String(failure)));
-            }}
-          >
-            {t("common.cancel")}
-          </Button>
         </div>
+        {servers.length === 0 ? (
+          <div className="settings-list settings-mcp-empty">
+            <Network
+              className="size-6 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="text-sm font-medium">{t("mcp.emptyTitle")}</p>
+            <p className="text-sm leading-6 text-muted-foreground max-w-sm">
+              {t("mcp.emptyDescription")}
+            </p>
+            <Button
+              variant="outline"
+              disabled={!!busy}
+              onClick={() => openEditor()}
+            >
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              {t("mcp.add")}
+            </Button>
+          </div>
+        ) : filteredServers.length === 0 ? (
+          <p className="settings-empty">{t("mcp.noResults")}</p>
+        ) : (
+          <ItemGroup className="settings-list settings-connection-list">
+            {filteredServers.map((server) => {
+              const connection = configuration.mcpServers[server.name];
+              const name = server.name;
+              const result = resultFor(server.name);
+              return (
+                <Item
+                  key={server.name}
+                  role="listitem"
+                  size="sm"
+                  className="settings-entry"
+                  data-mcp-connection={server.name}
+                >
+                  <ItemContent className="settings-entry-copy">
+                    <ItemTitle className="settings-entry-title">
+                      <Network className="size-4 shrink-0" aria-hidden="true" />
+                      <span>{name}</span>
+                    </ItemTitle>
+                    <ItemDescription className="settings-entry-description">
+                      {t(server.enabled ? "mcp.enabled" : "mcp.disabled")} ·{" "}
+                      {t(
+                        server.transport === "http"
+                          ? "mcp.remote"
+                          : "mcp.local",
+                      )}
+                      {mcpEndpoint(connection) && (
+                        <span className="block">{mcpEndpoint(connection)}</span>
+                      )}
+                    </ItemDescription>
+                    {result && (
+                      <p
+                        className="text-xs text-muted-foreground"
+                        role="status"
+                      >
+                        {result}
+                      </p>
+                    )}
+                  </ItemContent>
+                  <ItemActions className="settings-entry-actions flex-wrap">
+                    {server.oauth && !server.signedIn && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!!busy}
+                        onClick={() => void signIn(server.name)}
+                        aria-label={t("mcp.signInNamed", { name })}
+                      >
+                        {t("mcp.signIn")}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!!busy}
+                      onClick={() => openEditor(server.name)}
+                      aria-label={t("mcp.manageNamed", { name })}
+                    >
+                      <Settings2 data-icon="inline-start" aria-hidden="true" />
+                      {t("common.manage")}
+                    </Button>
+                  </ItemActions>
+                </Item>
+              );
+            })}
+          </ItemGroup>
+        )}
+        {!editing && loginActions}
+      </section>
+      {editing && (
+        <McpConnectionDialog
+          key={editing.id}
+          adding={editing.adding}
+          connection={configuration.mcpServers[editing.id]}
+          name={editing.adding ? "" : editing.id}
+          names={servers.map((server) => server.name)}
+          server={servers.find((server) => server.name === editing.id)}
+          busy={busy}
+          result={resultFor(editing.id)}
+          loginActions={loginActions}
+          onSave={(connection, name) =>
+            saveConnection(name, connection, editing.id)
+          }
+          onImport={(raw) => importConnections(raw, editing.id)}
+          onRemove={() => removeConnection(editing.id)}
+          onTest={() => testConnection(editing.id)}
+          onSignIn={() => void signIn(editing.id)}
+          onSignOut={() =>
+            void act(
+              `logout:${editing.id}`,
+              async () => {
+                onMcpChange(
+                  await window.worklens.invoke("mcpLogout", {
+                    name: editing.id,
+                  }),
+                );
+                clearResult(editing.id);
+              },
+              t("mcp.signedOut"),
+            )
+          }
+          onClose={() => {
+            setEditing(undefined);
+          }}
+        />
       )}
-    </section>
+    </div>
   );
 }

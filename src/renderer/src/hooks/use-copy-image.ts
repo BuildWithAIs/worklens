@@ -41,9 +41,13 @@ export function useCopyImage(source?: string) {
       if (!controller.signal.aborted) {
         setIsCopied(true);
         timer.current = setTimeout(() => setIsCopied(false), 3000);
+        return "copied" as const;
       }
     } catch {
-      if (!controller.signal.aborted) setError(true);
+      if (!controller.signal.aborted) {
+        setError(true);
+        return "failed" as const;
+      }
     } finally {
       lease?.release();
       if (active.current === controller) {

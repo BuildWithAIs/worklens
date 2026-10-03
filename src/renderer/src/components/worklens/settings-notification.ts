@@ -7,13 +7,30 @@ export function settingsErrorDescription(
   message: string,
   language: AppLanguage,
   token = false,
+  fallback?: string,
 ) {
   const t = i18n.getFixedT(language);
-  const clean = message
-    .replace(/^Error:\s*/, "")
-    .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, "");
+  const clean = message.replace(
+    /^(?:Error:\s*|Error invoking remote method '[^']+':\s*)+/,
+    "",
+  );
   const english = systemText(clean, "en");
   const patterns: [RegExp, keyof typeof en.settingsFeedback][] = [
+    [
+      /OAuth dynamic client registration failed with status 403/i,
+      "oauthClientRejected",
+    ],
+    [
+      /OAuthRegistrationError|OAuth dynamic client registration failed/i,
+      "oauthRegistration",
+    ],
+    [/^Sign in to this MCP server first/, "mcpSignIn"],
+    [/^Sign in to the selected provider first/, "providerSignIn"],
+    [/^Enter valid MCP JSON|^Invalid MCP configuration/, "mcpConfiguration"],
+    [
+      /^Re-enter credentials after changing the server|^Re-enter the OAuth client secret/,
+      "mcpCredentials",
+    ],
     [/read or decrypt|Unrecognized credential/i, "unreadable"],
     [/secure storage/i, "secureStorage"],
     [
@@ -46,13 +63,14 @@ export function settingsErrorDescription(
       const parsed = JSON.parse(clean);
       const reason = parsed?.error?.message ?? parsed?.message;
       if (typeof reason === "string" && reason !== clean)
-        return settingsErrorDescription(reason, language, token);
+        return settingsErrorDescription(reason, language, token, fallback);
     } catch {
       /* malformed serialized error */
     }
     return t("settingsFeedback.unknown");
   }
   return (
+    fallback ||
     systemText(clean.split(/\n\s*at /)[0], language) ||
     t("settingsFeedback.unknown")
   );
@@ -64,12 +82,13 @@ export function settingsFailure(
   message: string,
   language: AppLanguage,
   token = false,
+  fallback?: string,
 ) {
   return {
     type: "error" as const,
     timeout: 0,
     priority: "high" as const,
     title,
-    description: settingsErrorDescription(message, language, token),
+    description: settingsErrorDescription(message, language, token, fallback),
   };
 }

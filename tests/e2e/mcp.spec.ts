@@ -57,49 +57,107 @@ for (const packaged of [false, true])
       await page
         .getByRole("button", { name: "Connectors", exact: true })
         .click();
-      await expect(page.locator("[data-mcp-settings]")).toHaveCount(0);
-      await page
-        .locator(".settings-navigation")
-        .getByRole("button", { name: "MCP", exact: true })
-        .click();
-      await expect(page.locator('[data-section="mcp"]')).toBeVisible();
+      await expect(page.locator("[data-mcp-settings]")).not.toBeVisible();
+      await page.getByRole("tab", { name: "MCP", exact: true }).click();
+      await expect(page.locator('[data-section="connections"]')).toBeVisible();
       const section = page.locator("[data-mcp-settings]");
-      await expect(section.getByText(/no programming is needed/)).toBeVisible();
-      await expect(
-        section.getByText(
-          "Let the agent combine tool calls in JavaScript workflows.",
-          { exact: true },
-        ),
-      ).toBeVisible();
-      await section.locator("#mcp-config").fill(
-        JSON.stringify(
-          {
-            mcpServers: {
-              fixture: {
-                command: process.execPath,
-                args: [resolve("tests/fixtures/mcp-server.mjs")],
-                env: {
-                  TOKEN: "synthetic-mcp-secret",
-                  ELECTRON_RUN_AS_NODE: "1",
-                },
-              },
-            },
-          },
-          null,
-          2,
-        ),
-      );
-      await section.getByRole("button", { name: "Save", exact: true }).click();
-      await expect(section.locator("#mcp-config")).toHaveValue(/<saved>/);
-      await expect(section.locator("#mcp-config")).not.toHaveValue(
+      await expect(section.locator("#mcp-config")).not.toBeVisible();
+      await section
+        .getByRole("button", { name: "Add connection", exact: true })
+        .click();
+      const editor = page.getByRole("dialog", {
+        name: "Add connection",
+        exact: true,
+      });
+      await expect(editor).toHaveCSS("-webkit-app-region", "no-drag");
+      await editor.locator("#mcp-name").fill("unsaved-draft");
+      await editor.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(editor).not.toBeVisible();
+      await section
+        .getByRole("button", { name: "Add connection", exact: true })
+        .click();
+      await expect(editor.locator("#mcp-name")).toHaveValue("");
+      await editor
+        .getByRole("textbox", { name: "Connection name", exact: true })
+        .fill("fixture");
+      await editor
+        .getByRole("combobox", { name: "Connection type", exact: true })
+        .selectOption("stdio");
+      await editor
+        .getByRole("textbox", { name: "Program to run", exact: true })
+        .fill(process.execPath);
+      await editor
+        .getByRole("textbox", { name: "Arguments (optional)", exact: true })
+        .fill(resolve("tests/fixtures/mcp-server.mjs"));
+      await editor.locator("summary").click();
+      await editor
+        .getByRole("textbox", { name: "JSON options", exact: true })
+        .fill(
+          JSON.stringify({
+            env: { TOKEN: "synthetic-mcp-secret", ELECTRON_RUN_AS_NODE: "1" },
+          }),
+        );
+      await editor
+        .getByRole("button", { name: "Add connection", exact: true })
+        .click();
+      await expect(editor).not.toBeVisible();
+      await section
+        .getByRole("button", {
+          name: "Manage connection: fixture",
+          exact: true,
+        })
+        .click();
+      const managed = page.getByRole("dialog", {
+        name: "Manage connection: fixture",
+        exact: true,
+      });
+      await managed.locator("summary").click();
+      await expect(managed.locator("#mcp-options")).toHaveValue(/<saved>/);
+      await expect(managed.locator("#mcp-options")).not.toHaveValue(
         /synthetic-mcp-secret/,
       );
+      await managed
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
       await section
+        .getByRole("button", { name: "Add connection", exact: true })
+        .click();
+      await editor
+        .getByRole("tab", { name: "Import JSON", exact: true })
+        .click();
+      await editor.locator("#mcp-import").fill(
+        JSON.stringify({
+          mcpServers: {
+            "json-fixture": {
+              command: process.execPath,
+              args: [resolve("tests/fixtures/mcp-server.mjs")],
+              env: {
+                TOKEN: "synthetic-import-secret",
+                ELECTRON_RUN_AS_NODE: "1",
+              },
+              enabled: false,
+            },
+          },
+        }),
+      );
+      await editor
+        .getByRole("button", { name: "Import connections", exact: true })
+        .click();
+      await expect(editor).not.toBeVisible();
+      await expect(section.locator("[data-mcp-connection]")).toHaveCount(2);
+      await section
+        .getByRole("button", {
+          name: "Manage connection: fixture",
+          exact: true,
+        })
+        .click();
+      await managed
         .getByRole("button", { name: "Test connection", exact: true })
         .click();
-      await expect(
-        page.getByText("Connected. 3 tools available."),
-      ).toBeVisible();
+      await expect(managed.getByRole("status")).toHaveText(
+        "Last test passed · 3 tools available",
+      );
+      await managed.getByRole("button", { name: "Close", exact: true }).click();
       await expect(section.getByRole("alert")).toHaveCount(0);
       await page.screenshot({
         path: `test-results/mcp-${packaged ? "packaged" : "electron"}.png`,
@@ -208,6 +266,7 @@ for (const packaged of [false, true])
       );
       expect(saved.mcp?.servers).toEqual([
         expect.objectContaining({ name: "fixture", enabled: true }),
+        expect.objectContaining({ name: "json-fixture", enabled: false }),
       ]);
       const restored = await page.evaluate(
         (id) => window.worklens.invoke("open", { id }),

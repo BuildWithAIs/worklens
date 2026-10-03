@@ -1,16 +1,88 @@
 const en = {
   mcp: {
-    title: "MCP servers",
-    codemode: "Code Mode",
-    codemodeExplanation:
-      "WorkLens can combine several steps to complete a task, such as gathering recruiting information or organizing expense records. Describe the result you want; no programming is needed. Available actions depend on your connected services and tools.",
-    codemodeDescription:
-      "Let the agent combine tool calls in JavaScript workflows.",
+    searchPlaceholder: "Search connections…",
+    search: "Search connections",
+    noResults: "No connections match your search.",
+    add: "Add connection",
+    emptyTitle: "No connections configured",
+    emptyDescription: "Add a connection using the service’s MCP configuration.",
+    addDescription: "Use the service’s MCP configuration.",
+    editorDescription: "Update this connection’s configuration.",
+    name: "Connection name",
+    nameHint: "Letters, numbers, - or _ (max. 80).",
+    nameFixed:
+      "This name identifies the connection’s tools and cannot be changed.",
+    nameInvalid: "Use 1–80 letters, numbers, - or _.",
+    nameRequired: "Enter a connection name.",
+    nameDuplicate: "Choose another name. This tool name is already in use.",
+    connectionType: "Connection type",
+    service: "Service",
+    otherService: "Other service",
+    services: {
+      atlassian: "Atlassian (Jira / Confluence Cloud)",
+      notion: "Notion",
+      linear: "Linear",
+      github: "GitHub",
+      sentry: "Sentry",
+    },
+    githubTokenHint: "Enter Bearer followed by a GitHub personal access token.",
+    remote: "Remote service",
+    local: "Local program",
+    url: "MCP server address",
+    urlInvalid: "Enter an HTTPS address, or an HTTP address on localhost.",
+    token: "Authorization header (optional)",
+    tokenRequired: "Authorization header",
+    tokenHint: "Enter Bearer <token>, or leave blank for browser sign-in.",
+    tokenKeep:
+      "Keep unchanged to reuse. Replace to update, or clear to remove.",
+    command: "Program to run",
+    commandRequired: "Enter the program name or path.",
+    arguments: "Arguments (optional)",
+    argumentsHint: "One argument per line, without shell quotes.",
+    useConnection: "Enable connection",
+    additionalOptions: "Advanced",
+    options: "JSON options",
+    optionsHint: "For env, headers and other options not shown above.",
+    authorizationInOptions:
+      "Edit Authorization in the field above. Remove it from JSON options.",
+    authorizationRequired:
+      "The server address changed. Re-enter the full Authorization header value.",
+    credentialsRequired:
+      "Re-enter saved values for: {{fields}}. They cannot be reused with these connection details.",
+    optionsInvalid:
+      "Enter a JSON object containing only additional fields, such as env or headers.",
+    manageNamed: "Manage connection: {{name}}",
+    signInNamed: "Sign in: {{name}}",
+    tested_one: "Last test passed · {{count}} tool available",
+    tested_other: "Last test passed · {{count}} tools available",
+    saveBeforeTesting: "Save your changes before testing this connection.",
+    deleteTitle: "Delete {{name}}?",
+    deleteDescription:
+      "The agent will stop using this connection on each chat’s next message. Saved service sign-in remains stored.",
+    removed: "MCP connection deleted",
+    removing: "Deleting…",
     description:
-      "Add stdio or HTTP servers using an mcpServers JSON object. With Code Mode off, the agent discovers MCP tools through tool search.",
-    configuration: "MCP configuration",
+      "Connect external services to use their tools and data in chats.",
+    setupMethod: "Connection setup method",
+    details: "Manual setup",
+    json: "Import JSON",
+    configuration: "JSON configuration",
+    configurationPlaceholder:
+      '{\n  "mcpServers": {\n    "company-jira": {\n      "url": "https://example.com/mcp"\n    }\n  }\n}',
+    import: "Import connections",
+    importing: "Importing…",
+    importHint:
+      "Paste an mcpServers configuration to add one or more connections. Existing connections are kept.",
+    configurationInvalid:
+      "Enter valid JSON with at least one connection under mcpServers.",
+    importNamesInvalid:
+      "Use 1–80 letters, numbers, - or _ for connection names.",
+    importNameConflict:
+      "Connection name {{name}} is already in use. Choose a unique name.",
+    importLimit:
+      "You can configure up to 100 connections. Import fewer connections.",
     credentialsHint:
-      "Credentials are stored encrypted. Keep <saved> to reuse a saved value. Changing a server address requires new credentials.",
+      "Keep <saved> to reuse credentials. Changed connection details may require re-entry.",
     nextMessage: "Saved changes apply to each chat on its next message.",
     saved: "MCP settings saved",
     saving: "Saving…",
@@ -18,25 +90,35 @@ const en = {
     disabled: "Disabled",
     test: "Test connection",
     testing: "Testing…",
-    connected_one: "Connected. {{count}} tool available.",
-    connected_other: "Connected. {{count}} tools available.",
     signIn: "Sign in",
     signOut: "Sign out",
     signedIn: "MCP sign-in complete",
     signedOut: "MCP signed out",
+    signInTitle: "Sign in to {{name}}",
     signingIn: "Waiting for sign-in…",
     openBrowser: "Open browser",
-    actionFailed:
-      "Couldn’t update MCP settings. Check the configuration and try again.",
-    testFailed:
-      "Couldn’t connect. Check the server configuration and try again.",
-    loginFailed:
-      "Couldn’t sign in. Check the server’s OAuth settings and try again.",
-    logoutFailed: "Couldn’t sign out. Check secure storage and try again.",
+    loadFailed: "Couldn’t load MCP connections",
+    actionFailed: "Couldn’t update MCP settings",
+    testFailed: "Couldn’t connect to {{name}}",
+    loginFailed: "Couldn’t sign in to {{name}}",
+    logoutFailed: "Couldn’t sign out of {{name}}",
+    cancelFailed: "Couldn’t cancel sign-in",
   },
   chatLinks: { openFailed: "Couldn’t open the link" },
   settingsFeedback: {
-    connectionNeedsAttention: "Connection needs attention",
+    oauthClientRejected:
+      "The service rejected this app’s registration. Check its supported apps.",
+    oauthRegistration:
+      "App registration failed. Check the service’s sign-in requirements.",
+    mcpUnknown: "Check the service’s setup guide and try again.",
+    mcpSignIn: "Sign in to this MCP connection, then try again.",
+    providerSignIn:
+      "Sign in to the selected provider in Providers settings, then try again.",
+    mcpConfiguration:
+      "Check the MCP connection names, connection types and configuration fields.",
+    mcpCredentials:
+      "Re-enter the saved credentials for this connection, then try again.",
+    connectionNeedsAttention: "Needs attention",
     loginFailed: "Couldn’t sign in to {{service}}",
     saveFailed: "Couldn’t save {{service}} settings",
     browserFailed: "Couldn’t open the browser",
@@ -126,12 +208,14 @@ const en = {
   },
   thread: {
     saveAndRegenerate: "Save and regenerate",
-    editConsequences: "Regenerates the replies after this message. Earlier versions remain available; completed actions are not undone.",
+    editConsequences:
+      "Regenerates the replies after this message. Earlier versions remain available; completed actions are not undone.",
     previousVersion: "Previous version",
     nextVersion: "Next version",
     versionPosition: "Version {{current}} of {{total}}",
     versionChanged: "The conversation changed. Cancel editing and try again.",
-    versionMissing: "This message version is unavailable. Reopen the conversation and try again.",
+    versionMissing:
+      "This message version is unavailable. Reopen the conversation and try again.",
 
     copyText: "Copy text",
     scrollToBottom: "Scroll to bottom",
@@ -180,6 +264,10 @@ const en = {
     colorPalette: "Color palette",
   },
   connectors: {
+    connectionTypes: "Connection types",
+    builtIn: "Built-in",
+    connectionCount_one: "{{count}} connection",
+    connectionCount_other: "{{count}} connections",
     jev: {
       tagline: "TypeSafe",
       description:
@@ -477,6 +565,13 @@ const en = {
     clearSearch: "Clear search",
   },
   settings: {
+    toolExecution: "Tool execution",
+    codeMode: "Code Mode",
+    aboutCodeMode: "About Code Mode",
+    codeModeDescription:
+      "Let the agent use code to combine built-in and MCP tool calls and process results. MCP is optional. Changes apply on each chat’s next message.",
+    codeModeFailed: "Couldn’t save Code Mode",
+
     chooseModels: "Select models",
     manageModelsFor: "Manage models: {{provider}}",
     modelsFor: "{{provider}} models",
@@ -497,8 +592,7 @@ const en = {
     noModelsMatchSearch: "No matching models. Try another name or model ID.",
     noModelsInCatalog:
       "No models found for this provider. Try refreshing the model list.",
-    noModelsSelected:
-      "No models added. Select models to use in chats.",
+    noModelsSelected: "No models added. Select models to use in chats.",
     modelsSaved: "Model selection saved",
 
     modelsRefreshed: "Models refreshed",
@@ -624,8 +718,7 @@ const en = {
     unsupportedModel: "Choose a model that supports images.",
     historyUnsupported: "This model can’t view images in this conversation.",
     format: "Choose a PNG, JPEG, or WebP image.",
-    invalid:
-      "Couldn’t read this image. Try exporting it as PNG or JPEG.",
+    invalid: "Couldn’t read this image. Try exporting it as PNG or JPEG.",
     size: "Each image must be 5 MiB or smaller.",
     limits:
       "You can add up to 8 images per message. Remove an image and try again.",
@@ -638,8 +731,7 @@ const en = {
       "Couldn’t process this image. Restart WorkLens and try again.",
     processingTimeout:
       "Image processing timed out. Try again or choose a smaller image.",
-    processingBusy:
-      "Other images are still processing. Try again later.",
+    processingBusy: "Other images are still processing. Try again later.",
     previewFailed: "Couldn’t load the image preview.",
     retryPreview: "Reload image preview",
     recoveryCount: "Images: {{count}}",

@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
-import { settingsErrorDescription } from "../src/renderer/src/components/worklens/settings-notification";
+import {
+  settingsErrorDescription,
+  settingsFailure,
+} from "../src/renderer/src/components/worklens/settings-notification";
 import {
   connectorFailure,
   connectorSuccess,
@@ -31,6 +34,31 @@ test.each([
     "Check the model or deployment settings.",
     "请检查模型或部署设置。",
   ],
+  [
+    "Error: Error invoking remote method 'worklens': Error: Error: Sign in to this MCP server first",
+    "Sign in to this MCP connection, then try again.",
+    "请先登录此 MCP 连接，再重试。",
+  ],
+  [
+    "Sign in to the selected provider first",
+    "Sign in to the selected provider in Providers settings, then try again.",
+    "请先在供应商设置中登录所选供应商，再重试。",
+  ],
+  [
+    "Invalid MCP configuration. Check server names, transports and fields.",
+    "Check the MCP connection names, connection types and configuration fields.",
+    "请检查 MCP 连接名称、连接类型和配置字段。",
+  ],
+  [
+    "Re-enter credentials after changing the server",
+    "Re-enter the saved credentials for this connection, then try again.",
+    "请重新填写此连接的已保存凭据，再重试。",
+  ],
+  [
+    "Re-enter the OAuth client secret",
+    "Re-enter the saved credentials for this connection, then try again.",
+    "请重新填写此连接的已保存凭据，再重试。",
+  ],
 ])("settings localize and shorten %s", (message, en, zh) => {
   expect(settingsErrorDescription(message, "en")).toBe(en);
   expect(settingsErrorDescription(message, "zh")).toBe(zh);
@@ -39,7 +67,7 @@ test.each([
 test("unknown errors retain useful reasons without IPC, stacks or serialized payloads", () => {
   expect(
     settingsErrorDescription(
-      "Error invoking remote method 'test': Error: Account suspended\n    at internal.js:1",
+      "Error: Error invoking remote method 'test': Error: Error: Account suspended\n    at internal.js:1",
       "en",
     ),
   ).toBe("Account suspended");
@@ -65,5 +93,29 @@ test("connector notifications use consistent lifetimes and preserve account info
     title: "已连接 Jira",
     description: "张三 · https://example.test",
     timeout: 3200,
+  });
+});
+
+test("OAuth registration rejection has a concise reason without blaming account credentials", () => {
+  const message =
+    "Error: OAuthRegistrationError: OAuth dynamic client registration failed with status 403: Forbidden";
+  expect(settingsErrorDescription(message, "en")).toBe(
+    "The service rejected this app’s registration. Check its supported apps.",
+  );
+  expect(settingsErrorDescription(message, "zh")).toBe(
+    "服务拒绝了此应用的注册，请查看它支持的应用。",
+  );
+  expect(
+    settingsFailure(
+      "Couldn’t sign in",
+      "UnknownError: " + "raw details ".repeat(100),
+      "en",
+      false,
+      "Check the service’s setup guide and try again.",
+    ),
+  ).toMatchObject({
+    title: "Couldn’t sign in",
+    description: "Check the service’s setup guide and try again.",
+    timeout: 0,
   });
 });
