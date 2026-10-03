@@ -138,13 +138,17 @@ test.skipIf(process.platform === "win32")(
     expect((read.details as typeof details).worklensShell.outputPaths).toEqual(
       [],
     );
-    await expect(
-      shell.execute(
-        "failed",
-        { command: "printf partial > failed.svg; exit 1" },
-        undefined,
-        undefined,
-      ),
-    ).rejects.toThrow();
+    const failed = await shell.execute(
+      "failed",
+      { command: "printf partial > failed.svg; exit 1" },
+      undefined,
+      undefined,
+    );
+    // Pi reports a nonzero shell exit as an error result, not a thrown error.
+    expect(failed.isError).toBe(true);
+    expect(failed.details.worklensShell).toEqual({
+      exitCode: 1,
+      outputPaths: [],
+    });
   },
 );

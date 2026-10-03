@@ -749,7 +749,16 @@ const zhCN = {
     usedTool: "已使用工具",
   },
   activity: {
+    waiting: "等待中…",
+    wait: {
+      queue: "正在等待其他请求完成。",
+      resource: "正在等待其他操作释放此资源。",
+      retry: "正在等待重试请求。",
+      remote: "正在等待服务处理完成。",
+      interval: "正在等待下一次请求的发送时间。",
+    },
     progress: {
+      waiting: "{{name}} · 等待中…",
       searching: "正在搜索",
       searched: "已搜索",
       reading: "正在读取",

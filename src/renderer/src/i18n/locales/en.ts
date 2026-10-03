@@ -798,7 +798,16 @@ const en = {
     usedTool: "Used tool",
   },
   activity: {
+    waiting: "Waiting…",
+    wait: {
+      queue: "Waiting for other requests to finish.",
+      resource: "Waiting for another operation to release this resource.",
+      retry: "Waiting before retrying the request.",
+      remote: "Waiting for the service to finish processing.",
+      interval: "Waiting before sending the next request.",
+    },
     progress: {
+      waiting: "{{name}} · Waiting…",
       searching: "Searching",
       searched: "Searched",
       reading: "Reading",

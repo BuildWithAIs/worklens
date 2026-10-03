@@ -35,6 +35,7 @@ import {
   incompleteUsage,
 } from "./usage";
 import { resources, toolNames } from "./resources";
+import { observeToolWait } from "./tool-wait";
 import { worklensTools } from "./tools";
 import { ConnectorRegistry } from "./connectors/registry";
 import type { SkillsService } from "./skills";
@@ -570,17 +571,7 @@ export class AgentService {
           redact: this.redact,
         },
       );
-      const customTools = worklensTools(cwd, (toolId, status) => {
-        runtime.toolUpdates.set(toolId, {
-          ...runtime.toolUpdates.get(toolId),
-          status,
-        });
-        this.publish(
-          runtime.manager.getSessionId(),
-          runtime,
-          "tool_resource_status",
-        );
-      });
+      const customTools = worklensTools(cwd, () => {});
       const integrationTools = this.connectors.tools(
         runtime.manager.getSessionId(),
         () => runtime.active?.id ?? "idle",
@@ -594,7 +585,29 @@ export class AgentService {
           model,
           thinkingLevel: selection.thinking,
           sessionManager: runtime.manager,
-          customTools: [...customTools, ...integrationTools],
+          customTools: [...customTools, ...integrationTools].map((tool) => ({
+            ...tool,
+            execute: (toolId, args, signal, onUpdate, ctx) => {
+              const run = runtime.active;
+              return observeToolWait(
+                () => tool.execute(toolId, args, signal, onUpdate, ctx),
+                (waitReason) => {
+                  if (!run || runtime.active !== run || run.cancelled) return;
+                  runtime.toolUpdates.set(toolId, {
+                    ...runtime.toolUpdates.get(toolId),
+                    status: waitReason ? "waiting" : "running",
+                    waitReason,
+                  });
+                  this.publish(
+                    runtime.manager.getSessionId(),
+                    runtime,
+                    "tool_resource_status",
+                  );
+                },
+                signal,
+              );
+            },
+          })),
           ...local,
         })
       ).session;
@@ -713,6 +726,7 @@ export class AgentService {
         : undefined;
       runtime.toolUpdates.set(event.toolCallId, {
         startedAt: previous?.startedAt,
+        waitReason: undefined,
         status:
           active.cancelled && event.isError
             ? "cancelled"

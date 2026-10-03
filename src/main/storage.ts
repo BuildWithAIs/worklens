@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
+import { trackToolTask, waitForTool } from "./tool-wait";
 import type {
   Credential,
   CredentialStore,
@@ -21,9 +22,11 @@ export async function atomicJson(path: string, value: unknown) {
 export class SerialQueue {
   private pending = new Map<string, Promise<unknown>>();
   run<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    const task = (this.pending.get(key) ?? Promise.resolve())
-      .catch(() => {})
-      .then(fn);
+    const previous = this.pending.get(key) ?? Promise.resolve();
+    const task = trackToolTask(async () => {
+      await waitForTool("resource", () => previous.catch(() => {}));
+      return fn();
+    });
     this.pending.set(key, task);
     void task
       .finally(() => {

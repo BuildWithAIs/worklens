@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { ToolQueue } from "../tool-queue";
+import { waitForTool } from "../tool-wait";
 
 type Service = "GitHub" | "Jira" | "Confluence" | "Jev";
 type Limit = { delayMs: number; retryable: boolean };
@@ -43,47 +45,13 @@ export function retryBackoff(attempt: number, base = 500) {
  * No response cache: ordinary reads still fetch current data.
  */
 class RequestGate {
-  private active = 0;
-  private waiting: {
-    enter: () => void;
-    signal: AbortSignal;
-    abort: () => void;
-  }[] = [];
+  private queue: ToolQueue;
   private until = 0;
   private failures = 0;
   private nextWrite = 0;
   private limits = new WeakMap<Response, Limit>();
-  constructor(private service: Service) {}
-
-  private async enter(signal: AbortSignal) {
-    signal.throwIfAborted();
-    // GitHub recommends serial requests. Keep the existing bounded concurrency
-    // for Atlassian batches so independent reads can still make progress.
-    if (this.active < (this.service === "GitHub" ? 1 : 4)) {
-      this.active++;
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      const waiter = {
-        enter: resolve,
-        signal,
-        abort: () => {
-          const index = this.waiting.indexOf(waiter);
-          if (index >= 0) this.waiting.splice(index, 1);
-          reject(signal.reason);
-        },
-      };
-      this.waiting.push(waiter);
-      signal.addEventListener("abort", waiter.abort, { once: true });
-    });
-  }
-
-  private leave() {
-    const waiter = this.waiting.shift();
-    if (waiter) {
-      waiter.signal.removeEventListener("abort", waiter.abort);
-      waiter.enter();
-    } else this.active--;
+  constructor(private service: Service) {
+    this.queue = new ToolQueue(service === "GitHub" ? 1 : 4);
   }
 
   limit(response: Response) {
@@ -104,22 +72,22 @@ class RequestGate {
     blocked: (wait: number) => Error,
     execute: () => Promise<Response>,
   ) {
-    await this.enter(signal);
-    try {
+    return this.queue.run(signal, async () => {
       signal.throwIfAborted();
       if (this.until > Date.now()) throw blocked(this.until - Date.now());
       if (write && this.service === "GitHub") {
         const wait = this.nextWrite - Date.now();
-        if (wait > 0) await delay(wait, undefined, { signal });
+        if (wait > 0)
+          await waitForTool("interval", () =>
+            delay(wait, undefined, { signal }),
+          );
         signal.throwIfAborted();
         this.nextWrite = Date.now() + 1000;
       }
       const response = await execute();
       this.observe(response);
       return response;
-    } finally {
-      this.leave();
-    }
+    });
   }
 
   private observe(response: Response) {

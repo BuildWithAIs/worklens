@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { waitForTool } from "../../tool-wait";
 import { atomicJson, SerialQueue } from "../../storage";
 import type { LocalArtifacts } from "../../local-artifacts";
 import type { TavilyConnections } from "./connection";
@@ -234,9 +235,11 @@ export class TavilyResearch {
             ...this.pending(handle, record),
             researchStatus: data.status,
           };
-        await delay(Math.min(5000, deadline - Date.now()), undefined, {
-          signal: http.signal,
-        });
+        await waitForTool("remote", () =>
+          delay(Math.min(5000, deadline - Date.now()), undefined, {
+            signal: http.signal,
+          }),
+        );
       }
     });
   }

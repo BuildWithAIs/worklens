@@ -25,7 +25,10 @@ import {
   toolProgress,
   toolActivityLabel,
   toolActivitySummary,
+  toolWaitHint,
+  activeProgressTool,
 } from "@/lib/activity-progress";
+import { Hint } from "@/components/ui/tooltip";
 import { ArtifactFiles } from "./ArtifactFiles";
 import { activityIcon } from "@/lib/activity-icon";
 import { systemText } from "@/lib/system-text";
@@ -292,14 +295,16 @@ function ActivityProgress({
   kind,
   active = true,
   summary,
+  hint,
 }: {
   progress: string;
   kind: string;
   active?: boolean;
   summary?: string;
+  hint?: string;
 }) {
   const shimmerRef = useShimmer();
-  const { language } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const label = [
     "thinking",
     "working",
@@ -312,6 +317,22 @@ function ActivityProgress({
     : (!active && summary) ||
       toolActivityLabel(kind, progress, active, language);
   const Icon = activityIcon(kind);
+  const text = (
+    <span
+      ref={shimmerRef}
+      tabIndex={hint ? 0 : undefined}
+      className={`min-w-0 ${hint ? "flex items-center" : "truncate"} ${active ? "shimmer motion-reduce:animate-none" : ""}`}
+    >
+      {hint ? (
+        <>
+          <span className="min-w-0 truncate">{kind}</span>
+          <span className="shrink-0 whitespace-pre">{` · ${t("activity.waiting")}`}</span>
+        </>
+      ) : (
+        label
+      )}
+    </span>
+  );
   return (
     <span
       data-slot="activity-progress"
@@ -320,12 +341,7 @@ function ActivityProgress({
       {kind !== "thinking" && kind !== "working" && (
         <Icon aria-hidden="true" className="mt-1 size-4 shrink-0" />
       )}
-      <span
-        ref={shimmerRef}
-        className={`min-w-0 truncate ${active ? "shimmer motion-reduce:animate-none" : ""}`}
-      >
-        {label}
-      </span>
+      {hint ? <Hint content={hint}>{text}</Hint> : text}
     </span>
   );
 }
@@ -340,6 +356,11 @@ function WorkLensLiveStatus() {
         progress={custom.liveProgress}
         kind={String(custom.progressKind ?? "working")}
         active={custom.progressActive !== false}
+        hint={
+          typeof custom.progressHint === "string"
+            ? custom.progressHint
+            : undefined
+        }
         summary={
           typeof custom.toolSummary === "string"
             ? custom.toolSummary
@@ -429,6 +450,11 @@ function WorkLensToolGroup({
                 progress={progress}
                 kind={String(timing.progressKind ?? "working")}
                 active={timing.progressActive !== false}
+                hint={
+                  typeof timing.progressHint === "string"
+                    ? timing.progressHint
+                    : undefined
+                }
                 summary={
                   typeof timing.toolSummary === "string"
                     ? timing.toolSummary
@@ -577,7 +603,10 @@ export function AgentThread({
       const runStartedAt = recordedTiming?.runStartedAt ?? latestRun?.startedAt;
       const runElapsedMs = recordedTiming?.runElapsedMs ?? latestRun?.elapsedMs;
       const latest = turn.at(-1)!.message;
-      const latestTool = latest.role === "tool" ? latest : undefined;
+      const latestTool =
+        latest.role === "tool"
+          ? (activeProgressTool(turn.map(({ message }) => message)) ?? latest)
+          : undefined;
       const phase = view?.phase;
       const awaitingConsent = running && !!view?.jevConsent?.pending.length;
       const progressKind = awaitingConsent
@@ -611,6 +640,10 @@ export function AgentThread({
           !["success", "error", "timeout", "cancelled"].includes(
             latestTool.status ?? "",
           ));
+      const progressHint =
+        progressActive && progressKind === latestTool?.toolName
+          ? toolWaitHint(latestTool, language)
+          : undefined;
       // Keep one stable part so tool/thinking transitions cannot grow the live DOM.
       const visibleActivity: Part[] = running
         ? [{ type: "reasoning", text: progress }]
@@ -649,6 +682,7 @@ export function AgentThread({
                 ? (prefixTool.toolName ?? "tool")
                 : progressKind,
               progressActive: prefixTool ? false : progressActive,
+              progressHint: !prefixTool ? progressHint : undefined,
               toolSummary: toolActivitySummary(
                 turn
                   .slice(0, liveTextSegments[0]?.position ?? turn.length)
@@ -702,6 +736,7 @@ export function AgentThread({
                   ? progressKind
                   : (segmentTool?.toolName ?? "tool"),
                 progressActive: lastSegment && progressActive,
+                progressHint: lastSegment ? progressHint : undefined,
               },
             },
           });
@@ -718,7 +753,11 @@ export function AgentThread({
           content: answer,
           status,
           metadata: {
-            custom: { sentAt, hasActivity: visibleActivity.length > 0, jevCalls: successfulJevCalls(turn.map(({ message }) => message)) },
+            custom: {
+              sentAt,
+              hasActivity: visibleActivity.length > 0,
+              jevCalls: successfulJevCalls(turn.map(({ message }) => message)),
+            },
           },
         });
       }

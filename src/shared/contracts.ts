@@ -131,6 +131,13 @@ export interface SkillsSnapshot {
   /** ~/.agents/skills on this machine, shared with other agent tools. */
   local: SkillInfo[];
 }
+export type ToolWaitReason =
+  | "queue"
+  | "resource"
+  | "retry"
+  | "remote"
+  | "interval";
+
 export interface MessageView {
   parentToolCallId?: string;
   entryId?: string;
@@ -154,6 +161,8 @@ export interface MessageView {
   timeoutSeconds?: number;
   exitCode?: number | null;
   startedAt?: string;
+  /** Transient presentation state, only valid while status is waiting. */
+  waitReason?: ToolWaitReason;
   status?:
     | "pending"
     | "waiting"
