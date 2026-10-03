@@ -30,7 +30,8 @@ export class TavilyHttp {
   async request(method: "GET" | "POST", path: string, body?: Json) {
     const url = `${this.connection.settings.url}${path}`;
     const retryable =
-      method === "GET" || ["/search", "/extract"].includes(path);
+      (method === "GET" && path !== "/usage") ||
+      ["/search", "/extract"].includes(path);
     for (let attempt = 0; ; attempt++) {
       this.signal.throwIfAborted();
       let response: Response;
@@ -54,6 +55,22 @@ export class TavilyHttp {
         continue;
       }
       const status = response.status;
+      // Usage has a separate, much tighter limit. Never retry it automatically;
+      // the connection service shares this cooldown with all usage consumers.
+      if (path === "/usage" && status === 429) {
+        const retry = response.headers.get("retry-after");
+        const parsed = retry
+          ? /^\d+$/.test(retry)
+            ? Number(retry) * 1000
+            : Date.parse(retry) - Date.now()
+          : NaN;
+        await response.body?.cancel();
+        throw new ServiceError("rate_limit", "Tavily 要求稍后重试", {
+          status,
+          retryAfterMs:
+            Number.isFinite(parsed) && parsed > 0 ? parsed : 600_000,
+        });
+      }
       if (
         retryable &&
         attempt < 2 &&

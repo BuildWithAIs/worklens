@@ -29,8 +29,18 @@
   outline-offset: 2px;
 }
 
-.usage-popover {
+.usage-popover,
+.tavily-credit-usage {
   --usage-blue: #6485c4;
+}
+:root[data-theme="dark"] .usage-popover,
+:root[data-theme="dark"] .tavily-credit-usage {
+  --usage-blue: #89a9e0;
+}
+.tavily-credit-usage .usage-progress {
+  margin: 6px 0 0;
+}
+.usage-popover {
   --usage-slate: #9984bd;
   --usage-cache: #a8bddf;
   --usage-write: #d7cbe9;
@@ -50,7 +60,6 @@
   font-variant-numeric: tabular-nums;
 }
 :root[data-theme="dark"] .usage-popover {
-  --usage-blue: #89a9e0;
   --usage-slate: #b39dd3;
   --usage-cache: #536f9f;
   --usage-write: #75628e;

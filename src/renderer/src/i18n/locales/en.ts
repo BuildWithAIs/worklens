@@ -322,6 +322,7 @@ const en = {
       enterCloudId: "Cloud ID discovery failed. Enter it manually.",
     },
     runtime: {
+      jevBusy: "Jev is busy. Try again later.",
       cloudHttps: "Cloud requires an HTTPS address.",
       githubHttps: "GitHub Cloud requires a standard HTTPS site address.",
       cloudEmail: "Enter your Atlassian account email for Cloud.",
@@ -342,6 +343,8 @@ const en = {
       invalidJson:
         "The service returned an unreadable response. Check whether the address redirects to an SSO sign-in page or the response is too large.",
       rateLimit: "GitHub is rate limiting requests. Try again later.",
+      serviceRateLimit:
+        "{{service}} is rate limiting requests. Try again later.",
       githubRedirect:
         "GitHub redirected the API request. Check the site address and target. Credentials were not forwarded.",
       connectedPrefix: "Connected: ",
@@ -415,6 +418,14 @@ const en = {
       description:
         "Connect Tavily to let the agent search the web and read web pages.",
       plan: "Plan",
+      credits: "{{used}} / {{limit}} Credits",
+      payAsYouGo: "Pay as you go",
+      usageFailed: "Couldn’t load usage",
+      usageUpdateFailed: "Couldn’t update usage",
+      usageLimited: "Usage temporarily rate limited",
+      usageUpdated: "Updated {{time}}",
+      refreshUsage: "Refresh usage",
+      refreshAvailable: "Refresh available at {{time}}",
       apiURL: "API URL",
       enterYourApiKey: "Enter your Tavily API key",
       getApiKey: "Get a free API key",

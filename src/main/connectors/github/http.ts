@@ -1,6 +1,7 @@
 import { Octokit } from "octokit";
 import { setTimeout as delay } from "node:timers/promises";
 import { apiAddresses, type ConnectionSnapshot } from "./connection";
+import { requestGate, retryAfterMs, retryBackoff } from "../request-gate";
 
 export type Json = Record<string, any>;
 export class ServiceError extends Error {
@@ -16,17 +17,29 @@ const MAX_RESPONSE = 24 * 1024 * 1024;
 export class GitHubHttp {
   readonly addresses;
   readonly signal: AbortSignal;
+  private gate;
   constructor(
     readonly connection: ConnectionSnapshot,
     readonly fetcher: typeof fetch = fetch,
     signal?: AbortSignal,
   ) {
     this.addresses = apiAddresses(connection.settings.url);
+    this.gate = requestGate(
+      "GitHub",
+      this.addresses.rest,
+      connection.token,
+      fetcher,
+    );
     this.signal = AbortSignal.any([
       connection.signal,
       ...(signal ? [signal] : []),
       AbortSignal.timeout(180_000),
     ]);
+  }
+  private rateLimit(wait: number) {
+    return new ServiceError("rate_limit", "GitHub 要求稍后重试", {
+      retryAfterMs: wait,
+    });
   }
   private trusted(raw: string, uploads = false) {
     const url = new URL(raw);
@@ -48,6 +61,7 @@ export class GitHubHttp {
     init: RequestInit,
     readOnly: boolean,
     uploads = false,
+    bounded = false,
   ): Promise<Response> {
     if (!this.trusted(url, uploads))
       throw new ServiceError("invalid_target", "请求超出当前 GitHub API 范围");
@@ -55,12 +69,30 @@ export class GitHubHttp {
       this.signal.throwIfAborted();
       let response: Response;
       try {
-        response = await this.fetcher(url, {
-          ...init,
-          redirect: "manual",
-          signal: AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]),
-        });
-      } catch {
+        response = await this.gate.fetch(
+          this.signal,
+          !readOnly,
+          (wait) => this.rateLimit(wait),
+          async () => {
+            const result = await this.fetcher(url, {
+              ...init,
+              redirect: "manual",
+              signal: AbortSignal.any([
+                this.signal,
+                AbortSignal.timeout(30_000),
+              ]),
+            });
+            return bounded
+              ? this.boundedResponse(
+                  result,
+                  readOnly,
+                  url === this.addresses.graphql,
+                )
+              : result;
+          },
+        );
+      } catch (error) {
+        if (error instanceof ServiceError) throw error;
         if (!readOnly)
           throw new ServiceError(
             "unknown",
@@ -69,30 +101,26 @@ export class GitHubHttp {
         this.signal.throwIfAborted();
         if (attempt >= 2)
           throw new ServiceError("network", "GitHub 网络请求失败或超时");
-        await delay(500 * 2 ** attempt, undefined, { signal: this.signal });
+        await delay(retryBackoff(attempt), undefined, { signal: this.signal });
         continue;
       }
-      const limited =
-        response.status === 429 ||
-        (response.status === 403 &&
-          (response.headers.has("retry-after") ||
-            response.headers.get("x-ratelimit-remaining") === "0"));
+      const limited = this.gate.limit(response);
+      if (limited) {
+        await response.body?.cancel();
+        if (!readOnly || attempt >= 2 || limited.delayMs > 30_000)
+          throw this.rateLimit(limited.delayMs);
+        await delay(limited.delayMs, undefined, { signal: this.signal });
+        continue;
+      }
       if (
         readOnly &&
         attempt < 2 &&
-        (limited || [500, 502, 503, 504].includes(response.status))
+        [500, 502, 503, 504].includes(response.status)
       ) {
-        const retry = response.headers.get("retry-after");
-        const reset = response.headers.get("x-ratelimit-reset");
-        const wait = retry
-          ? /^\d+$/.test(retry)
-            ? Number(retry) * 1000
-            : Date.parse(retry) - Date.now()
-          : limited && reset
-            ? Number(reset) * 1000 - Date.now()
-            : limited
-              ? 60000
-              : 500 * 2 ** attempt;
+        const wait = Math.max(
+          retryAfterMs(response.headers.get("retry-after")) ?? 0,
+          retryBackoff(attempt),
+        );
         if (wait > 30000) {
           await response.body?.cancel();
           throw new ServiceError("rate_limit", "GitHub 要求稍后重试", {
@@ -110,6 +138,83 @@ export class GitHubHttp {
       return response;
     }
   }
+  private async boundedResponse(
+    response: Response,
+    readOnly: boolean,
+    graphql: boolean,
+  ) {
+    // These responses are consumed by the rate-limit path, not Octokit. Record
+    // the cooldown without waiting for a potentially large error body.
+    if (
+      response.status === 429 ||
+      (response.status === 403 &&
+        (response.headers.has("retry-after") ||
+          response.headers.get("x-ratelimit-remaining") === "0"))
+    )
+      return response;
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      throw new ServiceError(
+        "redirect",
+        "GitHub API 返回重定向，请检查站点地址和目标；未转发凭据",
+      );
+    }
+    // Bound Octokit's otherwise unbounded JSON/text decoder, including error bodies.
+    if (Number(response.headers.get("content-length")) > MAX_RESPONSE) {
+      await response.body?.cancel();
+      throw new ServiceError(
+        readOnly ? "result_too_large" : "unknown",
+        "GitHub 响应超过 24 MiB，请缩小查询范围或下载文件；不要重复写入",
+      );
+    }
+    if (!response.body) return response;
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    const reader = response.body.getReader();
+    try {
+      for (;;) {
+        const item = await reader.read();
+        if (item.done) break;
+        size += item.value.length;
+        if (size > MAX_RESPONSE)
+          throw new ServiceError(
+            readOnly ? "result_too_large" : "unknown",
+            "GitHub 响应超过 24 MiB",
+          );
+        chunks.push(item.value);
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+    const bytes = Buffer.concat(chunks);
+    // Inspect the bounded body before releasing the queue slot. A secondary
+    // limit may appear only in a REST 403 body or a GraphQL 200 error envelope.
+    if (response.status === 403 || graphql) {
+      try {
+        const data = JSON.parse(bytes.toString("utf8"));
+        if (
+          (response.status === 403 &&
+            typeof data?.message === "string" &&
+            /rate limit|abuse/i.test(data.message)) ||
+          (graphql &&
+            Array.isArray(data?.errors) &&
+            data.errors.some(
+              (error: Json) =>
+                (error.type ?? error.extensions?.code) === "RATE_LIMITED",
+            ))
+        )
+          this.gate.recordLimit(response.headers);
+      } catch {
+        /* Octokit reports malformed bodies through the existing error path. */
+      }
+    }
+    return new Response(bytes, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  }
   async rest(
     route: string,
     params: Json = {},
@@ -120,49 +225,8 @@ export class GitHubHttp {
     headers: Record<string, string | undefined>;
     status: number;
   }> {
-    const guardedFetch: typeof fetch = async (input, init) => {
-      const response = await this.request(String(input), init ?? {}, readOnly);
-      if (response.status >= 300 && response.status < 400) {
-        await response.body?.cancel();
-        throw new ServiceError(
-          "redirect",
-          "GitHub API 返回重定向，请检查站点地址和目标；未转发凭据",
-        );
-      }
-      // Bound Octokit's otherwise unbounded JSON/text decoder, including error bodies.
-      if (Number(response.headers.get("content-length")) > MAX_RESPONSE) {
-        await response.body?.cancel();
-        throw new ServiceError(
-          readOnly ? "result_too_large" : "unknown",
-          "GitHub 响应超过 24 MiB，请缩小查询范围或下载文件；不要重复写入",
-        );
-      }
-      if (!response.body) return response;
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      const reader = response.body.getReader();
-      try {
-        for (;;) {
-          const item = await reader.read();
-          if (item.done) break;
-          size += item.value.length;
-          if (size > MAX_RESPONSE)
-            throw new ServiceError(
-              readOnly ? "result_too_large" : "unknown",
-              "GitHub 响应超过 24 MiB",
-            );
-          chunks.push(item.value);
-        }
-      } finally {
-        await reader.cancel().catch(() => {});
-        reader.releaseLock();
-      }
-      return new Response(Buffer.concat(chunks), {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
-    };
+    const guardedFetch: typeof fetch = (input, init) =>
+      this.request(String(input), init ?? {}, readOnly, false, true);
     const client = new Octokit({
       auth: this.connection.token,
       baseUrl: this.addresses.rest,
@@ -218,6 +282,12 @@ export class GitHubHttp {
         (status === 403 &&
           (/rate limit|abuse/i.test(message) ||
             error.response?.headers?.["x-ratelimit-remaining"] === "0"));
+      if (limited) {
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(error.response.headers ?? {}))
+          if (typeof value === "string") headers.set(key, value);
+        throw this.rateLimit(this.gate.recordLimit(headers));
+      }
       const code = limited
         ? "rate_limit"
         : status === 401
@@ -256,6 +326,12 @@ export class GitHubHttp {
       const unsupported = errors.every((e: Json) =>
         /undefinedField|undefinedType|argumentNotAccepted/.test(e.type),
       );
+      if (errors.some((e: Json) => e.type === "RATE_LIMITED")) {
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(response.headers))
+          if (value !== undefined) headers.set(key, value);
+        this.gate.recordLimit(headers);
+      }
       throw new ServiceError(
         unsupported
           ? "unsupported_capability"

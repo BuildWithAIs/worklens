@@ -278,6 +278,10 @@ export interface Requests {
   githubRemove: { input: undefined; output: void };
   tavilySave: { input: TavilySettingsInput; output: TavilyConnection };
   tavilyTest: { input: TavilySettingsInput; output: string };
+  tavilyUsage: {
+    input: { refresh?: boolean } | undefined;
+    output: TavilyUsageState;
+  };
   tavilyRemove: { input: undefined; output: void };
   htmlFileAction: {
     input: {
@@ -469,6 +473,24 @@ export interface TavilyConnection extends Omit<TavilySettingsInput, "token"> {
   configured: boolean;
   plan?: string;
   error?: string;
+}
+export interface TavilyCreditUsage {
+  used: number | null;
+  limit: number | null;
+}
+export interface TavilyUsage {
+  plan?: string;
+  included: TavilyCreditUsage;
+  paygo?: TavilyCreditUsage;
+}
+export interface TavilyUsageSnapshot extends TavilyUsage {
+  fetchedAt: number;
+  expiresAt: number;
+}
+export interface TavilyUsageState {
+  usage?: TavilyUsageSnapshot;
+  refreshAfter: number;
+  error?: "rate_limit" | "unavailable";
 }
 export type ConnectorId = "confluence" | "jira" | "github" | "tavily" | "jev";
 export interface JevSettingsInput {

@@ -1,13 +1,22 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { ConnectionSnapshot } from "./connection";
+import { requestGate } from "../request-gate";
 
 const MAX_RESPONSE = 1024 * 1024;
 
 export class JevHttp {
+  private gate;
   constructor(
     private readonly connection: ConnectionSnapshot,
     private readonly fetcher: typeof fetch = fetch,
-  ) {}
+  ) {
+    this.gate = requestGate(
+      "Jev",
+      connection.settings.url,
+      connection.token,
+      fetcher,
+    );
+  }
   async request(
     path: "/v1/models" | "/v1/systemone",
     payload?: string,
@@ -21,30 +30,31 @@ export class JevHttp {
     ]);
     for (let attempt = 0; ; attempt++) {
       combined.throwIfAborted();
-      const response = await this.fetcher(
-        `${this.connection.settings.url}${path}`,
-        {
-          method: payload === undefined ? "GET" : "POST",
-          headers: {
-            authorization: `Bearer ${this.connection.token}`,
-            accept: "application/json",
-            ...(payload !== undefined
-              ? { "content-type": "application/json" }
-              : {}),
-          },
-          body: payload,
-          redirect: "manual",
-          signal: combined,
-        },
+      const response = await this.gate.fetch(
+        combined,
+        payload !== undefined,
+        () => new Error("Jev is busy. Try again later."),
+        () =>
+          this.fetcher(`${this.connection.settings.url}${path}`, {
+            method: payload === undefined ? "GET" : "POST",
+            headers: {
+              authorization: `Bearer ${this.connection.token}`,
+              accept: "application/json",
+              ...(payload !== undefined
+                ? { "content-type": "application/json" }
+                : {}),
+            },
+            body: payload,
+            redirect: "manual",
+            signal: combined,
+          }),
       );
-      if ([429, 529].includes(response.status) && attempt < 2) {
-        const retry = response.headers.get("retry-after");
-        const wait =
-          retry && /^\d+$/.test(retry)
-            ? Number(retry) * 1000
-            : 500 * 2 ** attempt;
+      const limited = this.gate.limit(response);
+      if (limited) {
+        const wait = limited.delayMs;
         await response.body?.cancel();
-        if (wait > 10_000) throw new Error("Jev is busy. Try again later.");
+        if (attempt >= 2 || wait > 10_000)
+          throw new Error("Jev is busy. Try again later.");
         await delay(wait, undefined, { signal: combined });
         continue;
       }

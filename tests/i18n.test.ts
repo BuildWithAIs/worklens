@@ -54,8 +54,11 @@ describe("internationalization resources", () => {
   });
 });
 
-for (const service of ["Jira", "Confluence", "GitHub"]) {
+for (const service of ["Jira", "Confluence", "GitHub", "Tavily"]) {
   test(`${service} runtime failures follow the selected language`, () => {
+    expect(systemText(`${service} 要求稍后重试`, "en")).toBe(
+      `${service} is rate limiting requests. Try again later.`,
+    );
     expect(systemText(`${service} 网络请求失败或超时`, "en")).toBe(
       `Couldn’t reach ${service} or the request timed out. Check your network and site address, then try again.`,
     );

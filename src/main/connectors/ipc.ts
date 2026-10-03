@@ -22,6 +22,10 @@ export const connectorSchemas = {
   githubRemove: z.undefined(),
   tavilySave: tavilySchema,
   tavilyTest: tavilySchema,
+  tavilyUsage: z
+    .object({ refresh: z.boolean().optional() })
+    .strict()
+    .optional(),
   tavilyRemove: z.undefined(),
   jiraSave: jiraSchema,
   jiraTest: jiraSchema,
@@ -56,6 +60,7 @@ export function connectorRequests(
     githubRemove: () => github.connections.remove(),
     tavilySave: (input) => tavily.connections.save(input),
     tavilyTest: (input) => tavily.test(input),
+    tavilyUsage: (input) => tavily.connections.usageState(input?.refresh),
     tavilyRemove: () => tavily.connections.remove(),
     jiraSave: (input) => jira.connections.save(input),
     jiraTest: (input) => jira.test(input),

@@ -10,6 +10,26 @@ import {
 
 test.each([
   [
+    "Jev is busy. Try again later.",
+    "Jev is busy. Try again later.",
+    "Jev 暂时繁忙，请稍后重试。",
+  ],
+  [
+    "Jira 要求稍后重试",
+    "Too many requests. Try again later.",
+    "请求过于频繁，请稍后重试。",
+  ],
+  [
+    "Confluence 要求稍后重试",
+    "Too many requests. Try again later.",
+    "请求过于频繁，请稍后重试。",
+  ],
+  [
+    "Tavily 要求稍后重试",
+    "Too many requests. Try again later.",
+    "请求过于频繁，请稍后重试。",
+  ],
+  [
     "Jira 网络请求失败或超时",
     "Check your network and site URL.",
     "请检查网络和网站地址。",

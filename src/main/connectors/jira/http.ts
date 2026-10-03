@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { ConnectionSnapshot } from "./connection";
+import { requestGate, retryAfterMs, retryBackoff } from "../request-gate";
 export class ServiceError extends Error {
   constructor(
     readonly code: string,
@@ -14,6 +15,7 @@ export class JiraHttp {
   readonly base: string;
   readonly site: URL;
   readonly signal: AbortSignal;
+  private gate;
   constructor(
     readonly connection: ConnectionSnapshot,
     signal?: AbortSignal,
@@ -26,11 +28,20 @@ export class JiraHttp {
       s.deployment === "cloud" && s.tokenType === "scoped"
         ? `https://api.atlassian.com/ex/jira/${s.cloudId}`
         : s.url;
+    this.gate = requestGate(
+      "Jira",
+      this.base,
+      JSON.stringify([s.email, connection.token]),
+      fetcher,
+    );
     this.signal = AbortSignal.any([
       connection.signal,
       ...(signal ? [signal] : []),
       AbortSignal.timeout(timeoutMs),
     ]);
+  }
+  private rateLimit(_wait: number) {
+    return new ServiceError("rate_limit", "Jira 要求稍后重试", 429);
   }
   url(path: string) {
     return this.base + path;
@@ -95,18 +106,28 @@ export class JiraHttp {
       this.signal.throwIfAborted();
       let response: Response;
       try {
-        response = await this.fetcher(url, {
-          method,
-          headers,
-          body: form
-            ? body
-            : body === undefined
-              ? undefined
-              : JSON.stringify(body),
-          redirect: "manual",
-          signal: AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]),
-        });
-      } catch {
+        response = await this.gate.fetch(
+          this.signal,
+          !readOnly,
+          (wait) => this.rateLimit(wait),
+          () =>
+            this.fetcher(url, {
+              method,
+              headers,
+              body: form
+                ? body
+                : body === undefined
+                  ? undefined
+                  : JSON.stringify(body),
+              redirect: "manual",
+              signal: AbortSignal.any([
+                this.signal,
+                AbortSignal.timeout(30_000),
+              ]),
+            }),
+        );
+      } catch (error) {
+        if (error instanceof ServiceError) throw error;
         if (!readOnly)
           throw new ServiceError(
             "unknown",
@@ -115,27 +136,32 @@ export class JiraHttp {
         this.signal.throwIfAborted();
         if (attempt >= 2)
           throw new ServiceError("network", "Jira 网络请求失败或超时");
-        await delay(500 * 2 ** attempt, undefined, { signal: this.signal });
+        await delay(retryBackoff(attempt), undefined, { signal: this.signal });
+        continue;
+      }
+      const limited = this.gate.limit(response);
+      if (limited) {
+        await response.body?.cancel();
+        if (
+          !readOnly ||
+          !limited.retryable ||
+          attempt >= 2 ||
+          limited.delayMs > 30_000
+        )
+          throw this.rateLimit(limited.delayMs);
+        await delay(limited.delayMs, undefined, { signal: this.signal });
         continue;
       }
       if (
         readOnly &&
-        [429, 500, 502, 503, 504].includes(response.status) &&
+        [500, 502, 503, 504].includes(response.status) &&
         attempt < 2
       ) {
         const header = response.headers.get("retry-after");
-        const ms = header
-          ? /^\d+(\.\d+)?$/.test(header)
-            ? Number(header) * 1000
-            : Date.parse(header) - Date.now()
-          : 500 * 2 ** attempt;
+        const ms = Math.max(retryAfterMs(header) ?? 0, retryBackoff(attempt));
         await response.body?.cancel();
         if (ms > 30_000)
-          throw new ServiceError(
-            "rate_limit",
-            `服务要求稍后重试（${header}）`,
-            429,
-          );
+          throw new ServiceError("rate_limit", "Jira 要求稍后重试", 429);
         await delay(Math.max(0, Number.isFinite(ms) ? ms : 1000), undefined, {
           signal: this.signal,
         });
