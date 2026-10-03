@@ -360,6 +360,14 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
         }),
       )
       .toEqual({ width: 640, height: 400 });
+    await expect(page.getByRole("menu")).not.toBeVisible();
+    await expect(
+      page
+        .locator('[data-slot="toast-title"]')
+        .filter({ hasText: "Image copied" })
+        .first(),
+    ).toBeVisible();
+    await previewDialog.locator("img").click({ button: "right" });
     const downloadPath = join(root, "downloaded-image.jpeg");
     await app.evaluate(({ BrowserWindow }, path) => {
       (globalThis as any).imageDownload = undefined;
@@ -396,8 +404,8 @@ test("Electron sends PNG, JPEG and WebP to Pi and reloads previews through valid
         [...saved],
       ),
     ).toEqual({ width: 640, height: 400 });
-    await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
-    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).not.toBeVisible();
+    await expect(previewDialog).toBeVisible();
     await page.keyboard.press("Escape");
     // Restore focus and seed this paste independently of the download interaction.
     await app.evaluate(

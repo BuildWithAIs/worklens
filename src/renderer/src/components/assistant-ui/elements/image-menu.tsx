@@ -6,7 +6,8 @@ import {
   type ReactElement,
 } from "react";
 import { ContextMenu } from "@base-ui/react/context-menu";
-import { CheckIcon, CopyIcon, DownloadIcon, Loader2Icon } from "lucide-react";
+import { CopyIcon, DownloadIcon, Loader2Icon } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 import {
   ContextMenuContent,
   DropdownMenuGroup,
@@ -31,9 +32,8 @@ export function ImageMenu({
 }) {
   const { t } = useAppTranslation();
   const { load } = useContext(ChatImageContext);
-  const { copyImage, isCopying, isCopied, error } = useCopyImage(source);
+  const { copyImage, isCopying } = useCopyImage(source);
   const [downloading, setDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState(false);
   const active = useRef<AbortController | undefined>(undefined);
   const trigger = useRef<HTMLDivElement | null>(null);
   const firstAction = useRef<HTMLDivElement | null>(null);
@@ -41,19 +41,28 @@ export function ImageMenu({
 
   useEffect(() => {
     setDownloading(false);
-    setDownloadError(false);
     return () => {
       active.current?.abort();
       active.current = undefined;
     };
   }, [source, load]);
 
+  const copy = async () => {
+    const result = await copyImage(resolvedSource);
+    if (!result) return;
+    toast.add({
+      type: result === "copied" ? "success" : "error",
+      title: t(result === "copied" ? "image.copied" : "image.copyFailed"),
+      timeout: result === "copied" ? 3200 : 0,
+      priority: result === "copied" ? "low" : "high",
+    });
+  };
+
   const download = async () => {
     if (!source || active.current) return;
     const controller = new AbortController();
     active.current = controller;
     setDownloading(true);
-    setDownloadError(false);
     let lease: ImageLease | undefined;
     try {
       // Hold an independent lease: closing the preview must not revoke a
@@ -71,7 +80,13 @@ export function ImageMenu({
         lease = undefined;
       }
     } catch {
-      if (!controller.signal.aborted) setDownloadError(true);
+      if (!controller.signal.aborted)
+        toast.add({
+          type: "error",
+          title: t("image.downloadFailed"),
+          timeout: 0,
+          priority: "high",
+        });
     } finally {
       lease?.release();
       if (active.current === controller) {
@@ -113,30 +128,18 @@ export function ImageMenu({
         <DropdownMenuGroup>
           <DropdownMenuItem
             ref={firstAction}
-            closeOnClick={false}
-            disabled={!source}
-            aria-disabled={isCopying || !source}
-            onClick={() => void copyImage(resolvedSource)}
+            disabled={isCopying || !source}
+            onClick={() => void copy()}
           >
             {isCopying ? (
               <Loader2Icon className="animate-spin" />
-            ) : isCopied ? (
-              <CheckIcon />
             ) : (
               <CopyIcon />
             )}
-            {t(
-              isCopying
-                ? "image.copying"
-                : isCopied
-                  ? "image.copied"
-                  : "image.copy",
-            )}
+            {t(isCopying ? "image.copying" : "image.copy")}
           </DropdownMenuItem>
           <DropdownMenuItem
-            closeOnClick={false}
-            disabled={!source}
-            aria-disabled={downloading || !source}
+            disabled={downloading || !source}
             onClick={() => void download()}
           >
             {downloading ? (
@@ -147,14 +150,6 @@ export function ImageMenu({
             {t(downloading ? "image.downloading" : "image.download")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        {(error || downloadError) && (
-          <p
-            role="alert"
-            className="max-w-48 px-2 py-1 text-xs text-destructive"
-          >
-            {t(downloadError ? "image.downloadFailed" : "image.copyFailed")}
-          </p>
-        )}
       </ContextMenuContent>
     </ContextMenu.Root>
   );

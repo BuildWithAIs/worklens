@@ -363,10 +363,13 @@ for (const theme of ["light", "dark"]) {
         .poll(() => page.evaluate(() => (window as any).clipboardImages.length))
         .toBe(index + 1);
       await expect(
-        page.getByRole("menuitem", { name: copiedLabel, exact: true }),
+        page
+          .locator('[data-slot="toast-title"]')
+          .filter({ hasText: copiedLabel })
+          .last(),
       ).toBeVisible();
-      await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
-      await page.keyboard.press("Escape");
+      await expect(page.getByRole("menu")).not.toBeVisible();
+      await expect(tiles.nth(index)).toBeFocused();
     }
     expect(await page.evaluate(() => (window as any).originalReads)).toEqual([
       0, 1, 2,
@@ -415,9 +418,14 @@ for (const theme of ["light", "dark"]) {
     await dialog.locator("img").click({ button: "right" });
     await page.getByRole("menuitem", { name: copyLabel, exact: true }).click();
     await expect(
-      page.getByRole("menuitem", { name: copiedLabel, exact: true }),
+      page
+        .locator('[data-slot="toast-title"]')
+        .filter({ hasText: copiedLabel })
+        .last(),
     ).toBeVisible();
-    await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
+    await expect(page.getByRole("menu")).not.toBeVisible();
+    await expect(dialog).toBeVisible();
+    await dialog.locator("img").click({ button: "right" });
     const download = page.waitForEvent("download");
     await page
       .getByRole("menuitem", {
@@ -426,7 +434,7 @@ for (const theme of ["light", "dark"]) {
       })
       .click();
     expect((await download).suggestedFilename()).toBe("sample-b.png");
-    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).not.toBeVisible();
     await expect(dialog).toBeVisible();
     await page.screenshot({
       path: info.outputPath(`image-copy-preview-${theme}.png`),
@@ -462,6 +470,47 @@ for (const theme of ["light", "dark"]) {
   });
 }
 
+test("image download closes the menu and reports read failures with a retryable toast", async ({
+  page,
+}) => {
+  await setup(page);
+  await choose(page, [file("sample.png")]);
+  await page.locator(".aui-composer-send").click();
+  await page.evaluate(() => {
+    const invoke = window.worklens.invoke;
+    let fail = true;
+    window.worklens.invoke = (async (name: string, input: any) => {
+      if (name === "chatImage" && input.variant === "original" && fail) {
+        fail = false;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        throw Error("Fixture original read failure");
+      }
+      return (invoke as any)(name, input);
+    }) as typeof window.worklens.invoke;
+  });
+  const tile = page.locator(
+    '.aui-user-message-attachments-end .aui-attachment-root [role="button"]',
+  );
+  await tile.click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Download image", exact: true })
+    .click();
+  await expect(page.getByRole("menu")).not.toBeVisible();
+  await expect(
+    page
+      .locator('[data-slot="toast-title"]')
+      .filter({ hasText: "Couldn’t download the image. Try again." }),
+  ).toHaveCount(1);
+  await tile.click({ button: "right" });
+  const download = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", { name: "Download image", exact: true })
+    .click();
+  expect((await download).suggestedFilename()).toBe("sample.png");
+  await expect(page.getByRole("menu")).not.toBeVisible();
+  await expect(tile).toBeFocused();
+});
+
 test("image copy reports failures, allows retry and cancels a pending history read on navigation", async ({
   page,
 }) => {
@@ -482,13 +531,17 @@ test("image copy reports failures, allows retry and cancels a pending history re
   );
   await tile.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Copy image", exact: true }).click();
+  await expect(page.getByRole("menu")).not.toBeVisible();
   await expect(
-    page.getByText("Couldn’t copy the image. Try again."),
-  ).toBeVisible();
+    page
+      .locator('[data-slot="toast-title"]')
+      .filter({ hasText: "Couldn’t copy the image. Try again." }),
+  ).toHaveCount(1);
   expect(await page.evaluate(() => (window as any).imageWrites)).toBe(0);
   await page.evaluate(() => {
     (window as any).rejectImageCopy = false;
   });
+  await tile.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Copy image", exact: true }).click();
   await expect
     .poll(() => page.evaluate(() => (window as any).imageWrites))
@@ -504,9 +557,15 @@ test("image copy reports failures, allows retry and cancels a pending history re
       return (invoke as any)(name, input);
     }) as typeof window.worklens.invoke;
   });
-  await page
-    .getByRole("menuitem", { name: "Image copied", exact: true })
-    .click();
+  await expect(page.getByRole("menu")).not.toBeVisible();
+  await tile.focus();
+  await page.keyboard.press("Shift+F10");
+  await expect(
+    page.getByRole("menuitem", { name: "Copy image", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menu")).not.toBeVisible();
+  await expect(tile).toBeFocused();
   await expect
     .poll(() => page.evaluate(() => typeof (window as any).finishCopyRead))
     .toBe("function");
