@@ -97,6 +97,7 @@ export function App() {
   const [data, setData] = useState<Bootstrap>();
   const [views, setViews] = useState<Record<string, ConversationView>>({});
   const [current, setCurrent] = useState<string>();
+  const [readyConversation, setReadyConversation] = useState<string>();
   const [historyStartedAt, setHistoryStartedAt] = useState<number>();
   const [historyLoad, setHistoryLoad] = useState<{
     id: string;
@@ -109,15 +110,23 @@ export function App() {
   const visibleConversation = useRef<string | undefined>(undefined);
   const notifiedRuns = useRef(new Set<string>());
   useEffect(() => {
-    visibleConversation.current = page === "chat" ? current : undefined;
-    if (page === "chat" && current)
+    const visible =
+      page === "chat" && !historyLoad && readyConversation === current
+        ? current
+        : undefined;
+    visibleConversation.current = visible;
+    if (visible)
       setUnread((previous) => {
-        if (!previous.has(current)) return previous;
+        if (!previous.has(visible)) return previous;
         const next = new Set(previous);
-        next.delete(current);
+        next.delete(visible);
         return next;
       });
-  }, [current, page]);
+  }, [current, page, historyLoad, readyConversation]);
+  const markHistoryReady = useCallback(
+    () => setReadyConversation(current),
+    [current],
+  );
   const [selection, setSelection] = useState<Selection>();
   const [text, setText] = useState("");
   const [draftImages, setDraftImages] = useState<ChatImage[]>([]);
@@ -193,9 +202,11 @@ export function App() {
   const latestRuns = useRef(new Map<string, string>());
   const globalUsage = useRef<GlobalUsage | undefined>(undefined);
   const currentView = current ? views[current] : undefined;
-  const loadingHistory = historyLoad?.id === current ? historyLoad : undefined;
+  const loadingHistory = historyLoad;
+  const selectedConversation = historyLoad?.id ?? current;
   const currentConversation =
-    data?.conversations.find((item) => item.id === current) ?? currentView;
+    data?.conversations.find((item) => item.id === selectedConversation) ??
+    (!historyLoad ? currentView : undefined);
   const busy = active(currentView?.phase);
   const sending = pendingSends.has(current ?? draftId);
   const refresh = useCallback(async () => {
@@ -295,17 +306,21 @@ export function App() {
     return () => preference.removeEventListener("change", apply);
   }, [data?.settings.theme]);
   async function open(id: string, defaults = data?.settings.defaults) {
-    if (id === current && page === "chat" && !loadingHistory?.failed) return;
+    if (id === current) {
+      if (!historyLoad && page === "chat") return;
+      navigation.current++;
+      setHistoryLoad(undefined);
+      setPage("chat");
+      return;
+    }
+    if (id === historyLoad?.id && !historyLoad.failed && page === "chat")
+      return;
     const visit = ++navigation.current;
-    setCurrent(id);
+    visibleConversation.current = undefined;
+    setReadyConversation(undefined);
     setPage("chat");
     setHistoryLoad({ id, failed: false });
     setHistoryStartedAt(performance.now());
-    setSelection(
-      data?.conversations.find((item) => item.id === id)?.selection ?? defaults,
-    );
-    setText("");
-    setDraftImages([]);
     try {
       await afterPaint();
       if (visit !== navigation.current) return;
@@ -314,7 +329,10 @@ export function App() {
       // History can render in the background; selection already painted above.
       startTransition(() => {
         acceptView(view);
+        setCurrent(id);
         setSelection(view.selection ?? defaults);
+        setText("");
+        setDraftImages([]);
         setHistoryLoad(undefined);
       });
     } catch {
@@ -324,9 +342,16 @@ export function App() {
   }
   function newConversation() {
     navigation.current++;
+    if (historyLoad && !current) {
+      setHistoryLoad(undefined);
+      setPage("chat");
+      return;
+    }
     setDraftId(crypto.randomUUID());
     setCurrent(undefined);
+    setReadyConversation(undefined);
     setHistoryLoad(undefined);
+    setHistoryStartedAt(undefined);
     setSelection(data?.settings.defaults);
     setText("");
     setDraftImages([]);
@@ -357,7 +382,7 @@ export function App() {
         next.delete(id);
         return next;
       });
-      if (current === id) newConversation();
+      if (current === id || historyLoad?.id === id) newConversation();
       setDialog(undefined);
       // Refresh usage and settings without delaying the visible removal.
       void refresh().catch((error) => notifyError(String(error)));
@@ -604,13 +629,15 @@ export function App() {
                 {group.conversations.map((conversation) => (
                   <div
                     key={conversation.id}
-                    className={`conversation-item ${current === conversation.id ? "selected" : ""}`}
+                    className={`conversation-item ${selectedConversation === conversation.id ? "selected" : ""}`}
                   >
                     <OverflowHint content={conversation.title}>
                       <Button
                         variant="ghost"
                         aria-current={
-                          current === conversation.id ? "page" : undefined
+                          selectedConversation === conversation.id
+                            ? "page"
+                            : undefined
                         }
                         aria-label={conversation.title}
                         className="conversation-open"
@@ -740,7 +767,7 @@ export function App() {
               </div>
             )}
           </header>
-          {loadingHistory ? (
+          {loadingHistory && (
             <div
               className="agent-thread relative"
               data-slot="conversation-loading"
@@ -765,9 +792,12 @@ export function App() {
                 <ThreadLoadingIndicator startedAt={historyStartedAt} />
               )}
             </div>
-          ) : (
+          )}
+          <div className={loadingHistory ? "hidden" : "contents"}>
             <AgentThread
               key={current ?? draftId}
+              suspended={!!loadingHistory}
+              onHistoryReady={markHistoryReady}
               historyStartedAt={historyStartedAt}
               view={currentView}
               onConsentChange={acceptView}
@@ -830,7 +860,7 @@ export function App() {
                 },
               }}
             />
-          )}
+          </div>
         </>
       </main>
       <Dialog

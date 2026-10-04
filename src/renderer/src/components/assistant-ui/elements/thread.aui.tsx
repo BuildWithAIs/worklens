@@ -31,6 +31,10 @@ import { useModelMenuContext } from "@/components/worklens/model-menu-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  ProgressiveThreadMessages,
+  useProgressiveHistory,
+} from "@/components/assistant-ui/elements/progressive-history";
+import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
   AuiIf,
@@ -66,7 +70,6 @@ import {
   SquareIcon,
 } from "lucide-react";
 import {
-  startTransition,
   createContext,
   useContext,
   useEffect,
@@ -107,6 +110,7 @@ export type ThreadComponents = {
 };
 
 export type ThreadProps = {
+  onHistoryReady?: () => void;
   loadingStartedAt?: number;
   components?: ThreadComponents | undefined;
   autoFocus?: boolean | undefined;
@@ -167,6 +171,7 @@ export const ThreadLoadingIndicator: FC<{ startedAt?: number }> = ({
 };
 
 export const Thread: FC<ThreadProps> = ({
+  onHistoryReady,
   loadingStartedAt,
   components = EMPTY_COMPONENTS,
   autoFocus = true,
@@ -178,6 +183,7 @@ export const Thread: FC<ThreadProps> = ({
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadRoot
+        onHistoryReady={onHistoryReady}
         loadingStartedAt={loadingStartedAt}
         isEmpty={isEmpty}
         autoFocus={autoFocus}
@@ -189,18 +195,29 @@ export const Thread: FC<ThreadProps> = ({
 };
 
 const ThreadRoot: FC<{
+  onHistoryReady?: () => void;
   loadingStartedAt?: number;
   isEmpty: boolean;
   autoFocus: boolean;
   footer?: ReactNode;
   afterMessages?: ReactNode;
-}> = ({ loadingStartedAt, isEmpty, autoFocus, footer, afterMessages }) => {
+}> = ({
+  onHistoryReady,
+  loadingStartedAt,
+  isEmpty,
+  autoFocus,
+  footer,
+  afterMessages,
+}) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
   const messages = useAuiState((s) => s.thread.messages);
   const fetchingHistory = useAuiState(isHistoryLoadingView);
   const viewport = useRef<HTMLDivElement>(null);
   const { first, ready } = useProgressiveHistory(messages.length, viewport);
   const loading = fetchingHistory || !ready;
+  useEffect(() => {
+    if (!loading) onHistoryReady?.();
+  }, [loading, onHistoryReady]);
 
   return (
     <ThreadPrimitive.Root
@@ -239,7 +256,10 @@ const ThreadRoot: FC<{
             data-slot="aui_message-group"
             className="messages mb-14 flex w-full min-w-0 flex-col gap-y-6 empty:hidden"
           >
-            <ProgressiveThreadMessages first={first} />
+            <ProgressiveThreadMessages
+              first={first}
+              components={messageComponents}
+            />
             {afterMessages}
           </div>
 
@@ -251,7 +271,7 @@ const ThreadRoot: FC<{
             )}
           >
             <ThreadScrollToBottom />
-            <Composer autoFocus={autoFocus} />
+            <Composer autoFocus={autoFocus && !loading} />
             {footer}
           </ThreadPrimitive.ViewportFooter>
         </div>
@@ -277,65 +297,6 @@ const ThreadMessage: FC = () => {
 };
 
 const messageComponents = { Message: ThreadMessage };
-
-function useProgressiveHistory(
-  messageCount: number,
-  viewport: { current: HTMLDivElement | null },
-) {
-  const [start, setStart] = useState<number>();
-  const [ready, setReady] = useState(messageCount === 0);
-  const initialStart = Math.max(0, messageCount - 2);
-  const first = Math.min(start ?? initialStart, initialStart);
-  useEffect(() => {
-    if (start === undefined && messageCount) setStart(first);
-  }, [start, messageCount, first]);
-  useEffect(() => {
-    if (!first) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const frame = requestAnimationFrame(() => {
-      timer = setTimeout(() => {
-        startTransition(() => setStart(Math.max(0, first - 2)));
-      }, 0);
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(timer);
-    };
-  }, [first]);
-  useEffect(() => {
-    if (first || ready) return;
-    let frame = requestAnimationFrame(() => {
-      // Lay out and position hidden history before revealing it. Never animate
-      // the initial scroll through a conversation's old messages.
-      const element = viewport.current;
-      element?.scrollTo({ top: element.scrollHeight, behavior: "instant" });
-      frame = requestAnimationFrame(() => setReady(true));
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [first, ready, viewport]);
-  return { first, ready };
-}
-
-function ProgressiveThreadMessages({ first }: { first: number }) {
-  const messages = useAuiState((s) => s.thread.messages);
-  // Start with the latest turn. Stable indices keep existing messages mounted
-  // as older turns are prepended, and leaving the thread cancels the next batch.
-  return (
-    <div
-      className="contents"
-      data-slot="progressive-history"
-      aria-busy={first > 0}
-    >
-      {messages.slice(first).map((_message, offset) => (
-        <ThreadPrimitive.MessageByIndex
-          key={first + offset}
-          index={first + offset}
-          components={messageComponents}
-        />
-      ))}
-    </div>
-  );
-}
 
 const ThreadScrollToBottom: FC = () => {
   const { t } = useAppTranslation();

@@ -68,6 +68,8 @@ import type {
 } from "../../../../shared/contracts";
 
 type Props = {
+  suspended?: boolean;
+  onHistoryReady?: () => void;
   historyStartedAt?: number;
   recoveredEdit?: RecoveredEdit;
   onRecoveredEditLoaded: () => void;
@@ -455,6 +457,8 @@ const threadComponents = {
 };
 
 export function AgentThread({
+  suspended = false,
+  onHistoryReady,
   historyStartedAt,
   recoveredEdit,
   onRecoveredEditLoaded,
@@ -907,22 +911,25 @@ export function AgentThread({
               running={!!view && activePhases.has(view.phase)}
             >
               <div className="agent-thread">
-                <Thread
-                  loadingStartedAt={historyStartedAt}
-                  components={threadComponents}
-                  footer={
-                    <JevSessionAccess
-                      conversation={view}
-                      onChange={onConsentChange}
-                    />
-                  }
-                  afterMessages={
-                    <JevConsentCards
-                      requests={view?.jevConsent?.pending ?? []}
-                      onChange={onConsentChange}
-                    />
-                  }
-                />
+                {!suspended && (
+                  <Thread
+                    onHistoryReady={onHistoryReady}
+                    loadingStartedAt={historyStartedAt}
+                    components={threadComponents}
+                    footer={
+                      <JevSessionAccess
+                        conversation={view}
+                        onChange={onConsentChange}
+                      />
+                    }
+                    afterMessages={
+                      <JevConsentCards
+                        requests={view?.jevConsent?.pending ?? []}
+                        onChange={onConsentChange}
+                      />
+                    }
+                  />
+                )}
               </div>
             </HtmlArtifactWorkspace>
           </ModelMenuContext.Provider>

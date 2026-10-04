@@ -1,100 +1,126 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
-async function setup(page: Page) {
+async function setup(page: Page, turns = 24, plain = false) {
   await mockWorklens(page);
-  await page.addInitScript(() => {
-    const invoke = window.worklens.invoke;
-    const table = [
-      "| Day | Temperature | Rain | Wind |",
-      "| --- | --- | --- | --- |",
-      ...Array.from(
-        { length: 20 },
-        (_, i) => `| Day ${i} | 20°C | None | Light |`,
-      ),
-    ].join("\n");
-    const views: Record<string, any> = {};
-    for (let n = 0; n < 6; n++) {
-      const id = `chat-${n}`;
-      views[id] = {
-        id,
-        title: `History ${n}`,
-        phase: "completed",
-        updatedAt: "2026-10-03T00:00:00Z",
-        selection: { provider: "deepseek", model: "flash", thinking: "medium" },
-        messages: Array.from({ length: n ? 24 : 1 }, (_, i) => [
-          { id: `${id}-user-${i}`, role: "user", text: `Question ${n}/${i}` },
-          {
-            id: `${id}-answer-${i}`,
-            role: "assistant",
-            text: `## Answer ${n}/${i}\n\n${table}`,
+  await page.addInitScript(
+    ({ turns, plain }) => {
+      const invoke = window.worklens.invoke;
+      const table = [
+        "| Day | Temperature | Rain | Wind |",
+        "| --- | --- | --- | --- |",
+        ...Array.from(
+          { length: 20 },
+          (_, i) => `| Day ${i} | 20°C | None | Light |`,
+        ),
+      ].join("\n");
+      const views: Record<string, any> = {};
+      for (let n = 0; n < 6; n++) {
+        const id = `chat-${n}`;
+        views[id] = {
+          id,
+          title: `History ${n}`,
+          phase: "completed",
+          updatedAt: "2026-10-03T00:00:00Z",
+          selection: {
+            provider: "deepseek",
+            model: "flash",
+            thinking: "medium",
           },
-        ]).flat(),
+          messages: Array.from({ length: n ? turns : 1 }, (_, i) => [
+            { id: `${id}-user-${i}`, role: "user", text: `Question ${n}/${i}` },
+            {
+              id: `${id}-answer-${i}`,
+              role: "assistant",
+              text: plain
+                ? `Answer ${n}/${i}`
+                : `## Answer ${n}/${i}\n\n${table}`,
+            },
+          ]).flat(),
+        };
+      }
+      const probe = {
+        held: [] as string[],
+        failed: [] as string[],
+        calls: [] as string[],
+        release: {} as Record<string, () => void>,
+        selectionMs: [] as number[],
+        partialRenders: [] as number[],
+        visiblePartialRenders: [] as number[],
       };
-    }
-    const probe = {
-      held: [] as string[],
-      failed: [] as string[],
-      calls: [] as string[],
-      release: {} as Record<string, () => void>,
-      selectionMs: [] as number[],
-      partialRenders: [] as number[],
-      visiblePartialRenders: [] as number[],
-    };
-    (window as any).switchProbe = probe;
-    document.addEventListener("click", (event) => {
-      const button = (event.target as Element).closest(".conversation-open");
-      if (!button) return;
-      const label = button.getAttribute("aria-label");
-      const start = performance.now();
-      const frame = () => {
-        if (
-          document
-            .querySelector('[data-slot="chat-title"]')
-            ?.getAttribute("aria-label") === label
-        )
-          probe.selectionMs.push(performance.now() - start);
-        else requestAnimationFrame(frame);
+      (window as any).switchProbe = probe;
+      let listener: Parameters<typeof window.worklens.onChat>[0] | undefined;
+      window.worklens.onChat = (callback) => {
+        listener = callback;
+        return () => {
+          listener = undefined;
+        };
       };
-      requestAnimationFrame(frame);
-    });
-    new MutationObserver(() => {
-      const history = document.querySelector(
-        '[data-slot="progressive-history"]',
-      );
-      if (history?.getAttribute("aria-busy") === "true") {
-        probe.partialRenders.push(
-          history.querySelectorAll(".aui-md table").length,
+      (window as any).completeReply = (id: string, runId: string) => {
+        listener?.({
+          conversationId: id,
+          runId,
+          type: "run_end",
+          sequence: 1,
+          view: { ...views[id], runId, revision: 1 },
+        });
+      };
+      document.addEventListener("click", (event) => {
+        const button = (event.target as Element).closest(".conversation-open");
+        if (!button) return;
+        const label = button.getAttribute("aria-label");
+        const start = performance.now();
+        const frame = () => {
+          if (
+            document
+              .querySelector('[data-slot="chat-title"]')
+              ?.getAttribute("aria-label") === label
+          )
+            probe.selectionMs.push(performance.now() - start);
+          else requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      });
+      new MutationObserver(() => {
+        const history = document.querySelector(
+          '[data-slot="progressive-history"]',
         );
-        if (getComputedStyle(history).visibility !== "hidden")
-          probe.visiblePartialRenders.push(
+        if (history?.getAttribute("aria-busy") === "true") {
+          probe.partialRenders.push(
             history.querySelectorAll(".aui-md table").length,
           );
-      }
-    }).observe(document, { childList: true, subtree: true });
-    window.worklens.invoke = (async (name: string, input: any) => {
-      if (name === "open") {
-        probe.calls.push(input.id);
-        if (probe.held.includes(input.id))
-          await new Promise<void>((resolve) => {
-            probe.release[input.id] = resolve;
-          });
-        if (probe.failed.includes(input.id))
-          throw new Error("Synthetic load failure");
-        return structuredClone(views[input.id]);
-      }
-      const result = await (invoke as any)(name, input);
-      if (name === "bootstrap") {
-        result.conversations = Object.values(views);
-        result.settings.lastConversation = "chat-0";
-      }
-      return result;
-    }) as typeof window.worklens.invoke;
-  });
+          if (getComputedStyle(history).visibility !== "hidden")
+            probe.visiblePartialRenders.push(
+              history.querySelectorAll(".aui-md table").length,
+            );
+        }
+      }).observe(document, { childList: true, subtree: true });
+      window.worklens.invoke = (async (name: string, input: any) => {
+        if (name === "open") {
+          probe.calls.push(input.id);
+          if (probe.held.includes(input.id))
+            await new Promise<void>((resolve) => {
+              probe.release[input.id] = resolve;
+            });
+          if (probe.failed.includes(input.id))
+            throw new Error("Synthetic load failure");
+          return structuredClone(views[input.id]);
+        }
+        const result = await (invoke as any)(name, input);
+        if (name === "bootstrap") {
+          result.conversations = Object.values(views);
+          result.settings.lastConversation = "chat-0";
+          for (const provider of result.providers)
+            for (const model of provider.models) model.image = true;
+        }
+        return result;
+      }) as typeof window.worklens.invoke;
+    },
+    { turns, plain },
+  );
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Answer 0/0", exact: true }),
-  ).toBeAttached();
+  await expect(page.getByText("Answer 0/0", { exact: true })).toBeVisible();
+  await expect(page.locator(".aui-composer-input")).toBeFocused();
 }
 
 test("selection and loading paint before history arrives; stale responses cannot replace a newer selection or draft", async ({
@@ -245,4 +271,107 @@ test("repeated multi-session switching paints selection promptly and progressive
   });
   await session.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   await page.screenshot({ path: info.outputPath("loaded-history.png") });
+});
+
+test("short messages load without waiting one frame per turn and restore typing focus", async ({
+  page,
+}, info) => {
+  await setup(page, 300, true);
+  const startedAt = await page.evaluate(() => performance.now());
+  await page.getByRole("button", { name: "History 1", exact: true }).click();
+  await expect(page.locator(".aui-thread-root")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  const elapsedMs = await page.evaluate(
+    (start) => performance.now() - start,
+    startedAt,
+  );
+  expect(elapsedMs).toBeLessThan(2000);
+  await expect(
+    page.locator('[data-slot="aui_assistant-message-root"]'),
+  ).toHaveCount(300);
+  await expect(page.locator(".aui-composer-input")).toBeFocused();
+  await info.attach("600-message-load-ms", {
+    body: JSON.stringify({ elapsedMs }),
+    contentType: "application/json",
+  });
+});
+
+for (const origin of ["History 0", "New chat"])
+  test(`failed navigation preserves text and image drafts from ${origin}`, async ({
+    page,
+  }) => {
+    await setup(page);
+    if (origin === "New chat")
+      await page.getByRole("button", { name: origin, exact: true }).click();
+    await page.locator(".aui-composer-input").fill("Keep my unsent draft");
+    const chooser = page.waitForEvent("filechooser");
+    await page.locator(".aui-composer-add-attachment").click();
+    await (
+      await chooser
+    ).setFiles({
+      name: "draft.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGNoCX0HRwzEcQDdEhxxGEJJKQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+    await expect(page.locator(".aui-composer-attachments img")).toHaveCount(1);
+    await expect(page.locator(".aui-attachment-tile-uploading")).toHaveCount(0);
+    await page.evaluate(() => {
+      (window as any).switchProbe.failed = ["chat-1"];
+    });
+    await page.getByRole("button", { name: "History 1", exact: true }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await page.getByRole("button", { name: origin, exact: true }).click();
+    await expect(page.locator(".aui-composer-input")).toHaveValue(
+      "Keep my unsent draft",
+    );
+    await expect(page.locator(".aui-composer-attachments img")).toHaveCount(1);
+    await expect(page.locator(".aui-composer-input")).toBeFocused();
+  });
+
+test("failed and abandoned loads stay unread until history becomes visible", async ({
+  page,
+}) => {
+  await setup(page);
+  const row = page.locator(".conversation-item").filter({
+    has: page.getByRole("button", { name: "History 1", exact: true }),
+  });
+  await page.evaluate(() => {
+    (window as any).completeReply("chat-1", "first-reply");
+    (window as any).switchProbe.failed = ["chat-1"];
+  });
+  await expect(row.locator(".conversation-unread")).toHaveCount(1);
+  await page.getByRole("button", { name: "History 1", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(row.locator(".conversation-unread")).toHaveCount(1);
+  await page.evaluate(() => {
+    const probe = (window as any).switchProbe;
+    probe.failed = [];
+    probe.held = ["chat-1"];
+  });
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => typeof (window as any).switchProbe.release["chat-1"]),
+    )
+    .toBe("function");
+  await page.evaluate(() => {
+    (window as any).completeReply("chat-1", "second-reply");
+  });
+  await page.getByRole("button", { name: "History 0", exact: true }).click();
+  await expect(page.locator(".aui-composer-input")).toBeFocused();
+  await page.evaluate(() => {
+    (window as any).switchProbe.release["chat-1"]();
+  });
+  await expect(row.locator(".conversation-unread")).toHaveCount(1);
+  await page.evaluate(() => {
+    (window as any).switchProbe.held = [];
+  });
+  await page.getByRole("button", { name: "History 1", exact: true }).click();
+  await expect(page.locator(".aui-composer-input")).toBeFocused();
+  await expect(row.locator(".conversation-unread")).toHaveCount(0);
 });
