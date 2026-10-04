@@ -70,7 +70,7 @@ export class GitHubHttp {
           "请求超出当前 GitHub API 范围",
         );
       for (let attempt = 0; ; attempt++) {
-        this.signal.throwIfAborted();
+        let dispatched = false;
         let response: Response;
         try {
           response = await this.gate.fetch(
@@ -78,7 +78,8 @@ export class GitHubHttp {
             !readOnly,
             (wait) => this.rateLimit(wait),
             async () => {
-              const result = await this.fetcher(url, {
+              dispatched = true;
+              return this.fetcher(url, {
                 ...init,
                 redirect: "manual",
                 signal: AbortSignal.any([
@@ -86,17 +87,20 @@ export class GitHubHttp {
                   AbortSignal.timeout(30_000),
                 ]),
               });
-              return bounded
-                ? this.boundedResponse(
+            },
+            bounded
+              ? (result) =>
+                  this.boundedResponse(
                     result,
                     readOnly,
                     url === this.addresses.graphql,
                   )
-                : result;
-            },
+              : undefined,
           );
         } catch (error) {
           if (error instanceof ServiceError) throw error;
+          if (!dispatched && this.signal.aborted)
+            throw new ServiceError("cancelled", "请求在发送前已取消。");
           if (!readOnly)
             throw new ServiceError(
               "unknown",

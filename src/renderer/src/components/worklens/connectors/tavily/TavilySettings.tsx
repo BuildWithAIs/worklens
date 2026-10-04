@@ -59,9 +59,11 @@ export function TavilySettings({
   const { action, busy, act } = useConnectorAction({
     validation,
     test: async () => {
-      const result = await window.worklens.invoke("tavilyTest", form);
-      setUsageRevision((value) => value + 1);
-      return result;
+      try {
+        return await window.worklens.invoke("tavilyTest", form);
+      } finally {
+        setUsageRevision((value) => value + 1);
+      }
     },
     save: () => window.worklens.invoke("tavilySave", form),
     remove: () => window.worklens.invoke("tavilyRemove", undefined),

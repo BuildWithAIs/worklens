@@ -104,15 +104,16 @@ export class JiraHttp {
       if (form) headers["X-Atlassian-Token"] = "no-check";
       else if (body !== undefined) headers["Content-Type"] = "application/json";
       for (let attempt = 0; ; attempt++) {
-        this.signal.throwIfAborted();
+        let dispatched = false;
         let response: Response;
         try {
           response = await this.gate.fetch(
             this.signal,
             !readOnly,
             (wait) => this.rateLimit(wait),
-            () =>
-              this.fetcher(url, {
+            () => {
+              dispatched = true;
+              return this.fetcher(url, {
                 method,
                 headers,
                 body: form
@@ -125,10 +126,13 @@ export class JiraHttp {
                   this.signal,
                   AbortSignal.timeout(30_000),
                 ]),
-              }),
+              });
+            },
           );
         } catch (error) {
           if (error instanceof ServiceError) throw error;
+          if (!dispatched && this.signal.aborted)
+            throw new ServiceError("cancelled", "请求在发送前已取消。");
           if (!readOnly)
             throw new ServiceError(
               "unknown",

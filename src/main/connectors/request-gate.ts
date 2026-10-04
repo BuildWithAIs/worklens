@@ -71,6 +71,7 @@ class RequestGate {
     write: boolean,
     blocked: (wait: number) => Error,
     execute: () => Promise<Response>,
+    consume?: (response: Response) => Promise<Response>,
   ) {
     return this.queue.run(signal, async () => {
       signal.throwIfAborted();
@@ -86,7 +87,11 @@ class RequestGate {
       }
       const response = await execute();
       this.observe(response);
-      return response;
+      const result = consume ? await consume(response) : response;
+      if (result.ok && this.until <= Date.now()) this.failures = 0;
+      const limit = this.limits.get(response);
+      if (limit && result !== response) this.limits.set(result, limit);
+      return result;
     });
   }
 
@@ -133,7 +138,6 @@ class RequestGate {
           retry !== undefined,
       });
     } else if (response.ok) {
-      if (this.until <= now) this.failures = 0;
       if (remaining === "0" && Number.isFinite(resetAt))
         this.until = Math.max(this.until, resetAt);
     }

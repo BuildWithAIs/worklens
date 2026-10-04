@@ -12,6 +12,7 @@ import { JevHttp } from "../../src/main/connectors/jev/http";
 const clock = vi.hoisted(() => ({
   now: 1_800_000_000_000,
   waits: [] as number[],
+  onWait: undefined as (() => void) | undefined,
 }));
 vi.mock("node:timers/promises", () => ({
   setTimeout: async (
@@ -21,12 +22,15 @@ vi.mock("node:timers/promises", () => ({
   ) => {
     options?.signal?.throwIfAborted();
     clock.waits.push(ms);
+    clock.onWait?.();
+    options?.signal?.throwIfAborted();
     clock.now += ms;
   },
 }));
 beforeEach(() => {
   clock.now = 1_800_000_000_000;
   clock.waits = [];
+  clock.onWait = undefined;
   vi.spyOn(Date, "now").mockImplementation(() => clock.now);
   vi.spyOn(Math, "random").mockReturnValue(0);
 });
@@ -51,8 +55,10 @@ function call(
   write = false,
   token?: string,
   url?: string,
+  signal?: AbortSignal,
 ) {
   const connection = snapshot(token, url);
+  if (signal) connection.signal = signal;
   if (service === "GitHub")
     return new GitHubHttp(connection, fetcher).rest(
       write ? "POST /items" : "GET /user",
@@ -380,5 +386,107 @@ test.each(services)(
     await expect(call(service, fetcher, true)).rejects.toThrow();
     await expect(call(service, fetcher)).rejects.toThrow();
     expect(fetcher).toHaveBeenCalledOnce();
+  },
+);
+
+test.each([
+  { status: 503, headers: new Headers({ "retry-after": "120" }) },
+  {
+    status: 200,
+    headers: new Headers({
+      "x-ratelimit-remaining": "0",
+      "x-ratelimit-reset": String((1_800_000_000_000 + 120_000) / 1000),
+    }),
+  },
+])(
+  "GitHub retains cooldown headers when a $status body fails",
+  async ({ status, headers }) => {
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      if (fetcher.mock.calls.length > 1) return ok();
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error("Synthetic response body reset"));
+          },
+        }),
+        { status, headers },
+      );
+    });
+    await expect(call("GitHub", fetcher)).rejects.toMatchObject({
+      code: "rate_limit",
+    });
+    await expect(call("GitHub", fetcher)).rejects.toMatchObject({
+      code: "rate_limit",
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+    clock.now = 1_800_000_120_000;
+    await call("GitHub", fetcher);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  },
+);
+
+test.each(["GitHub", "Jira", "Confluence"] as const)(
+  "%s distinguishes cancellation of a queued write from an uncertain dispatch",
+  async (service) => {
+    const releases: ((response: Response) => void)[] = [];
+    const fetcher = vi.fn<typeof fetch>(
+      () => new Promise((resolve) => releases.push(resolve)),
+    );
+    const maximum = service === "GitHub" ? 1 : 4;
+    const reads = Promise.all(
+      Array.from({ length: maximum }, () => call(service, fetcher)),
+    );
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(maximum));
+    const controller = new AbortController();
+    const write = call(
+      service,
+      fetcher,
+      true,
+      undefined,
+      undefined,
+      controller.signal,
+    );
+    const cancelled = expect(write).rejects.toMatchObject({
+      code: "cancelled",
+    });
+    controller.abort();
+    await cancelled;
+    expect(fetcher).toHaveBeenCalledTimes(maximum);
+    for (const release of releases) release(ok());
+    await reads;
+    fetcher.mockImplementation(async () => ok());
+    await call(service, fetcher, true);
+    expect(fetcher).toHaveBeenCalledTimes(maximum + 1);
+  },
+);
+
+test("GitHub cancels an unsent write during write spacing", async () => {
+  const fetcher = vi.fn<typeof fetch>(async () => ok());
+  await call("GitHub", fetcher, true);
+  const controller = new AbortController();
+  clock.onWait = () => controller.abort();
+  await expect(
+    call("GitHub", fetcher, true, undefined, undefined, controller.signal),
+  ).rejects.toMatchObject({ code: "cancelled" });
+  expect(clock.waits).toEqual([1000]);
+  expect(fetcher).toHaveBeenCalledOnce();
+  clock.onWait = undefined;
+  await call("GitHub", fetcher, true);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+test.each(["GitHub", "Jira", "Confluence"] as const)(
+  "%s keeps cancellation after write dispatch uncertain and never retries it",
+  async (service) => {
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      controller.abort();
+      throw new Error("Synthetic response lost after dispatch");
+    });
+    await expect(
+      call(service, fetcher, true, undefined, undefined, controller.signal),
+    ).rejects.toMatchObject({ code: "unknown" });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(clock.waits).toEqual([]);
   },
 );

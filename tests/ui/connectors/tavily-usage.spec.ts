@@ -302,6 +302,52 @@ test("manual refresh and connection tests update visible credits without reopeni
   ).toBeVisible();
 });
 
+test("a rate-limited connection test updates the visible usage cooldown", async ({
+  page,
+}) => {
+  await page.clock.install();
+  const manage = await setup(page);
+  await manage.click();
+  const dialog = page.getByRole("dialog", { name: "Tavily", exact: true });
+  const refresh = dialog.getByRole("button", {
+    name: "Refresh usage",
+    exact: true,
+  });
+  await expect(
+    dialog.getByText("56 / 1,000 Credits", { exact: true }),
+  ).toBeVisible();
+  const previous = await dialog.getByRole("status").textContent();
+  await page.clock.fastForward(60_001);
+  await expect(refresh).toBeEnabled();
+  await page.evaluate(() => {
+    const invoke = window.worklens.invoke;
+    window.worklens.invoke = (async (method, input) => {
+      if (method === "tavilyTest") {
+        const probe = (window as any).usageProbe;
+        probe.override = {
+          usage: probe.last.usage,
+          refreshAfter: Date.now() + 600_000,
+          error: "rate_limit",
+        };
+        throw new Error("Tavily 要求稍后重试");
+      }
+      return invoke(method, input);
+    }) as typeof window.worklens.invoke;
+  });
+  await dialog
+    .getByRole("button", { name: "Test connection", exact: true })
+    .click();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Usage temporarily rate limited",
+  );
+  await expect(dialog.getByRole("status")).toContainText(previous!);
+  await expect(refresh).toBeDisabled();
+  expect(await page.evaluate(() => (window as any).usageProbe.calls)).toBe(2);
+  await page.clock.fastForward(300_000);
+  await expect(refresh).toBeDisabled();
+  expect(await page.evaluate(() => (window as any).usageProbe.calls)).toBe(2);
+});
+
 test("rate-limited refresh retains the old timestamp and disables refresh until the server deadline", async ({
   page,
 }, info) => {
