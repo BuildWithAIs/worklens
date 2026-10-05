@@ -3,6 +3,11 @@ import i18n, { type AppLanguage } from "../i18n";
 // Main-process and provider messages are untrusted runtime data. Translate only
 // known application-owned text and leave conversation/tool content untouched.
 const messages = [
+  [
+    "Jev 暂时繁忙，请稍后重试。",
+    "Jev is busy. Try again later.",
+    "connectors.runtime.jevBusy",
+  ],
   ["MESSAGE_VERSION_CHANGED", "MESSAGE_VERSION_CHANGED", "thread.versionChanged"],
   ["MESSAGE_VERSION_MISSING", "MESSAGE_VERSION_MISSING", "thread.versionMissing"],
   ["CHAT_IMAGE_MODEL", "CHAT_IMAGE_MODEL", "attachments.unsupportedModel"],
@@ -290,6 +295,11 @@ export function systemText(text: string, language: AppLanguage) {
   // Connector-owned runtime messages carry service names and status codes.
   // Translate their known wording while retaining server-provided details.
   result = result
+    .replace(
+      /(Jira|Confluence|GitHub|Tavily) 要求稍后重试/g,
+      (_, service: string) =>
+        t("connectors.runtime.serviceRateLimit", { service }),
+    )
     .replace(
       /(Jira|Confluence|GitHub|Tavily) 网络请求失败或超时/g,
       (_, service) => t("connectors.runtime.network", { service }),

@@ -27,6 +27,7 @@ import {
 import { BrandIcon } from "../../ProviderIcon";
 import tavilyIcon from "@lobehub/icons-static-svg/icons/tavily.svg?url";
 import { useAppTranslation } from "@/i18n";
+import { TavilyUsage } from "./TavilyUsage";
 
 /** Default API address; the field lets a proxy stand in for it. */
 const TAVILY_API_URL = "https://api.tavily.com";
@@ -50,13 +51,20 @@ export function TavilySettings({
     token: "",
   });
   const validation = useConnectorForm("tavily", form, connection);
+  const [usageRevision, setUsageRevision] = useState(0);
   const update = (patch: Partial<TavilySettingsInput>) => {
     setForm((current) => ({ ...current, ...patch }));
     validation.reset();
   };
   const { action, busy, act } = useConnectorAction({
     validation,
-    test: () => window.worklens.invoke("tavilyTest", form),
+    test: async () => {
+      try {
+        return await window.worklens.invoke("tavilyTest", form);
+      } finally {
+        setUsageRevision((value) => value + 1);
+      }
+    },
     save: () => window.worklens.invoke("tavilySave", form),
     remove: () => window.worklens.invoke("tavilyRemove", undefined),
     afterSave: () => setForm((current) => ({ ...current, token: "" })),
@@ -88,10 +96,18 @@ export function TavilySettings({
           </DialogDescription>
         </DialogHeader>
 
-        {connection?.plan && (
-          <p className="text-sm">
-            {t("connectors.tavily.plan")}: {connection.plan}
-          </p>
+        {connection?.configured && validation.unchanged ? (
+          <TavilyUsage
+            key={connection.url}
+            plan={connection.plan}
+            revision={usageRevision}
+          />
+        ) : (
+          connection?.plan && (
+            <p className="text-sm">
+              {t("connectors.tavily.plan")}: {connection.plan}
+            </p>
+          )
         )}
         <form
           id="tavily-settings-form"

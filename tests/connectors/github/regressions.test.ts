@@ -1,8 +1,85 @@
 import { expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
 import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";
 import { setup } from "./setup";
 import { HEAD } from "./fixture";
+import { apiAddresses } from "../../../src/main/connectors/github/connection";
+import { requestGate } from "../../../src/main/connectors/request-gate";
+
+it("journals a cancelled queued write as unsent and allows a new invocation", async () => {
+  const s = await setup();
+  const connection = s.connections.snapshot();
+  const gate = requestGate(
+    "GitHub",
+    apiAddresses(connection.settings.url).rest,
+    connection.token,
+    s.connections.fetcher,
+  );
+  let release!: (response: Response) => void;
+  const blocker = gate.fetch(
+    new AbortController().signal,
+    false,
+    () => new Error("Synthetic cooldown"),
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const controller = new AbortController();
+  const callId = "cancelled-write";
+  const operationId = createHash("sha256")
+    .update(JSON.stringify(["session1", "run1", connection.revision, callId]))
+    .digest("hex");
+  const journalPath = join(
+    s.artifacts.root,
+    "github",
+    "operations",
+    createHash("sha256").update("session1").digest("hex"),
+    `${operationId}.json`,
+  );
+  const request = { operation: "star_repository", repo: "o/r" };
+  const operation = s.call(
+    request,
+    true,
+    "session1",
+    controller.signal,
+    callId,
+  );
+  try {
+    await vi.waitFor(async () => {
+      expect(JSON.parse(await readFile(journalPath, "utf8")).pendingStep).toBe(
+        "star_repository",
+      );
+    });
+    controller.abort();
+    const result = await operation;
+    expect(result.data.status).toBe("cancelled");
+    expect(result.data.outcome).toBe("cancelled");
+    expect(result.data.steps).toEqual([
+      { step: "star_repository", status: "cancelled" },
+    ]);
+    expect(JSON.parse(await readFile(journalPath, "utf8")).status).toBe(
+      "cancelled",
+    );
+    expect(s.fixture.state.writes).toBe(0);
+  } finally {
+    controller.abort();
+    release(Response.json({ ok: true }));
+    await blocker;
+    await operation;
+  }
+  const retry = await s.call(
+    request,
+    true,
+    "session1",
+    undefined,
+    "retry-unsent-write",
+  );
+  expect(retry.data.status).toBe("success");
+  expect(s.fixture.state.writes).toBe(1);
+});
 
 it("keeps mutation bodies and local paths out of REST preflight URLs", async () => {
   const gets: URL[] = [];

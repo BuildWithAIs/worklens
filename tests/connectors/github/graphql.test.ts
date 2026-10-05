@@ -129,7 +129,7 @@ it("validates the complete collaboration and project workflows against the pinne
         `${request.operation}: ${JSON.stringify(result.data)}`,
       ).toContain(result.data.status);
     }
-});
+}, 90_000); // The full mutation catalog now observes GitHub's one-second write spacing.
 it("does not present GraphQL partial data as complete success", async () => {
   const s = await setup();
   s.fixture.state.graphqlErrors = true;
