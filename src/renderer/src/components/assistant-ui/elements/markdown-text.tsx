@@ -48,6 +48,7 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import { useAppTranslation } from "@/i18n";
 import { toast } from "@/components/ui/toast";
+import { inspectConversationFile } from "@/lib/file-inspection-queue";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   compact?: boolean;
@@ -91,17 +92,21 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
     available: ReadonlySet<string>;
   }>();
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     if (!conversationId || !assistant) return;
     const paths: string[] = JSON.parse(candidates);
+    if (!paths.length) {
+      setVerification((previous) => (previous ? undefined : previous));
+      return;
+    }
     void Promise.all(
       paths.map(async (path) => {
         try {
-          const file = await window.worklens.invoke("conversationFile", {
-            id: conversationId,
+          const file = await inspectConversationFile(
+            conversationId,
             path,
-            action: "inspect",
-          });
+            controller.signal,
+          );
           return file && !file.issue
             ? { path, produced: file.produced }
             : undefined;
@@ -110,7 +115,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
         }
       }),
     ).then((results) => {
-      if (active)
+      if (!controller.signal.aborted)
         setVerification({
           conversationId,
           paths: new Set(
@@ -122,7 +127,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
         });
     });
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [assistant, conversationId, candidates, running, outputs]);
   const producedPaths =
