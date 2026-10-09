@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, Settings2, Zap } from "lucide-react";
+import { LoaderCircle, Pencil, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -132,12 +132,11 @@ export function NetworkProxySetting({
             {proxy.mode === "custom" && (
               <Button
                 variant="outline"
-                size="sm"
                 disabled={pending}
                 onClick={() => setEditing(true)}
                 aria-label={t("settings.proxyEditLabel")}
               >
-                <Settings2 data-icon="inline-start" aria-hidden="true" />
+                <Pencil data-icon="inline-start" aria-hidden="true" />
                 {t("settings.proxyEdit")}
               </Button>
             )}

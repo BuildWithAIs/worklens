@@ -108,7 +108,17 @@ test("custom proxy is prefilled, validated, tested and applied only after saving
     "Using http://127.0.0.1:1087",
   );
 
-  await row.getByRole("button", { name: "Edit custom proxy" }).click();
+  // The edit button matches the select beside it.
+  const edit = row.getByRole("button", { name: "Edit custom proxy" });
+  const heights = await Promise.all(
+    [edit, select].map((control) =>
+      control.evaluate((element) => element.getBoundingClientRect().height),
+    ),
+  );
+  expect(heights[0]).toBe(heights[1]);
+  await row.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("network-custom-row.png") });
+  await edit.click();
   await expect(address).toHaveValue("http://127.0.0.1:1087");
   await expect(dialog.locator("#network-proxy-url-hint")).toHaveCount(0);
   await page.evaluate(() => {
@@ -122,9 +132,7 @@ test("custom proxy is prefilled, validated, tested and applied only after saving
   ).toBeVisible();
 });
 
-test("turning the proxy off saves immediately", async ({
-  page,
-}) => {
+test("turning the proxy off saves immediately", async ({ page }) => {
   const row = await openGeneral(page);
   await expect(row.getByRole("status")).toHaveText(
     "No system proxy detected. Requests connect directly.",
