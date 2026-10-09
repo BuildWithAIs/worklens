@@ -129,7 +129,7 @@ test("failed commit restores the saved value and preview, keyboard can retry", a
   await expect(
     page
       .locator('[data-slot="toast-title"]')
-      .filter({ hasText: "Could not save background appearance." }),
+      .filter({ hasText: "Couldn’t save background appearance." }),
   ).toBeVisible();
   await expect(slider(page)).toHaveValue("50");
   await expect(

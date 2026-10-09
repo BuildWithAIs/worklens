@@ -31,7 +31,7 @@ for (const theme of ["light", "dark"]) {
       await row.getByRole("button", { name: t("About example-guide", "了解example-guide"), exact: true }).click();
       const details = page.getByRole("dialog", { name: "example-guide", exact: true });
       await expect(details.locator('[data-slot="dialog-description"]')).toHaveText(source.description);
-      await expect(details).toContainText(t("Changes apply on the next conversation turn.", "更改将在下一轮对话生效。"));
+      await expect(details).toContainText(t("Changes take effect on your next message.", "更改将在你发送下一条消息时生效。"));
       await page.keyboard.press("Escape");
       await content.getByRole("button", { name: t("About Built-in", "关于内置"), exact: true }).hover();
       await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(t("Ships with WorkLens.", "随 WorkLens 安装。"));
@@ -118,7 +118,7 @@ test("duplicate skills explain precedence, reveal their own file, and expose ful
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", {name: "example-guide", exact: true});
   await expect(dialog).toContainText("Full local description.");
-  await expect(dialog).toContainText("Changes apply on the next conversation turn");
+  await expect(dialog).toContainText("Changes take effect on your next message");
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
 });

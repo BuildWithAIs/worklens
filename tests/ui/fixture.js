@@ -262,7 +262,7 @@ export async function mockWorklens(page, options = {}) {
         if (name === "settings") {
           if (input.backgroundIntensity && window.failNextBackgroundSave) {
             window.failNextBackgroundSave = false;
-            throw Error("Could not save background appearance.");
+            throw Error("Couldn’t save background appearance.");
           }
           await new Promise((resolve) => setTimeout(resolve, 120));
           if (input.hiddenModels && window.failNextVisibilitySave) {
