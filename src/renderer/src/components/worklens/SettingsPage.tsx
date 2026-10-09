@@ -8,6 +8,7 @@ import {
   type ConnectionTab,
 } from "./ConnectorSettingsTabs";
 import { CodeModeSetting } from "./CodeModeSetting";
+import { NetworkProxySetting } from "./NetworkProxySetting";
 import { SkillsSettings } from "./skills/SkillsSettings";
 import { Hint } from "@/components/ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
@@ -711,6 +712,11 @@ export function SettingsPage({
                 <CodeModeSetting
                   enabled={data.settings.codemodeEnabled !== false}
                   save={save}
+                />
+                <NetworkProxySetting
+                  proxy={data.settings.proxy}
+                  save={save}
+                  onSuccess={onSuccess}
                 />
                 <section className="settings-section">
                   <h2
