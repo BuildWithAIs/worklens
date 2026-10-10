@@ -216,7 +216,7 @@ test("Cloud v2 page updates, comments, properties and tasks use deployment-speci
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
-  const service = new ConfluenceService(f.connections, f.artifacts, fetcher);
+  const service = new ConfluenceService(f.sites, f.artifacts, fetcher);
   const tools = service.tools("cloud-session", () => "run");
   const call = async (a: object, write = false) => {
     const r = await tools[write ? 1 : 0].execute(

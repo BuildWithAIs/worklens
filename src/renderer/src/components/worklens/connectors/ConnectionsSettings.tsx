@@ -17,7 +17,12 @@ import {
   ItemActions,
 } from "@/components/ui/item";
 import { useAppTranslation } from "@/i18n";
-import { connectorCatalog, type ConnectorSettingsProps } from "./catalog";
+import {
+  connectorCatalog,
+  savedConnections,
+  type ConnectorInstance,
+  type ConnectorSettingsProps,
+} from "./catalog";
 import { settingsErrorDescription } from "../settings-notification";
 export function ConnectionsSettings({
   data,
@@ -29,26 +34,45 @@ export function ConnectionsSettings({
   const { t, language } = useAppTranslation();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
-  const [editing, setEditing] = useState<string>();
+  const [editing, setEditing] = useState<{ id: string; instance?: string }>();
   const Settings = connectorCatalog.find(
-    (entry) => entry.id === editing,
+    (entry) => entry.id === editing?.id,
   )?.Settings;
   const search = query.trim().toLocaleLowerCase();
+  const matches = (text: string) => text.toLocaleLowerCase().includes(search);
+  const rows = connectorCatalog.flatMap((platform) => {
+    const saved = savedConnections(platform, data);
+    const label = `${platform.name} ${platform.keywords ?? ""}`;
+    return [
+      ...saved
+        .filter((instance) => matches(`${label} ${instance.url ?? ""}`))
+        .map((instance) => ({
+          platform,
+          added: true,
+          instance: instance as ConnectorInstance | undefined,
+          // Several saved sites need their address to tell actions apart.
+          multiple: saved.length > 1,
+        })),
+      // Multi-instance services stay available for adding another site.
+      ...((!saved.length || platform.instances) && matches(label)
+        ? [
+            {
+              platform,
+              added: false,
+              instance: undefined,
+              multiple: saved.length > 0,
+            },
+          ]
+        : []),
+    ];
+  });
   const groups = [
     { id: "connected", label: t("common.connected"), added: true },
     { id: "available", label: t("common.available"), added: false },
   ]
     .map((group) => ({
       ...group,
-      platforms: connectorCatalog.filter((platform) => {
-        const added = !!platform.connection?.(data)?.url;
-        return (
-          added === group.added &&
-          `${platform.name} ${platform.keywords ?? ""}`
-            .toLocaleLowerCase()
-            .includes(search)
-        );
-      }),
+      platforms: rows.filter((row) => row.added === group.added),
     }))
     .filter(
       (group) =>
@@ -88,22 +112,35 @@ export function ConnectionsSettings({
             </span>
           </h2>
           <ItemGroup className="settings-list settings-connection-list">
-            {group.platforms.map(
-              ({ id, name, icon, tagline, connection, Settings }) => (
+            {group.platforms.map(({ platform, instance, multiple }) => {
+              const { id, name, icon, tagline, Settings } = platform;
+              const adding = !group.added && multiple;
+              const label = group.added
+                ? `${t("common.manage")} ${name}${multiple && instance?.url ? ` ${instance.url}` : ""}`
+                : adding
+                  ? t("connectors.addSiteNamed", { name })
+                  : `${t("common.connect")} ${name}`;
+              return (
                 <Item
-                  key={id}
+                  key={`${id}:${instance?.id ?? ""}`}
                   size="sm"
                   role="listitem"
                   className="settings-entry"
                   data-connection={id}
+                  data-connection-instance={instance?.id}
                 >
                   <ItemContent className="settings-entry-copy">
                     <ItemTitle className="settings-entry-title">
                       {icon ? <BrandIcon source={icon} /> : <ProviderIcon />}
                       <span>{name}</span>
                       {tagline && <Badge variant="outline">{tagline(t)}</Badge>}
+                      {instance?.readOnly && (
+                        <Badge variant="outline">
+                          {t("connectors.readOnly")}
+                        </Badge>
+                      )}
                     </ItemTitle>
-                    {connection?.(data)?.error && (
+                    {instance?.error && (
                       <ItemDescription className="text-[var(--warning)]">
                         <span className="inline-flex items-center gap-1.5">
                           <CircleAlert
@@ -112,7 +149,7 @@ export function ConnectionsSettings({
                           />
                           {t("settingsFeedback.connectionNeedsAttention", {
                             reason: settingsErrorDescription(
-                              connection(data)!.error!,
+                              instance.error,
                               language,
                               true,
                             ),
@@ -122,7 +159,7 @@ export function ConnectionsSettings({
                     )}
                     {group.added && (
                       <ItemDescription className="settings-entry-description">
-                        {connection?.(data)?.url}
+                        {instance?.url}
                       </ItemDescription>
                     )}
                   </ItemContent>
@@ -131,8 +168,17 @@ export function ConnectionsSettings({
                       variant="outline"
                       size="sm"
                       disabled={!Settings}
-                      onClick={() => setEditing(id)}
-                      aria-label={`${group.added ? t("common.manage") : t("common.connect")} ${name}`}
+                      onClick={() =>
+                        setEditing({
+                          id,
+                          // Single-connection services have no instance ID.
+                          instance:
+                            instance && instance.id !== id
+                              ? instance.id
+                              : undefined,
+                        })
+                      }
+                      aria-label={label}
                     >
                       {group.added ? (
                         <Settings2
@@ -142,12 +188,16 @@ export function ConnectionsSettings({
                       ) : (
                         <Plus data-icon="inline-start" aria-hidden="true" />
                       )}
-                      {group.added ? t("common.manage") : t("common.connect")}
+                      {group.added
+                        ? t("common.manage")
+                        : adding
+                          ? t("connectors.addSite")
+                          : t("common.connect")}
                     </Button>
                   </ItemActions>
                 </Item>
-              ),
-            )}
+              );
+            })}
           </ItemGroup>
         </section>
       ))}
@@ -160,11 +210,14 @@ export function ConnectionsSettings({
       )}
       {Settings && (
         <Settings
+          // Each site keeps its own form state.
+          key={`${editing?.id}:${editing?.instance ?? ""}`}
           data={data}
           conversation={conversation}
           onConsentChange={onConsentChange}
           refresh={refresh}
           onSuccess={onSuccess}
+          instance={editing?.instance}
           onClose={() => setEditing(undefined)}
         />
       )}

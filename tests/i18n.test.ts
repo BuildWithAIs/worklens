@@ -67,6 +67,14 @@ for (const service of ["Jira", "Confluence", "GitHub", "Tavily"]) {
     );
     expect(
       systemText(
+        `${service} 站点证书验证失败，请求未发送。请核对站点地址，或在系统中信任该站点证书。`,
+        "en",
+      ),
+    ).toBe(
+      `${service} couldn’t verify the site certificate, so the request wasn’t sent. Check the site address, or trust the site’s certificate on this computer.`,
+    );
+    expect(
+      systemText(
         `${service} 返回 401。请检查目标、部署类型、token 和权限。`,
         "en",
       ),

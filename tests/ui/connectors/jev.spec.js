@@ -205,7 +205,17 @@ for (const language of ["en", "zh"])
         });
         await manage.click();
         const settings = page.getByRole("dialog", { name, exact: true });
-        await expect(settings.getByRole("switch")).toHaveCount(0);
+        // Only Confluence has a per-site read-only switch; no global access toggle.
+        await expect(settings.getByRole("switch")).toHaveCount(
+          name === "Confluence" ? 1 : 0,
+        );
+        if (name === "Confluence")
+          await expect(
+            settings.getByRole("switch", {
+              name: t("Read-only", "只读"),
+              exact: true,
+            }),
+          ).not.toBeChecked();
         await expect(
           settings.getByRole("button", {
             name: t("Disconnect", "断开连接"),

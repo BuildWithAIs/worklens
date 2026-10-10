@@ -2,7 +2,7 @@ import type { ReadRequest } from "./schema";
 import { summarizeItem } from "./list-results";
 import { Continuations } from "./continuations";
 import { lstat } from "node:fs/promises";
-import { ConfluenceConnections, type ConnectionSnapshot } from "./connection";
+import type { ConnectionSnapshot } from "./connection";
 import { ConfluenceAdapter } from "./adapter";
 import { ServiceError, type Json } from "./http";
 import {
@@ -17,11 +17,16 @@ export interface Execution {
   sessionId: string;
   signal: AbortSignal;
 }
+/** Every configured site shares redaction and staleness checks. */
+export interface ConnectionGuard {
+  assertCurrent(snapshot: ConnectionSnapshot): void;
+  redact(text: string): string;
+}
 export class OperationSupport {
   private continuations: Continuations;
   observed = new Map<string, number>();
   constructor(
-    readonly connections: ConfluenceConnections,
+    readonly connections: ConnectionGuard,
     readonly artifacts: LocalArtifacts,
   ) {
     this.continuations = new Continuations(artifacts.root);

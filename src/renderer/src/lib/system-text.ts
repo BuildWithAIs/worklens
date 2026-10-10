@@ -275,6 +275,16 @@ const messages = [
   ],
   ["服务端点配置错误", "Invalid service endpoint.", "system.invalidEndpoint"],
   [
+    "该 Confluence 站点已添加",
+    "This Confluence site has already been added.",
+    "connectors.runtime.siteExists",
+  ],
+  [
+    "未找到该 Confluence 站点，请刷新后重试",
+    "This Confluence site no longer exists. Close this dialog and try again.",
+    "connectors.runtime.siteMissing",
+  ],
+  [
     "网络或服务请求失败",
     "Network or service request failed.",
     "system.networkFailed",
@@ -303,6 +313,10 @@ export function systemText(text: string, language: AppLanguage) {
     .replace(
       /(Jira|Confluence|GitHub|Tavily) 网络请求失败或超时/g,
       (_, service) => t("connectors.runtime.network", { service }),
+    )
+    .replace(
+      /(Jira|Confluence|GitHub|Tavily) 站点证书验证失败，请求未发送。请核对站点地址，或在系统中信任该站点证书。/g,
+      (_, service) => t("connectors.runtime.certificate", { service }),
     )
     .replace(
       /(Jira|Confluence|GitHub|Tavily) 返回 (\d{3})。/g,

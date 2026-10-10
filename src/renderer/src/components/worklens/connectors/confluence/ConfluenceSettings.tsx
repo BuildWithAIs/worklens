@@ -2,14 +2,20 @@ import { savedCredentialPlaceholder } from "../../credential-placeholder";
 import { completeSiteUrl } from "../site-url";
 import { useState } from "react";
 import type {
-  ConfluenceConnection,
   ConfluenceSettingsInput,
+  ConfluenceSite,
 } from "../../../../../../shared/contracts";
 import { useConnectorForm } from "../connector-form";
 import { ConnectorActions } from "../ConnectorActions";
 import { useConnectorAction } from "../use-connector-action";
 import { Input } from "@/components/ui/input";
-import { Field, FieldLabel, FieldError } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+  FieldError,
+} from "@/components/ui/field";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -25,17 +31,25 @@ import {
 } from "@/components/ui/native-select";
 import { useAppTranslation } from "@/i18n";
 export function ConfluenceSettings({
-  connection,
+  sites,
+  instance,
   refresh,
   onSuccess,
   onClose,
 }: {
-  connection?: ConfluenceConnection;
+  sites: ConfluenceSite[];
+  /** The managed site; omitted when adding one. */
+  instance?: string;
   refresh: () => Promise<unknown>;
   onSuccess: (message: string) => void;
   onClose: () => void;
 }) {
   const { t } = useAppTranslation();
+  // With no sites yet, the first connection fills the primary slot.
+  const connection = instance
+    ? sites.find((site) => site.id === instance)
+    : undefined;
+  const [readOnly, setReadOnly] = useState(connection?.readOnly ?? false);
   const [form, setForm] = useState<ConfluenceSettingsInput>({
     url: connection?.url ?? "",
     deployment: connection?.deployment ?? "data-center",
@@ -44,7 +58,13 @@ export function ConfluenceSettings({
     token: "",
     tokenType: connection?.tokenType ?? "classic",
   });
-  const validation = useConnectorForm("confluence", form, connection);
+  const formValidation = useConnectorForm("confluence", form, connection);
+  // A read-only change alone is still a change worth saving.
+  const validation = {
+    ...formValidation,
+    unchanged:
+      formValidation.unchanged && readOnly === (connection?.readOnly ?? false),
+  };
   const update = (patch: Partial<ConfluenceSettingsInput>) => {
     setForm((current) => ({ ...current, ...patch }));
     validation.reset();
@@ -56,14 +76,18 @@ export function ConfluenceSettings({
         ...form,
         email: form.email || undefined,
         cloudId: form.cloudId || undefined,
+        site: connection?.id,
       }),
     save: () =>
       window.worklens.invoke("confluenceSave", {
         ...form,
         email: form.email || undefined,
         cloudId: form.cloudId || undefined,
+        site: connection?.id,
+        readOnly,
       }),
-    remove: () => window.worklens.invoke("confluenceRemove", undefined),
+    remove: () =>
+      window.worklens.invoke("confluenceRemove", { site: connection!.id }),
     afterSave: () => setForm((current) => ({ ...current, token: "" })),
     afterRemove: () =>
       setForm({
@@ -238,6 +262,29 @@ export function ConfluenceSettings({
               <FieldError id="confluence-token-error">
                 {validation.fieldError("token")}
               </FieldError>
+            </Field>
+            <Field orientation="horizontal" className="justify-between">
+              <div className="flex flex-col gap-1">
+                <FieldLabel htmlFor="confluence-read-only">
+                  {t("connectors.readOnly")}
+                </FieldLabel>
+                <FieldDescription id="confluence-read-only-hint">
+                  {t(
+                    readOnly
+                      ? "connectors.confluence.readOnlyOn"
+                      : "connectors.confluence.readOnlyOff",
+                  )}
+                </FieldDescription>
+              </div>
+              <Switch
+                id="confluence-read-only"
+                checked={readOnly}
+                aria-describedby="confluence-read-only-hint"
+                onCheckedChange={(checked) => {
+                  setReadOnly(checked);
+                  validation.reset();
+                }}
+              />
             </Field>
           </fieldset>
         </form>

@@ -63,7 +63,10 @@ test("connector cooldown survives repeated IPC tests, saves and reconnects", asy
           } catch (error) {
             errors.push(String(error));
           }
-          await invoke(`${service}Remove`, undefined);
+          await invoke(
+            `${service}Remove`,
+            service === "confluence" ? { site: "primary" } : undefined,
+          );
           try {
             await invoke(`${service}Test`, input);
           } catch (error) {

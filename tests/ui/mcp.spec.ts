@@ -2699,3 +2699,32 @@ test("MCP imports close first and report each test in its row", async ({
     "Check the test results in the connection list.",
   );
 });
+
+test("MCP masked Authorization is replaced on focus and never appended to", async ({
+  page,
+}) => {
+  await mockMcp(page, {
+    connections: {
+      remote: {
+        url: "https://remote.example.test/mcp",
+        headers: { Authorization: "Bearer synthetic-remote" },
+      },
+    },
+  });
+  await openMcp(page);
+  const editor = await manage(page, "remote");
+  const token = editor.locator("#mcp-token");
+  await token.focus();
+  await page.keyboard.type("Bearer synthetic-replaced");
+  await expect(token).toHaveValue("Bearer synthetic-replaced");
+  await token.fill("<saved>suffix");
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor.locator("#mcp-token-error")).toContainText(
+    "Clear the saved value",
+  );
+  expect(
+    await page.evaluate(() =>
+      (window as any).calls.filter((call: any) => call.name === "mcpSave"),
+    ),
+  ).toHaveLength(0);
+});

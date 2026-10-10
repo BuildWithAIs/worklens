@@ -35,6 +35,11 @@ test.each([
     "请检查网络和网站地址。",
   ],
   [
+    "Error invoking remote method 'worklens': Error: MCP error -32000: Confluence 站点证书验证失败，请求未发送。请核对站点地址，或在系统中信任该站点证书。",
+    "The site certificate couldn’t be verified. Check the site URL, or trust the site’s certificate on this computer.",
+    "无法验证网站证书。请核对网站地址，或在本机信任该网站证书。",
+  ],
+  [
     "GitHub 返回 403。",
     "Check your account or token permissions.",
     "请检查账户或 Token 权限。",

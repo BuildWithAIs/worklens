@@ -23,6 +23,15 @@ export interface ConnectorSettingsProps {
   onClose: () => void;
   conversation?: ConversationView;
   onConsentChange?: (view: ConversationView) => void;
+  /** The saved instance being managed; omitted when adding a new one. */
+  instance?: string;
+}
+export interface ConnectorInstance {
+  id: string;
+  configured: boolean;
+  url?: string;
+  error?: string;
+  readOnly?: boolean;
 }
 interface CatalogEntry {
   id: ConnectorId;
@@ -34,10 +43,12 @@ interface CatalogEntry {
   connection?: (
     data: Bootstrap,
   ) => { configured: boolean; url?: string; error?: string } | undefined;
+  /** Services that can be connected more than once list each saved instance. */
+  instances?: (data: Bootstrap) => ConnectorInstance[];
   Settings?: ComponentType<ConnectorSettingsProps>;
 }
 function ConfluenceConfiguration({ data, ...props }: ConnectorSettingsProps) {
-  return <ConfluenceSettings connection={data.confluence} {...props} />;
+  return <ConfluenceSettings sites={data.confluenceSites ?? []} {...props} />;
 }
 // UI-only registration. Never import main-process clients or credentials here.
 export const connectorCatalog: readonly CatalogEntry[] = [
@@ -56,7 +67,7 @@ export const connectorCatalog: readonly CatalogEntry[] = [
     name: "Confluence",
     icon: confluence,
     keywords: "Atlassian",
-    connection: (data) => data.confluence,
+    instances: (data) => data.confluenceSites ?? [],
     Settings: ConfluenceConfiguration,
   },
   {
@@ -92,3 +103,12 @@ export const connectorCatalog: readonly CatalogEntry[] = [
     ),
   },
 ];
+/** Saved connections shown as rows: one per instance, or the single connection. */
+export function savedConnections(
+  entry: CatalogEntry,
+  data: Bootstrap,
+): ConnectorInstance[] {
+  if (entry.instances) return entry.instances(data);
+  const connection = entry.connection?.(data);
+  return connection?.url ? [{ ...connection, id: entry.id }] : [];
+}

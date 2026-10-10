@@ -32,6 +32,8 @@ const en = {
       sentry: "Sentry",
     },
     githubTokenHint: "Enter Bearer followed by a GitHub personal access token.",
+    savedValueEdited:
+      "Clear the saved value before entering a new one, or keep it unchanged.",
     remote: "Remote service",
     local: "Local program",
     url: "MCP server address",
@@ -135,6 +137,8 @@ const en = {
     modelConnected: "{{service}} connection successful",
     visibilitySaved: "Model visibility saved",
     network: "Check your network and site URL.",
+    certificate:
+      "The site certificate couldn’t be verified. Check the site URL, or trust the site’s certificate on this computer.",
     credentials: "Check your credentials.",
     token: "Check your token and account.",
     permissions: "Check your account or token permissions.",
@@ -358,6 +362,8 @@ const en = {
       connectedPrefix: "Connected: ",
       network:
         "Couldn’t reach {{service}} or the request timed out. Check your network and site address, then try again.",
+      certificate:
+        "{{service}} couldn’t verify the site certificate, so the request wasn’t sent. Check the site address, or trust the site’s certificate on this computer.",
       httpStatus: "{{service}} returned HTTP {{status}}. ",
       credentialsUnreadable:
         "Couldn’t read or decrypt the {{service}} settings. The original file is preserved. Enter the token again or disconnect.",
@@ -366,6 +372,9 @@ const en = {
       changed: "The {{service}} connection changed. Read the target again.",
       siteInvalid:
         "Enter the {{service}} site address without credentials, query parameters or a fragment.",
+      siteExists: "This Confluence site has already been added.",
+      siteMissing:
+        "This Confluence site no longer exists. Close this dialog and try again.",
     },
     form: {
       disconnectDescription:
@@ -397,10 +406,16 @@ const en = {
       tokenType: "Token type",
       classicAPIToken: "Classic API token",
       apiTokenWithScopes: "API token with scopes",
+      readOnlyOn: "The agent can only search and read this site.",
+      readOnlyOff:
+        "The agent can change content with this account’s permissions.",
 
       enterYourToken: "Enter token",
       testConnection: "Test connection",
     },
+    readOnly: "Read-only",
+    addSite: "Add site",
+    addSiteNamed: "Add {{name}} site",
     searchConnectors: "Search connectors",
     searchConnectorsPlaceholder: "Search connectors…",
     filterConnectors: "Filter connectors",

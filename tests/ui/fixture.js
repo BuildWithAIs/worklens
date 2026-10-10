@@ -229,12 +229,26 @@ export async function mockWorklens(page, options = {}) {
           return structuredClone(data.settings);
         }
         if (name === "confluenceSave") {
-          const { token, ...settings } = input;
-          data.confluence = { ...settings, configured: true };
-          return structuredClone(data.confluence);
+          const { token, site, readOnly = false, ...settings } = input;
+          const sites = (data.confluenceSites ??= []);
+          const url = settings.url.replace(/\/+$/, "");
+          if (sites.some((item) => item.id !== site && item.url === url))
+            throw Error("该 Confluence 站点已添加");
+          const id =
+            site ??
+            (sites.some((item) => item.id === "primary")
+              ? `site-${sites.length + 1}`
+              : "primary");
+          const next = { ...settings, url, id, readOnly, configured: true };
+          const index = sites.findIndex((item) => item.id === id);
+          if (index >= 0) sites[index] = next;
+          else sites.push(next);
+          return structuredClone(next);
         }
         if (name === "confluenceRemove") {
-          data.confluence = undefined;
+          data.confluenceSites = (data.confluenceSites ?? []).filter(
+            (item) => item.id !== input.site,
+          );
           return;
         }
         if (name === "confluenceTest") {
