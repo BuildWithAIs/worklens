@@ -220,7 +220,7 @@ export interface Recovery {
 }
 export interface Bootstrap {
   mcp?: McpSnapshot;
-  confluence?: ConfluenceConnection;
+  confluenceSites?: ConfluenceSite[];
   jira?: JiraConnection;
   github?: GitHubConnection;
   tavily?: TavilyConnection;
@@ -303,11 +303,11 @@ export interface Requests {
   };
   previewHtml: { input: { id: string; path: string }; output: string };
   confluenceSave: {
-    input: ConfluenceSettingsInput;
-    output: ConfluenceConnection;
+    input: ConfluenceSiteInput;
+    output: ConfluenceSite;
   };
-  confluenceTest: { input: ConfluenceSettingsInput; output: string };
-  confluenceRemove: { input: undefined; output: void };
+  confluenceTest: { input: ConfluenceSiteInput; output: string };
+  confluenceRemove: { input: { site: string }; output: void };
   artifact: {
     input: { id: string; action: "show" | "open" | "saveAs" };
     output: void;
@@ -435,6 +435,15 @@ export interface ConfluenceConnection extends Omit<
 > {
   configured: boolean;
   error?: string;
+}
+/** Omitting site adds a new one; readOnly hides it from confluence_write. */
+export interface ConfluenceSiteInput extends ConfluenceSettingsInput {
+  site?: string;
+  readOnly?: boolean;
+}
+export interface ConfluenceSite extends ConfluenceConnection {
+  id: string;
+  readOnly: boolean;
 }
 export interface LocalArtifact {
   id: string;

@@ -47,7 +47,8 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
     const invalid = await page.evaluate(() =>
       window.worklens.invoke("bootstrap", undefined),
     );
-    expect(invalid.confluence?.configured).toBe(false);
+    // An unverified new site is not saved, so a retry cannot add a duplicate.
+    expect(invalid.confluenceSites).toEqual([]);
     expect(invalid.tools).not.toContain("confluence_read");
     expect(invalid.tools).not.toContain("confluence_write");
     fixture.state.identityStatus = 200;
@@ -87,10 +88,11 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
     const saved = await page.evaluate(() =>
       window.worklens.invoke("bootstrap", undefined),
     );
-    expect(saved.confluence?.configured).toBe(true);
-    expect(saved.confluence).not.toHaveProperty("access");
+    expect(saved.confluenceSites).toHaveLength(1);
+    expect(saved.confluenceSites?.[0].configured).toBe(true);
+    expect(saved.confluenceSites?.[0]).not.toHaveProperty("access");
     expect(saved.tools).toContain("confluence_write");
-    expect(saved.confluence?.url).toBe(fixture.url);
+    expect(saved.confluenceSites?.[0].url).toBe(fixture.url);
     await app!.evaluate(
       async (_electron, { mainUrl, url, model }) => {
         const vm = process.getBuiltinModule("node:vm");
@@ -206,9 +208,9 @@ test("Confluence settings, encrypted restart, Pi download and file card", async 
             await page.evaluate(() =>
               window.worklens.invoke("bootstrap", undefined),
             )
-          ).confluence?.configured,
+          ).confluenceSites?.length,
       )
-      .toBe(false);
+      .toBe(0);
     expect(await readFile(artifact!.path, "utf8")).toBe(
       "fixture attachment bytes",
     );

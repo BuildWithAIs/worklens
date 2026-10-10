@@ -39,6 +39,7 @@ import {
 } from "./mcp-configuration";
 
 type EditorField = "name" | "url" | "command" | "options" | "token";
+const SAVED = "<saved>";
 const formFields = new Set(["url", "command", "args", "enabled", "type"]);
 
 function credentialFields(connection?: McpConnectionConfig) {
@@ -208,6 +209,9 @@ export function McpConnectionDialog({
       !/^Bearer\s+\S+/i.test(token.trim())
     )
       message = t("mcp.githubTokenHint");
+    // Typing into a masked field appends to the placeholder value.
+    if (field === "token" && token !== SAVED && token.includes(SAVED))
+      message = t("mcp.savedValueEdited");
     if (field === "name") {
       if (!name.trim()) message = t("mcp.nameRequired");
       else if (!/^[a-zA-Z0-9_-]{1,80}$/.test(name.trim()))
@@ -454,6 +458,9 @@ export function McpConnectionDialog({
                     errors.token ? "mcp-token-error" : "mcp-token-hint"
                   }
                   placeholder="Bearer …"
+                  onFocus={(event) => {
+                    if (token === SAVED) event.currentTarget.select();
+                  }}
                   onChange={(event) => {
                     setToken(event.target.value);
                     clear("token");

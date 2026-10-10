@@ -12,6 +12,10 @@ import type { TavilyService } from "./tavily/service";
 import { connectionSchema as jevSchema } from "./jev/connection";
 import type { JevService } from "./jev/service";
 
+const confluenceSiteSchema = connectionSchema.extend({
+  site: z.string().min(1).max(100).optional(),
+  readOnly: z.boolean().optional(),
+});
 // Each connector owns its settings schema; the IPC surface remains explicit and typed.
 export const connectorSchemas = {
   jevSave: jevSchema,
@@ -30,9 +34,9 @@ export const connectorSchemas = {
   jiraSave: jiraSchema,
   jiraTest: jiraSchema,
   jiraRemove: z.undefined(),
-  confluenceSave: connectionSchema,
-  confluenceTest: connectionSchema,
-  confluenceRemove: z.undefined(),
+  confluenceSave: confluenceSiteSchema,
+  confluenceTest: confluenceSiteSchema,
+  confluenceRemove: z.object({ site: z.string().min(1).max(100) }).strict(),
 };
 type ConnectorRequest = keyof typeof connectorSchemas;
 export function isConnectorRequest(
@@ -65,9 +69,9 @@ export function connectorRequests(
     jiraSave: (input) => jira.connections.save(input),
     jiraTest: (input) => jira.test(input),
     jiraRemove: () => jira.connections.remove(),
-    confluenceSave: (input) => confluence.connections.save(input),
+    confluenceSave: (input) => confluence.sites.save(input),
     confluenceTest: (input) => confluence.test(input),
-    confluenceRemove: () => confluence.connections.remove(),
+    confluenceRemove: (input) => confluence.sites.remove(input.site),
   };
   return <K extends ConnectorRequest>(
     method: K,

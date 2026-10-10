@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach } from "vitest";
-import { ConfluenceConnections } from "../../../src/main/connectors/confluence/connection";
+import { ConfluenceSites } from "../../../src/main/connectors/confluence/sites";
 import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
 import { LocalArtifacts } from "../../../src/main/local-artifacts";
 import { confluenceFixture } from "./fixture";
@@ -43,7 +43,7 @@ export async function setup() {
   const fixture = await confluenceFixture();
   cleanups.push(fixture.close);
   const encryption = testEncryption();
-  const connections = new ConfluenceConnections(
+  const sites = new ConfluenceSites(
     join(root, "connection.json"),
     encryption,
     async (url, init) => {
@@ -67,12 +67,13 @@ export async function setup() {
     tokenType: "classic" as const,
     token: "synthetic-secret-123",
   };
+  const connections = sites.primary;
   await connections.save(input);
   const artifacts = new LocalArtifacts(
     join(root, "artifacts"),
     join(root, "sessions"),
   );
-  const service = new ConfluenceService(connections, artifacts);
+  const service = new ConfluenceService(sites, artifacts);
   let run = "run1";
   const tools = service.tools("session1", () => run);
   const call = async (
@@ -96,6 +97,7 @@ export async function setup() {
     root,
     fixture,
     connections,
+    sites,
     encryption,
     input,
     artifacts,

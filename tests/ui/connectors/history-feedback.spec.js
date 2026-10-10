@@ -14,13 +14,24 @@ for (const [service, name] of [
         const invoke = window.worklens.invoke;
         window.worklens.invoke = async (method, input) => {
           const result = await invoke(method, input);
-          if (method === "bootstrap")
-            result[service] = {
-              ...result[service],
+          if (method === "bootstrap") {
+            const connection = {
               configured: false,
               url: "https://example.test",
               error: `${name} 网络请求失败或超时`,
             };
+            if (service === "confluence")
+              result.confluenceSites = [
+                {
+                  ...connection,
+                  id: "primary",
+                  readOnly: false,
+                  deployment: "data-center",
+                  tokenType: "classic",
+                },
+              ];
+            else result[service] = { ...result[service], ...connection };
+          }
           return result;
         };
       },

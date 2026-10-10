@@ -3,7 +3,7 @@ import { Tabs } from "@base-ui/react/tabs";
 import { useAppTranslation } from "@/i18n";
 import { ConnectionsSettings } from "./connectors/ConnectionsSettings";
 import { McpSettings } from "./McpSettings";
-import { connectorCatalog } from "./connectors/catalog";
+import { connectorCatalog, savedConnections } from "./connectors/catalog";
 
 export type ConnectionTab = "builtin" | "mcp";
 
@@ -19,9 +19,10 @@ export function ConnectorSettingsTabs({
 }) {
   const { t } = useAppTranslation();
   const countId = useId();
-  const builtinCount = connectorCatalog.filter(
-    (entry) => !!entry.connection?.(props.data)?.url,
-  ).length;
+  const builtinCount = connectorCatalog.reduce(
+    (count, entry) => count + savedConnections(entry, props.data).length,
+    0,
+  );
   const mcpCount = props.data.mcp?.servers.length ?? 0;
   return (
     <Tabs.Root

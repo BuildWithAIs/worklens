@@ -168,6 +168,9 @@ export class ConfluenceConnections {
       signal: this.controller.signal,
     };
   }
+  owns(snapshot: ConnectionSnapshot) {
+    return snapshot.revision === this.revision;
+  }
   assertCurrent(snapshot: ConnectionSnapshot) {
     snapshot.signal.throwIfAborted();
     if (snapshot.revision !== this.revision)

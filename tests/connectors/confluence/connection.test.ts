@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { ConfluenceConnections } from "../../../src/main/connectors/confluence/connection";
 import { testConnection } from "../../../src/main/connectors/confluence/connection-test";
+import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
+import { certificateFailure } from "../../../src/main/connectors/confluence/http";
 import { setup } from "./setup";
 
 test("save validates automatically, failed replacement disables tools, and a corrected save re-enables them", async () => {
@@ -114,3 +116,37 @@ test.each(["html", "redirect", "network"])(
     expect(connections.info().configured).toBe(false);
   },
 );
+
+test("untrusted certificates are reported as unsent requests, including writes", async () => {
+  const f = await setup();
+  const untrusted = (async () => {
+    throw new TypeError("fetch failed", {
+      cause: Object.assign(new Error("self-signed certificate"), {
+        code: "DEPTH_ZERO_SELF_SIGNED_CERT",
+      }),
+    });
+  }) as typeof fetch;
+  const fresh = new ConfluenceConnections(
+    join(f.root, "untrusted.json"),
+    f.encryption,
+    untrusted,
+  );
+  await expect(fresh.test(f.input)).rejects.toThrow(/证书验证失败，请求未发送/);
+  const service = new ConfluenceService(f.sites, f.artifacts, untrusted);
+  const write = service.tools("session1", () => "run-cert")[1];
+  const result = await write.execute(
+    "tool1",
+    { request: { operation: "add_comment", page: "1", content: "hi" } },
+    new AbortController().signal,
+    undefined,
+    {} as never,
+  );
+  expect(JSON.parse((result.content[0] as { text: string }).text).status).toBe(
+    "certificate",
+  );
+  expect(f.fixture.state.commentCount).toBe(0);
+  expect(certificateFailure(new TypeError("fetch failed"))).toBe(false);
+  expect(
+    certificateFailure({ cause: { cause: { code: "CERT_HAS_EXPIRED" } } }),
+  ).toBe(true);
+});

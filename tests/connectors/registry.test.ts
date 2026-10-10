@@ -52,7 +52,7 @@ test("composition reuses existing credentials and tools while configuration revi
   expect(connectors.registry.names()).toEqual([]);
   await connectors.registry.initialize();
   expect(await readFile(path, "utf8")).toBe(original);
-  expect(connectors.bootstrap().confluence.configured).toBe(true);
+  expect(connectors.bootstrap().confluenceSites[0].configured).toBe(true);
   expect(connectors.registry.names()).toEqual([
     "confluence_read",
     "confluence_write",
@@ -60,6 +60,7 @@ test("composition reuses existing credentials and tools while configuration revi
   const key = connectors.registry.configurationKey();
   await connectors.requests("confluenceSave", {
     ...f.input,
+    site: "primary",
     token: "replacement-secret",
   });
   expect(connectors.registry.configurationKey()).not.toBe(key);
@@ -71,7 +72,7 @@ test("composition reuses existing credentials and tools while configuration revi
     instructions: connectors.registry.instructions(),
   });
   expect(local.resourceLoader.getSystemPrompt()).toContain("storage 格式");
-  await connectors.requests("confluenceRemove", undefined);
+  await connectors.requests("confluenceRemove", { site: "primary" });
   expect(connectors.registry.names()).toEqual([]);
   expect(connectors.registry.instructions()).toBe("");
   const disconnected = await resources(f.root, join(f.root, "pi"));
@@ -93,7 +94,7 @@ test.each([
     await writeFile(join(f.root, "connector-enabled.json"), legacy);
     const connectors = createConnectors(f.root, f.encryption, f.artifacts);
     await connectors.registry.initialize();
-    expect(connectors.bootstrap().confluence.configured).toBe(true);
+    expect(connectors.bootstrap().confluenceSites[0].configured).toBe(true);
     expect(connectors.registry.names()).toContain("confluence_read");
     expect(
       connectors.registry
@@ -102,7 +103,7 @@ test.each([
     ).toContain("confluence_read");
     expect(connectors.registry.instructions()).not.toBe("");
     expect(await readFile(path, "utf8")).toBe(original);
-    await connectors.requests("confluenceRemove", undefined);
+    await connectors.requests("confluenceRemove", { site: "primary" });
     expect(connectors.registry.names()).not.toContain("confluence_read");
   },
 );

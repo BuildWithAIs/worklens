@@ -99,7 +99,14 @@ for (const language of ["en", "zh"]) {
       await filter.selectOption("connected");
       await expect(content.getByRole("listitem")).toHaveCount(1);
       await filter.selectOption("available");
-      await expect(content.getByRole("listitem")).toHaveCount(4);
+      // Confluence stays available so another site can be added.
+      await expect(content.getByRole("listitem")).toHaveCount(5);
+      await expect(
+        content.getByRole("button", {
+          name: t("Add Confluence site", "添加 Confluence 站点"),
+          exact: true,
+        }),
+      ).toBeVisible();
       await filter.selectOption("all");
       const manage = content.getByRole("button", {
         name: t("Manage Confluence", "管理 Confluence"),

@@ -18,12 +18,17 @@ for (const saved of [false, true]) {
             delete provider.credentialType;
           }
           for (const service of ["jira", "confluence", "github"]) {
-            result[service] = {
+            const connection = {
               configured: saved,
               url: saved ? "https://example.test" : "",
               deployment: "data-center",
               tokenType: "classic",
             };
+            if (service !== "confluence") result[service] = connection;
+            else
+              result.confluenceSites = saved
+                ? [{ ...connection, id: "primary", readOnly: false }]
+                : [];
           }
         }
         return result;

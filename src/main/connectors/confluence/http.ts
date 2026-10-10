@@ -11,6 +11,27 @@ export class ServiceError extends Error {
   }
 }
 export type Json = Record<string, any>;
+const certificateCodes = new Set([
+  "CERT_HAS_EXPIRED",
+  "CERT_NOT_YET_VALID",
+  "CERT_SIGNATURE_FAILURE",
+  "CERT_UNTRUSTED",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+]);
+/** TLS verification fails during the handshake, before any request is sent. */
+export function certificateFailure(error: unknown) {
+  for (let item = error, depth = 0; item && depth < 5; depth++) {
+    const code = (item as { code?: unknown }).code;
+    if (typeof code === "string" && certificateCodes.has(code)) return true;
+    item = (item as { cause?: unknown }).cause;
+  }
+  return false;
+}
 export class ConfluenceHttp {
   readonly base: string;
   readonly site: URL;
@@ -159,6 +180,11 @@ export class ConfluenceHttp {
           if (error instanceof ServiceError) throw error;
           if (!dispatched && this.signal.aborted)
             throw new ServiceError("cancelled", "请求在发送前已取消。");
+          if (certificateFailure(error))
+            throw new ServiceError(
+              "certificate",
+              "Confluence 站点证书验证失败，请求未发送。请核对站点地址，或在系统中信任该站点证书。",
+            );
           if (method !== "GET")
             throw new ServiceError(
               "unknown",

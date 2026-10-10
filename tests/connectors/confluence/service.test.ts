@@ -1,3 +1,4 @@
+import { ConfluenceSites } from "../../../src/main/connectors/confluence/sites";
 import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -60,7 +61,7 @@ test.each([false, true])(
         expect(out.data.journalWarning).toContain("本地完成日志保存失败");
       }
       // The durable pending record still protects retries, including after restart.
-      const restarted = new ConfluenceService(f.connections, f.artifacts);
+      const restarted = new ConfluenceService(f.sites, f.artifacts);
       const replay = await restarted
         .tools("session1", () => "run1")[1]
         .execute(
@@ -294,15 +295,16 @@ test.each(["read", "confirm", "write"])(
     const saved = JSON.parse(await readFile(path, "utf8"));
     saved.settings.access = access;
     await writeFile(path, JSON.stringify(saved));
-    const loaded = new ConfluenceConnections(path, f.encryption);
-    await loaded.load();
+    const sites = new ConfluenceSites(path, f.encryption);
+    await sites.load();
+    const loaded = sites.primary;
     expect(loaded.snapshot().token).toBe(f.input.token);
     expect(loaded.info()).not.toHaveProperty("access");
     const migrated = JSON.parse(await readFile(path, "utf8"));
     expect(migrated.encrypted).toBe(saved.encrypted);
     expect(migrated.revision).toBe(saved.revision);
     expect(migrated.settings).not.toHaveProperty("access");
-    const service = new ConfluenceService(loaded, f.artifacts);
+    const service = new ConfluenceService(sites, f.artifacts);
     expect(service.names()).toEqual(["confluence_read", "confluence_write"]);
     const result = await service
       .tools("migration", () => "run")[1]

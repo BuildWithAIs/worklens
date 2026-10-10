@@ -25,6 +25,7 @@ const zhCN = {
       sentry: "Sentry",
     },
     githubTokenHint: "填写 Bearer，后接空格和 GitHub 个人访问令牌。",
+    savedValueEdited: "请先清空已保存的值再填写新值，或保持不变。",
     remote: "远程服务",
     local: "本地程序",
     url: "MCP 服务地址",
@@ -116,6 +117,7 @@ const zhCN = {
     modelConnected: "{{service}} 连接成功",
     visibilitySaved: "模型显示设置已保存",
     network: "请检查网络和网站地址。",
+    certificate: "无法验证网站证书。请核对网站地址，或在本机信任该网站证书。",
     credentials: "请检查凭据。",
     token: "请检查 Token 和账户。",
     permissions: "请检查账户或 Token 权限。",
@@ -330,12 +332,16 @@ const zhCN = {
       githubRedirect: "GitHub API 返回重定向，请检查站点地址和目标；未转发凭据",
       connectedPrefix: "已连接：",
       network: "无法连接 {{service}} 或请求超时。请检查网络和站点地址后重试。",
+      certificate:
+        "{{service}} 站点证书验证失败，请求未发送。请核对站点地址，或在本机信任该站点证书。",
       httpStatus: "{{service}} 返回 {{status}}。",
       credentialsUnreadable:
         "无法读取或解密 {{service}} 配置，原文件已保留。请重新填写 Token 或断开连接。",
       connectFirst: "请先在设置 → 连接器中保存并验证 {{service}} 连接。",
       changed: "{{service}} 连接已变更，请重新读取目标。",
       siteInvalid: "请填写不包含凭据、查询参数或片段的 {{service}} 站点地址。",
+      siteExists: "已添加过这个 Confluence 站点。",
+      siteMissing: "这个 Confluence 站点已不存在。请关闭对话框后重试。",
     },
     form: {
       disconnectDescription:
@@ -365,10 +371,15 @@ const zhCN = {
       tokenType: "Token 类型",
       classicAPIToken: "普通 API token",
       apiTokenWithScopes: "带 scopes 的 API token",
+      readOnlyOn: "助手只能搜索和读取此站点。",
+      readOnlyOff: "助手可按此账号的权限修改内容。",
 
       enterYourToken: "输入 Token",
       testConnection: "测试连接",
     },
+    readOnly: "只读",
+    addSite: "添加站点",
+    addSiteNamed: "添加 {{name}} 站点",
     searchConnectors: "搜索连接器",
     searchConnectorsPlaceholder: "搜索连接器…",
     filterConnectors: "筛选连接器",

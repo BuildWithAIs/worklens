@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { Encryption } from "../storage";
 import type { LocalArtifacts } from "../local-artifacts";
-import { ConfluenceConnections } from "./confluence/connection";
+import { ConfluenceSites } from "./confluence/sites";
 import { ConfluenceService } from "./confluence/service";
 import { confluenceConnector } from "./confluence";
 import { ConnectorRegistry } from "./registry";
@@ -30,11 +30,11 @@ export function createConnectors(
     onConsentChange?: (sessionId: string) => void;
   } = {},
 ) {
-  const connections = new ConfluenceConnections(
+  const confluenceSites = new ConfluenceSites(
     join(userData, "confluence.json"),
     encryption,
   );
-  const confluence = new ConfluenceService(connections, artifacts);
+  const confluence = new ConfluenceService(confluenceSites, artifacts);
   const jiraConnections = new JiraConnections(
     join(userData, "jira.json"),
     encryption,
@@ -79,7 +79,7 @@ export function createConnectors(
     jevConsent,
     requests: connectorRequests(confluence, jira, github, tavily, jev),
     bootstrap: () => ({
-      confluence: connections.info(),
+      confluenceSites: confluenceSites.info(),
       jira: jiraConnections.info(),
       github: githubConnections.info(),
       tavily: tavilyConnections.info(),

@@ -2155,3 +2155,32 @@ test("MCP edits stay open for testing and reset masked credentials only after sa
   await testButton.click();
   await expect(editor.getByRole("status")).toContainText("3 tools available");
 });
+
+test("MCP masked Authorization is replaced on focus and never appended to", async ({
+  page,
+}) => {
+  await mockMcp(page, {
+    connections: {
+      remote: {
+        url: "https://remote.example.test/mcp",
+        headers: { Authorization: "Bearer synthetic-remote" },
+      },
+    },
+  });
+  await openMcp(page);
+  const editor = await manage(page, "remote");
+  const token = editor.locator("#mcp-token");
+  await token.focus();
+  await page.keyboard.type("Bearer synthetic-replaced");
+  await expect(token).toHaveValue("Bearer synthetic-replaced");
+  await token.fill("<saved>suffix");
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor.locator("#mcp-token-error")).toContainText(
+    "Clear the saved value",
+  );
+  expect(
+    await page.evaluate(() =>
+      (window as any).calls.filter((call: any) => call.name === "mcpSave"),
+    ),
+  ).toHaveLength(0);
+});

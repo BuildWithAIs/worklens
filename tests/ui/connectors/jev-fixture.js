@@ -214,12 +214,16 @@ export async function mockJev(
             deployment: "data-center",
             tokenType: "classic",
           };
-          result.confluence = {
-            url: "https://wiki.example.test",
-            configured: true,
-            deployment: "data-center",
-            tokenType: "classic",
-          };
+          result.confluenceSites = [
+            {
+              id: "primary",
+              readOnly: false,
+              url: "https://wiki.example.test",
+              configured: true,
+              deployment: "data-center",
+              tokenType: "classic",
+            },
+          ];
           if (conversation) {
             result.conversations = Object.values(views);
             result.settings.lastConversation = "sample-chat";

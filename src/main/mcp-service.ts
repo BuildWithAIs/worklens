@@ -576,7 +576,7 @@ export class McpService {
     const client = new McpClient({
       name: "WorkLens",
       version: "0.1.0",
-      requestTimeoutMs: 15000,
+      requestTimeoutMs: (config.timeout ?? 15) * 1000,
     });
     const transport = this.transport(
       headers && "url" in config ? { ...config, headers } : config,

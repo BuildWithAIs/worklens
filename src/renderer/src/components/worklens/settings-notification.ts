@@ -46,6 +46,7 @@ export function settingsErrorDescription(
     [/redirect/i, "redirect"],
     [/without credentials, query parameters or a fragment/i, "url"],
     [/requires.*HTTPS|endpoint must use HTTPS/i, "https"],
+    [/couldn’t verify the site certificate/i, "certificate"],
     [
       /Could not reach|timed out|Connection timed out|Network or service request failed/i,
       "network",

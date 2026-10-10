@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { serializeConversation } from "@earendil-works/pi-coding-agent";
-import { ConfluenceConnections } from "../../../src/main/connectors/confluence/connection";
+import { ConfluenceSites } from "../../../src/main/connectors/confluence/sites";
 import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
 import { Continuations } from "../../../src/main/connectors/confluence/continuations";
 import {
@@ -56,7 +56,7 @@ test("list projection keeps navigation compact and preserves original records in
       _links: { next: "/confluence/rest/api/search?start=2" },
     }),
   );
-  const service = new ConfluenceService(f.connections, f.artifacts, fetcher);
+  const service = new ConfluenceService(f.sites, f.artifacts, fetcher);
   const out = await service
     .tools("session1", () => "run")[0]
     .execute(
@@ -82,12 +82,14 @@ test("continuations survive connection/service restart and stay session and quer
   const f = await setup();
   const query = { operation: "search", cql: "type=page", limit: 1 };
   const first = await f.call(query);
-  const loaded = new ConfluenceConnections(
+  const loaded = new ConfluenceSites(
     join(f.root, "connection.json"),
     f.encryption,
   );
   await loaded.load();
-  expect(loaded.snapshot().revision).toBe(f.connections.snapshot().revision);
+  expect(loaded.primary.snapshot().revision).toBe(
+    f.connections.snapshot().revision,
+  );
   const resumed = new ConfluenceService(loaded, f.artifacts);
   const execute = (session: string, request: object) =>
     resumed
@@ -117,7 +119,7 @@ test("continuations survive connection/service restart and stay session and quer
     continuation: first.data.continuation,
   });
   expect(JSON.stringify(changed.content)).toContain("invalid_continuation");
-  await loaded.save(f.input);
+  await loaded.primary.save(f.input);
   const revoked = await execute("session1", {
     ...query,
     continuation: first.data.continuation,
@@ -217,7 +219,7 @@ test("failed list persistence returns original records instead of summaries and 
   const f = await setup();
   vi.spyOn(f.artifacts, "save").mockRejectedValue(new Error("ENOSPC"));
   const content = "x".repeat(20000);
-  const service = new ConfluenceService(f.connections, f.artifacts, async () =>
+  const service = new ConfluenceService(f.sites, f.artifacts, async () =>
     Response.json({
       results: [
         {
@@ -286,10 +288,10 @@ test("legacy encrypted connection migrates once and resumes its new cursor after
   const saved = JSON.parse(await readFile(path, "utf8"));
   delete saved.revision;
   await writeFile(path, JSON.stringify(saved));
-  const upgraded = new ConfluenceConnections(path, f.encryption);
+  const upgraded = new ConfluenceSites(path, f.encryption);
   await upgraded.load();
   const migrated = JSON.parse(await readFile(path, "utf8"));
-  expect(migrated.revision).toBe(upgraded.snapshot().revision);
+  expect(migrated.revision).toBe(upgraded.primary.snapshot().revision);
   expect(migrated.encrypted).toBe(saved.encrypted);
   expect(await readFile(path, "utf8")).not.toContain(f.input.token);
   const firstService = new ConfluenceService(upgraded, f.artifacts);
@@ -306,9 +308,11 @@ test("legacy encrypted connection migrates once and resumes its new cursor after
   const cursor = JSON.parse(
     (first.content[0] as { text: string }).text,
   ).continuation;
-  const restarted = new ConfluenceConnections(path, f.encryption);
+  const restarted = new ConfluenceSites(path, f.encryption);
   await restarted.load();
-  expect(restarted.snapshot().revision).toBe(upgraded.snapshot().revision);
+  expect(restarted.primary.snapshot().revision).toBe(
+    upgraded.primary.snapshot().revision,
+  );
   const service = new ConfluenceService(restarted, f.artifacts);
   const next = await service
     .tools("session1", () => "run2")[0]
