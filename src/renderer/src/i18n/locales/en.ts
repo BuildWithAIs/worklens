@@ -250,8 +250,8 @@ const en = {
     stopVoiceInput: "Stop voice input",
   },
   agent: {
-    workingForSeconds: "Working for {{seconds}}s",
-    workedForSeconds: "Worked for {{seconds}}s",
+    workingFor: "Working for {{duration}}",
+    workedFor: "Worked for {{duration}}",
     thoughts: "Thoughts",
     failedCountSuffix: " · {{failed}} failed",
   },

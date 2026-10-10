@@ -234,8 +234,8 @@ const zhCN = {
     stopVoiceInput: "停止语音输入",
   },
   agent: {
-    workingForSeconds: "处理中 {{seconds}} 秒",
-    workedForSeconds: "已处理 {{seconds}} 秒",
+    workingFor: "处理中 {{duration}}",
+    workedFor: "已处理 {{duration}}",
     thoughts: "思考过程",
     failedCountSuffix: " · {{failed}} 次失败",
   },

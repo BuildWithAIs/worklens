@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { useAppTranslation } from "@/i18n";
 import { formatCost, formatTokens } from "@/lib/usage-format";
+import { formatDuration } from "@/lib/duration";
 import { nonNegative } from "../../../../shared/usage";
 import type {
   CostUsage,
@@ -43,7 +44,7 @@ export function UsagePopover({
   /** Pi is summarizing the conversation to free context. */
   compacting?: boolean;
 }) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   // Hovering a segment or legend entry highlights that category.
   const [highlighted, setHighlighted] = useState<string>();
   const run = usage?.run;
@@ -135,7 +136,7 @@ export function UsagePopover({
     0,
   );
   const elapsed = nonNegative(run?.elapsedMs)
-    ? ` · ${(run.elapsedMs / 1000).toFixed(1)}s`
+    ? ` · ${formatDuration(run.elapsedMs, language, true)}`
     : "";
   // When every shown cost is an estimate, say so once in the header.
   const shownCosts = [run, conversation].filter(
