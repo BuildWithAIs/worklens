@@ -270,7 +270,7 @@ test("background save errors remain visible and preserve the selected effect", a
   await expect(
     page
       .locator('[data-slot="toast-title"]')
-      .filter({ hasText: "Could not save background appearance." }),
+      .filter({ hasText: "Couldn’t save background appearance." }),
   ).toBeVisible();
   await expect(
     page.getByRole("combobox", { name: "Background effect", exact: true }),

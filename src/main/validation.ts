@@ -2,6 +2,22 @@ import { z } from "zod";
 import { connectorSchemas } from "./connectors/ipc";
 import { chatImagesSchema } from "./chat-images";
 import { CHAT_IMAGE_LIMITS } from "../shared/chat-images";
+import { normalizeProxyUrl } from "../shared/network-proxy";
+
+const proxySettings = z
+  .object({
+    mode: z.enum(["system", "custom", "off"]),
+    url: z.string().max(2000).optional(),
+    bypass: z.string().max(4000).optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.mode !== "custom" || !!normalizeProxyUrl(value.url ?? ""),
+    {
+      message: "Enter a valid HTTP or HTTPS proxy address",
+      path: ["url"],
+    },
+  );
 const id = z
   .string()
   .min(1)
@@ -97,6 +113,8 @@ export const schemas = {
   refreshModels: z.object({ provider: z.string().min(1).max(200) }).strict(),
   bootstrap: z.undefined(),
   providers: z.undefined(),
+  proxyDetect: z.object({ shell: z.boolean().optional() }).strict(),
+  proxyTest: proxySettings,
   modelSelection: z
     .object({
       provider: z.string().min(1).max(200),
@@ -109,6 +127,7 @@ export const schemas = {
     .object({
       theme: z.enum(["light", "dark", "system"]).optional(),
       codemodeEnabled: z.boolean().optional(),
+      proxy: proxySettings.optional(),
       backgroundEffect: z
         .enum(["none", "surface", "fluid", "aurora"])
         .optional(),

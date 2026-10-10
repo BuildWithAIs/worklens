@@ -95,7 +95,12 @@ export async function mockWorklens(page, options = {}) {
     });
     const skills = {
       builtin: [
-        skill("example-guide", "builtin", "Example built-in instructions.", false),
+        skill(
+          "example-guide",
+          "builtin",
+          "Example built-in instructions.",
+          false,
+        ),
       ],
       local: [
         skill("brave-search", "local", "Web search."),
@@ -126,7 +131,11 @@ export async function mockWorklens(page, options = {}) {
     });
     if (options.largeModelCatalog) {
       data.providers[0].models = Array.from({ length: 120 }, (_, i) =>
-        model(`model-${i}`, `Catalog ${i < 60 ? "Alpha" : "Beta"} ${i}`, "deepseek"),
+        model(
+          `model-${i}`,
+          `Catalog ${i < 60 ? "Alpha" : "Beta"} ${i}`,
+          "deepseek",
+        ),
       );
     }
     Object.assign(data.settings, options.initialSettings ?? {});
@@ -181,12 +190,19 @@ export async function mockWorklens(page, options = {}) {
           for (const provider of data.providers.filter((p) => p.configured)) {
             const previous = data.settings.modelCatalogs[provider.id];
             const ids = provider.models.map((m) => m.id);
-            if (!previous) data.settings.modelCatalogs[provider.id] = { known: ids, new: [] };
-            else for (const id of ids.filter((id) => !previous.known.includes(id))) {
-              previous.known.push(id);
-              previous.new.push(id);
-              data.settings.hiddenModels.push(`${provider.id}/${id}`);
-            }
+            if (!previous)
+              data.settings.modelCatalogs[provider.id] = {
+                known: ids,
+                new: [],
+              };
+            else
+              for (const id of ids.filter(
+                (id) => !previous.known.includes(id),
+              )) {
+                previous.known.push(id);
+                previous.new.push(id);
+                data.settings.hiddenModels.push(`${provider.id}/${id}`);
+              }
           }
           return structuredClone(data);
         }
@@ -203,8 +219,13 @@ export async function mockWorklens(page, options = {}) {
           }
           data.settings.hiddenModels = [...hidden];
           const catalog = data.settings.modelCatalogs[input.provider];
-          catalog.new = catalog.new.filter((id) => !input.reviewed.includes(id));
-          localStorage.setItem("ui-fixture-settings", JSON.stringify(data.settings));
+          catalog.new = catalog.new.filter(
+            (id) => !input.reviewed.includes(id),
+          );
+          localStorage.setItem(
+            "ui-fixture-settings",
+            JSON.stringify(data.settings),
+          );
           return structuredClone(data.settings);
         }
         if (name === "confluenceSave") {
@@ -212,7 +233,10 @@ export async function mockWorklens(page, options = {}) {
           data.confluence = { ...settings, configured: true };
           return structuredClone(data.confluence);
         }
-        if (name === "confluenceRemove") { data.confluence = undefined; return; }
+        if (name === "confluenceRemove") {
+          data.confluence = undefined;
+          return;
+        }
         if (name === "confluenceTest") {
           if (!input.url) throw Error("Enter a Confluence URL");
           return `Fixture User · ${input.url}`;
@@ -225,10 +249,17 @@ export async function mockWorklens(page, options = {}) {
         if (name === "githubSave") {
           if (!input.url) throw Error("Enter a GitHub URL");
           const { token, ...settings } = input;
-          data.github = { ...settings, configured: true, login: "fixture-user" };
+          data.github = {
+            ...settings,
+            configured: true,
+            login: "fixture-user",
+          };
           return structuredClone(data.github);
         }
-        if (name === "githubRemove") { data.github = undefined; return; }
+        if (name === "githubRemove") {
+          data.github = undefined;
+          return;
+        }
         if (name === "githubTest") {
           if (!input.url) throw Error("Enter a GitHub URL");
           return `fixture-user · ${input.url}`;
@@ -248,21 +279,48 @@ export async function mockWorklens(page, options = {}) {
           data.tavily = { url: input.url, configured: true, plan: "dev" };
           return structuredClone(data.tavily);
         }
-        if (name === "tavilyRemove") { data.tavily = undefined; return; }
-        if (name === "tavilyUsage") return { usage: { plan: "dev", included: { used: 56, limit: 1000 }, fetchedAt: Date.now(), expiresAt: Date.now() + 300000 }, refreshAfter: Date.now() + 60000 };
+        if (name === "tavilyRemove") {
+          data.tavily = undefined;
+          return;
+        }
+        if (name === "tavilyUsage")
+          return {
+            usage: {
+              plan: "dev",
+              included: { used: 56, limit: 1000 },
+              fetchedAt: Date.now(),
+              expiresAt: Date.now() + 300000,
+            },
+            refreshAfter: Date.now() + 60000,
+          };
         if (name === "tavilyTest") {
           if (!input.token) throw Error("请填写 Tavily API key");
           return "Tavily 已连接：dev";
         }
-        if (name === "jiraRemove") { data.jira = undefined; return; }
+        if (name === "jiraRemove") {
+          data.jira = undefined;
+          return;
+        }
         if (name === "jiraTest") {
           if (!input.url) throw Error("Enter a Jira URL");
           return `Fixture User · ${input.url}`;
         }
+        if (name === "proxyDetect")
+          return input.shell
+            ? (window.proxyShellDetection ?? window.proxyDetection ?? {})
+            : (window.proxyDetection ?? {});
+        if (name === "proxyTest") {
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          if (window.failProxyTest)
+            throw Error(
+              `Could not reach the network through proxy ${input.url}`,
+            );
+          return { proxy: input.url };
+        }
         if (name === "settings") {
           if (input.backgroundIntensity && window.failNextBackgroundSave) {
             window.failNextBackgroundSave = false;
-            throw Error("Could not save background appearance.");
+            throw Error("Couldn’t save background appearance.");
           }
           await new Promise((resolve) => setTimeout(resolve, 120));
           if (input.hiddenModels && window.failNextVisibilitySave) {
@@ -342,11 +400,20 @@ export async function mockExistingConversation(page) {
   await mockWorklens(page);
   await page.addInitScript(() => {
     const invoke = window.worklens.invoke;
-    const view = { id: "existing", title: "Existing conversation", phase: "completed", messages: [{ id: "user", role: "user", text: "Hello" }], updatedAt: "2026-09-13T00:00:00Z" };
+    const view = {
+      id: "existing",
+      title: "Existing conversation",
+      phase: "completed",
+      messages: [{ id: "user", role: "user", text: "Hello" }],
+      updatedAt: "2026-09-13T00:00:00Z",
+    };
     window.worklens.invoke = async (name, input) => {
       if (name === "open") return view;
       const result = await invoke(name, input);
-      if (name === "bootstrap") { result.conversations = [view]; result.settings.lastConversation = view.id; }
+      if (name === "bootstrap") {
+        result.conversations = [view];
+        result.settings.lastConversation = view.id;
+      }
       return result;
     };
   });
