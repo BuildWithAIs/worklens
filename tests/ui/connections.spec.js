@@ -82,8 +82,8 @@ for (const theme of ["light", "dark"]) {
       const general = page.locator('[data-section="general"]');
       await expect(general).toBeVisible();
       await expect(general.locator(":scope > section > h2")).toHaveText(language === "en"
-        ? ["Preferences", "Tool execution", "Local data"]
-        : ["偏好", "工具执行", "本地数据"]);
+        ? ["Preferences", "Tool execution", "Network", "Local data"]
+        : ["偏好", "工具执行", "网络", "本地数据"]);
       await expect(general.getByRole("switch", { name: "Code Mode", exact: true })).toBeChecked();
       await expect(general.getByRole("heading", { name: language === "en" ? "Tool execution" : "工具执行", exact: true })).toBeVisible();
       const codeMode = general.getByRole("switch", { name: "Code Mode", exact: true });

@@ -9,6 +9,7 @@ import {
   dialog,
   nativeTheme,
   Menu,
+  session,
 } from "electron";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -32,6 +33,7 @@ import { LocalArtifacts } from "./local-artifacts";
 import { SkillsService } from "./skills";
 import { McpService } from "./mcp-service";
 import { installationId } from "./installation-id";
+import { NetworkProxy, readShellProxy } from "./network-proxy";
 
 // Keep the original safeStorage identity: changing case selects a different
 // macOS Keychain key. The application bundle controls the Dock display name.
@@ -56,6 +58,7 @@ let window: BrowserWindow | undefined;
 export let agents: AgentService | undefined;
 let providers: ProviderService | undefined;
 let mcp: McpService | undefined;
+let proxy: NetworkProxy | undefined;
 let quitting = false;
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -78,6 +81,17 @@ else {
       );
       const state = new StateStore(join(paths.userData, "app-state.json"));
       await state.load();
+      // Apply the proxy before any service validates connections or calls models.
+      // The probe session keeps "system" mode so detection always sees the
+      // operating system's settings, whatever WorkLens is configured to use.
+      const proxyProbe = session.fromPartition("worklens-proxy-probe");
+      await proxyProbe.setProxy({ mode: "system" });
+      proxy = new NetworkProxy({
+        resolveSystem: (url) => proxyProbe.resolveProxy(url),
+        setSessionProxy: (config) => session.defaultSession.setProxy(config),
+        readShellProxy,
+      });
+      await proxy.apply(state.value.proxy);
       mcp = new McpService(
         join(paths.userData, "pi"),
         safeStorage,
@@ -244,6 +258,13 @@ else {
                 case "settings":
                   value = await state.update(input);
                   nativeTheme.themeSource = state.value.theme;
+                  if (input.proxy) await proxy!.apply(state.value.proxy);
+                  break;
+                case "proxyDetect":
+                  value = await proxy!.detect(input.shell);
+                  break;
+                case "proxyTest":
+                  value = await proxy!.test(input);
                   break;
                 case "providers":
                   value = await providers!.list();

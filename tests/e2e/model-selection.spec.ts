@@ -87,7 +87,7 @@ test("model catalog discovery and management persist through real IPC and app re
     await expect(page.getByText("new-model", { exact: true })).toHaveCount(0);
     await page
       .getByRole("button", {
-        name: "Select models: Local model catalog",
+        name: "Manage models: Local model catalog",
         exact: true,
       })
       .click();

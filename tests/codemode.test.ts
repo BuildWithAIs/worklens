@@ -43,6 +43,7 @@ async function setup() {
     JSON.stringify({
       mcpServers: {
         fixture: {
+          displayName: "Paper trail",
           command: process.execPath,
           args: [resolve("tests/fixtures/mcp-server.mjs")],
           env: { TOKEN: "synthetic-MCP-credential" },

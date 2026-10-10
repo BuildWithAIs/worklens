@@ -1,6 +1,7 @@
 // The editor only changes fields it owns. Keep provider authentication, custom
 // headers, environment variables and tool exposure settings from imported JSON.
 export interface McpConnectionConfig {
+  displayName?: string;
   description?: string;
   url?: string;
   command?: string;
@@ -12,6 +13,15 @@ export interface McpConnectionConfig {
   oauth?: { clientId?: string; clientSecret?: string };
   auth?: { provider: string };
   [key: string]: unknown;
+}
+
+export type McpTestResult =
+  | { state: "untested" | "testing" | "signIn" }
+  | { state: "passed"; tools: number }
+  | { state: "failed"; error: string };
+
+export function mcpDisplayName(id: string, config?: McpConnectionConfig) {
+  return config?.displayName ?? id;
 }
 
 export interface McpConfiguration {

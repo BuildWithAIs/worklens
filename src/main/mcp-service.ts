@@ -30,6 +30,7 @@ const SAVED = "<saved>";
 const stringMap = z.record(z.string().min(1).max(200), z.string().max(20000));
 const exposure = z.enum(["direct", "deferred", "codemode", "hidden"]);
 const common = {
+  displayName: z.string().trim().min(1).max(80).optional(),
   description: z.string().max(4000).optional(),
   enabled: z.boolean().optional(),
   exposure: exposure.optional(),
@@ -118,7 +119,8 @@ const configSchema = z
         message: "Server names must have distinct tool namespaces",
       });
   });
-type Config = { mcpServers: Record<string, McpServerConfig> };
+type StoredServerConfig = McpServerConfig & { displayName?: string };
+type Config = { mcpServers: Record<string, StoredServerConfig> };
 
 /** Entire documents are encrypted, including embedded headers, env values and OAuth state. */
 export class EncryptedDocument<T> {
@@ -478,7 +480,9 @@ export class McpService {
         const errors = this.error ? [this.redact(this.error)] : [];
         const servers = Object.entries(this.config.mcpServers).flatMap(
           ([name, raw]) => {
-            const config = structuredClone(raw);
+            // Display names belong to WorkLens; Pi keeps the stable server key.
+            const { displayName: _displayName, ...config } =
+              structuredClone(raw);
             if (
               config.enabled !== false &&
               "url" in config &&

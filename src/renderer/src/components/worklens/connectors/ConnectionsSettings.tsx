@@ -23,6 +23,7 @@ import {
   type ConnectorInstance,
   type ConnectorSettingsProps,
 } from "./catalog";
+import { settingsErrorDescription } from "../settings-notification";
 export function ConnectionsSettings({
   data,
   refresh,
@@ -30,7 +31,7 @@ export function ConnectionsSettings({
   conversation,
   onConsentChange,
 }: Omit<ConnectorSettingsProps, "onClose">) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
   const [editing, setEditing] = useState<{ id: string; instance?: string }>();
@@ -146,7 +147,13 @@ export function ConnectionsSettings({
                             className="size-3.5 shrink-0"
                             aria-hidden="true"
                           />
-                          {t("settingsFeedback.connectionNeedsAttention")}
+                          {t("settingsFeedback.connectionNeedsAttention", {
+                            reason: settingsErrorDescription(
+                              instance.error,
+                              language,
+                              true,
+                            ),
+                          })}
                         </span>
                       </ItemDescription>
                     )}

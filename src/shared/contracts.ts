@@ -111,7 +111,24 @@ export interface Settings {
   disabledSkills?: string[];
   disabledSkillIds?: string[];
   codemodeEnabled?: boolean;
+  /** Missing means "system": follow the operating system's proxy settings. */
+  proxy?: ProxySettings;
   [key: string]: unknown;
+}
+export interface ProxySettings {
+  mode: "system" | "custom" | "off";
+  /** Custom HTTP or HTTPS proxy origin, e.g. http://127.0.0.1:7890. */
+  url?: string;
+  /** Comma-separated hosts that bypass the custom proxy. */
+  bypass?: string;
+}
+export interface ProxyDetection {
+  /** System proxy for public HTTPS requests, when it is an HTTP(S) proxy. */
+  system?: string;
+  /** A system proxy WorkLens cannot use yet, such as SOCKS. */
+  unsupported?: string;
+  /** HTTP(S)_PROXY from the launch or login-shell environment. */
+  environment?: string;
 }
 export interface SkillInfo {
   id: string;
@@ -319,6 +336,8 @@ export interface Requests {
     output: Settings;
   };
   providers: { input: undefined; output: ProviderInfo[] };
+  proxyDetect: { input: { shell?: boolean }; output: ProxyDetection };
+  proxyTest: { input: ProxySettings; output: { proxy?: string } };
   login: {
     input: { provider: string; type: "api_key" | "oauth"; loginId: string };
     output: void;
