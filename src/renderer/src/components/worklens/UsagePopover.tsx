@@ -124,9 +124,12 @@ export function UsagePopover({
     cacheInput > 0 ? (conversation!.cacheRead! / cacheInput) * 100 : undefined;
   const modelLabel = `${modelName ?? "—"}${metadata ? ` · ${metadata.thinking[0].toUpperCase()}${metadata.thinking.slice(1)}` : ""}`;
   const segments = breakdown.filter(([field]) => field !== "reasoning");
-  const compositionKnown =
-    conversation?.status === "complete" &&
-    segments.every(([field]) => nonNegative(conversation?.[field]));
+  // Requests without accounting (e.g. stopped mid-stream) make the totals a
+  // lower bound. The known requests still show their composition, marked "+".
+  const compositionKnown = segments.every(([field]) =>
+    nonNegative(conversation?.[field]),
+  );
+  const compositionPartial = conversation?.status === "partial";
   const compositionTotal = segments.reduce(
     (sum, [field]) => sum + (conversation?.[field] ?? 0),
     0,
@@ -304,7 +307,10 @@ export function UsagePopover({
                             ([field, label]) =>
                               `${label}: ${formatTokens(conversation?.[field])}`,
                           )
-                          .join(", ")
+                          .join(", ") +
+                        (compositionPartial
+                          ? ` · ${t("usage.partialTokenData")}`
+                          : "")
                       : t("usage.tokenCompositionUnavailable")
                   }
                 >
@@ -331,7 +337,11 @@ export function UsagePopover({
                     kind: field,
                     label,
                     description: label,
-                    value: formatTokens(conversation?.[field]),
+                    value:
+                      formatTokens(conversation?.[field]) +
+                      (compositionPartial && nonNegative(conversation?.[field])
+                        ? "+"
+                        : ""),
                   }))}
                   active={highlighted}
                   onActive={setHighlighted}

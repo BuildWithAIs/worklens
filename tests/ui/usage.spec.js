@@ -586,3 +586,28 @@ test("overview and details headline values share one text style", async ({
   await page.getByRole("tab", { name: "Details", exact: true }).click();
   expect(await style(".usage-breakdown-heading strong")).toEqual(overview);
 });
+
+test("a partial conversation still shows the composition of known requests", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.evaluate(() => {
+    // For example, a request stopped before the provider reported usage.
+    window.usageView.usage.conversation.status = "partial";
+    window.usageEmit(2, 3860000, 2);
+  });
+  await page.getByRole("button", { name: "Open current usage details" }).click();
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
+  const details = page.locator(".usage-breakdown");
+  await expect(details.locator(".usage-breakdown-heading strong")).toHaveText(
+    "44.1k+",
+  );
+  await expect(details.locator(".usage-composition > span")).toHaveCount(4);
+  await expect(details.locator(".usage-legend")).toHaveText(
+    "Input25.6k+Output8k+Cache read9.2k+Cache write1.3k+",
+  );
+  await expect(details.getByRole("img")).toHaveAttribute(
+    "aria-label",
+    /Partial token data$/,
+  );
+});
