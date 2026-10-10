@@ -29,10 +29,12 @@
   outline-offset: 2px;
 }
 
+.usage-header,
 .usage-popover,
 .tavily-credit-usage {
   --usage-blue: #6485c4;
 }
+:root[data-theme="dark"] .usage-header,
 :root[data-theme="dark"] .usage-popover,
 :root[data-theme="dark"] .tavily-credit-usage {
   --usage-blue: #89a9e0;
@@ -46,10 +48,17 @@
   --usage-slate: #9984bd;
   --usage-cache: #a8bddf;
   --usage-write: #d7cbe9;
+  /* Height follows the taller tab; the cap leaves room for longer text and
+     only a very short window makes the content scroll. */
+  --usage-max-height: min(var(--available-height), 420px);
+  display: flex;
+  flex-direction: column;
   width: 340px;
-  height: 320px;
+  /* The fullest tab content (two legend lines, a run state, savings and
+     reasoning), so every session opens at the same size. */
+  min-height: 288px;
   max-width: calc(100vw - 24px);
-  max-height: var(--available-height);
+  max-height: var(--usage-max-height);
   padding: 16px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
@@ -66,30 +75,35 @@
   --usage-cache: #536f9f;
   --usage-write: #75628e;
 }
+/* Both panels share one grid cell, so the popover is as tall as the taller
+   tab and switching tabs never changes its height. */
 .usage-tabs {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  /* Popover padding and border. */
+  max-height: calc(var(--usage-max-height) - 34px);
 }
+.usage-tab-panel {
+  grid-area: 2 / 1;
+}
+/* The tabs head the popover as one full-width segmented control; its own
+   track separates it from the content, so no divider is needed. */
 .usage-heading {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.usage-popover [data-slot="usage-title"] {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
+.usage-heading .usage-tab-list {
+  flex: 1;
 }
 .usage-tab-list button {
+  flex: 1;
   border: 0;
   background: transparent;
   border-radius: 7px;
-  height: 22px;
+  height: 24px;
   padding: 0 8px;
   font-size: 11px;
   font-weight: 500;
@@ -117,9 +131,15 @@
   overflow: auto;
   padding-top: 16px;
 }
-.usage-tab-panel[hidden],
+/* The inactive panel keeps its space but is not shown or reachable.
+   Controls inside must not fade out over a transition, or they linger. */
+.usage-tab-panel[data-inactive],
 .usage-tab-panel[inert] {
-  display: none;
+  visibility: hidden;
+}
+.usage-tab-panel[data-inactive] *,
+.usage-tab-panel[inert] * {
+  transition: none;
 }
 .usage-popover p {
   margin: 0;
@@ -138,6 +158,9 @@
   white-space: nowrap;
 }
 /* The headline value matches the details headline; only its context is muted. */
+.usage-context-labels .usage-scope {
+  color: var(--muted);
+}
 .usage-context-labels strong {
   color: var(--text);
 }
@@ -162,32 +185,6 @@
   display: block;
   height: 100%;
   background: var(--usage-blue);
-}
-.usage-summary {
-  width: 100%;
-  margin: var(--usage-section-gap) 0 2px;
-  border-collapse: collapse;
-}
-.usage-summary th,
-.usage-summary td {
-  padding: 4px 0;
-  font-size: 12px;
-  font-weight: 400;
-  text-align: right;
-  white-space: nowrap;
-}
-.usage-summary thead th {
-  color: var(--faint);
-  font-size: 10px;
-}
-.usage-summary th:first-child {
-  text-align: left;
-}
-.usage-summary tbody th {
-  color: var(--muted);
-}
-.usage-summary td {
-  padding-left: 8px;
 }
 .usage-run-state {
   display: flex;
@@ -233,13 +230,21 @@
   line-height: 18px;
   color: var(--muted);
 }
+.usage-context-facts {
+  margin-top: var(--usage-section-gap);
+}
 .usage-facts > div {
   display: flex;
   justify-content: space-between;
   gap: 10px;
 }
+.usage-facts .usage-run-state {
+  display: block;
+  color: var(--faint);
+}
 .usage-facts dd {
   margin: 0;
+  white-space: nowrap;
   color: var(--text);
 }
 .usage-popover [data-kind="input"] {
@@ -266,13 +271,16 @@
   font-size: 11px;
   color: var(--muted);
 }
+/* Footer: 12px above the divider, 12px below it, then the popover's
+   16px padding under the text. */
 .usage-model,
 .usage-total {
   position: relative;
   margin-top: auto;
-  padding-top: 29px;
-  height: 52px;
-  line-height: 16px;
+  padding-top: 25px;
+  /* Match the 20px hint control so both footers share a text baseline
+     and divider position, including the model icon's 16px variant. */
+  line-height: 20px;
   flex-shrink: 0;
 }
 .usage-model::before,
@@ -303,24 +311,26 @@
   }
 }
 
-/* Context composition. Hues validated for CVD separation and contrast on the
-   light and dark surfaces; history is neutral so the latest turn stands out. */
+/* Context and token composition share a muted palette and the same blue.
+   History stays neutral so the latest turn stands out. */
 .usage-header,
 .usage-popover {
-  --context-system: #d4692a;
-  --context-summary: #1f9a6a;
+  --context-system: #b47e56;
+  --context-summary: #5c947f;
   --context-history: #a1a1aa;
-  --context-turn: #2f6fd1;
+  --context-turn: var(--usage-blue);
 }
 :root[data-theme="dark"] .usage-header,
 :root[data-theme="dark"] .usage-popover {
-  --context-system: #d26c36;
-  --context-summary: #33ab7c;
-  --context-history: #71717a;
-  --context-turn: #5b93e8;
+  --context-system: #cca17e;
+  --context-summary: #82b29b;
+  --context-history: #858995;
 }
 .usage-context-bar {
   position: relative;
+  /* Keep the threshold's hover target inside the bar, so a threshold near
+     the end never makes the panel scroll sideways. */
+  overflow-x: clip;
 }
 .usage-context-track {
   display: flex;
@@ -348,6 +358,11 @@
     width 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
     background-color 400ms ease,
     opacity 150ms ease;
+}
+/* A nonzero total must remain visible in the 48px header preview. Only the
+   leading segment gets a minimum; full-size bars retain their proportions. */
+.usage-context-bar[data-size="mini"] .usage-context-track > [data-leading] {
+  min-width: 3px;
 }
 /* New segments grow from zero, like a turn being appended. */
 @starting-style {
@@ -402,13 +417,21 @@
     background-position: 140% 0;
   }
 }
+/* A 12px hover target centred on the 1px dashed threshold line. */
 .usage-context-threshold {
   position: absolute;
-  top: -3px;
-  bottom: -3px;
-  left: var(--at);
+  top: -4px;
+  bottom: -4px;
+  left: calc(var(--at) - 6px);
+  width: 12px;
+}
+.usage-context-threshold::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: 6px;
   border-left: 1px dashed var(--muted);
-  pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .usage-context-track > span {
@@ -455,18 +478,6 @@
   height: 6px;
   border-radius: 1px;
   flex-shrink: 0;
-}
-/* One plain sentence about compaction, below the legend. */
-.usage-compact-caption {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 2px;
-}
-/* Repeats the bar's dashed threshold marker. */
-.usage-compact-caption i {
-  height: 10px;
-  border-left: 1px dashed var(--muted);
 }
 .usage-popover [data-kind="system"] {
   background: var(--context-system);

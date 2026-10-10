@@ -31,15 +31,16 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
   };
   const total = async (page: Page, expected: string) => {
     await page.locator(".usage-trigger").click();
-    await page.getByRole("tab", { name: "Tokens", exact: true }).click();
+    await page.getByRole("tab", { name: "Usage", exact: true }).click();
     await expect(page.locator(".usage-total strong")).toHaveText(expected);
     await page.keyboard.press("Escape");
   };
   const completedRun = async (page: Page, tokens: string) => {
     await expect(page.getByRole("button", { name: "Stop task", exact: true })).toHaveCount(0, { timeout: 30000 });
     await page.locator(".usage-trigger").click();
+    await page.getByRole("tab", { name: "Usage", exact: true }).click();
     // A completed run is described by its row; only other states add a notice.
-    await expect(page.getByTestId("run-usage").locator("th")).toHaveAttribute(
+    await expect(page.getByTestId("run-usage")).toHaveAttribute(
       "aria-label",
       /^Last run · Completed/,
     );
@@ -109,7 +110,8 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await completedRun(page, "280");
     expect(await readFile(target, "utf8")).toBe("usage verified");
     await page.locator(".usage-trigger").click();
-    await expect(page.getByTestId("run-usage").locator("th")).toHaveAttribute(
+    await page.getByRole("tab", { name: "Usage", exact: true }).click();
+    await expect(page.getByTestId("run-usage")).toHaveAttribute(
       "aria-label",
       /^Last run · Completed/,
     );
@@ -164,6 +166,7 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await page.getByRole("button", { name: "Stop task", exact: true }).click();
     await expect(page.getByRole("button", { name: "Stop task", exact: true })).toHaveCount(0);
     await page.locator(".usage-trigger").click();
+    await page.getByRole("tab", { name: "Usage", exact: true }).click();
     await expect(page.locator(".usage-run-state")).toContainText("Cancelled");
     await page.keyboard.press("Escape");
     const beforeRestart = await page.evaluate(() =>
@@ -203,10 +206,11 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await total(restored, "560+");
     await completedRun(restored, "140");
     await restored.locator(".usage-trigger").click();
+    await restored.getByRole("tab", { name: "Usage", exact: true }).click();
     await expect(restored.getByTestId("conversation-usage")).toContainText(
       "420",
     );
-    await expect(restored.getByTestId("run-usage").locator("th")).toHaveAttribute(
+    await expect(restored.getByTestId("run-usage")).toHaveAttribute(
       "aria-label",
       /^Last run · Completed/,
     );

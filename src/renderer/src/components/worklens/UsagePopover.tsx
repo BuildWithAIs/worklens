@@ -47,6 +47,15 @@ export function UsagePopover({
   const { t, language } = useAppTranslation();
   // Hovering a segment or legend entry highlights that category.
   const [highlighted, setHighlighted] = useState<string>();
+  // Both panels stay mounted in one grid cell so the tabs share a height.
+  // The inactive one keeps its space (and inert) instead of Tailwind's
+  // display: none for [hidden].
+  const inactivePanel = ({
+    hidden,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement>) => (
+    <div {...props} data-inactive={hidden || undefined} />
+  );
   const run = usage?.run;
   const conversation = usage?.conversation;
   const context = usage?.context;
@@ -135,26 +144,35 @@ export function UsagePopover({
     (sum, [field]) => sum + (conversation?.[field] ?? 0),
     0,
   );
+  // Running and completed runs need no note; other states and incomplete
+  // data are named in the run's row, so no extra line is needed.
+  const runNotice = [
+    !run || !["active", "completed"].includes(run.state) ? state : undefined,
+    run?.status === "partial" ? t("usage.partialData") : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const duration = nonNegative(run?.elapsedMs)
     ? formatDuration(run.elapsedMs, language, true)
     : undefined;
-  // When every shown cost is an estimate, say so once in the header.
-  const shownCosts = [run, conversation].filter(
-    (item) =>
-      nonNegative(item?.cost.usd) && item?.cost.status !== "unavailable",
-  );
-  const costsEstimated =
-    shownCosts.length > 0 &&
-    shownCosts.every((item) => item!.cost.source !== "provider");
-  const compactCaption = (() => {
-    if (!nonNegative(context?.compactAt)) return undefined;
-    if (!nonNegative(totals.tokens))
-      return t("usage.compactsAt", { tokens: formatTokens(context.compactAt) });
-    const left = context.compactAt - totals.tokens;
-    return left > 0
-      ? t("usage.compactsIn", { tokens: formatTokens(left) })
-      : t("usage.compactsNext");
-  })();
+  // "≈" marks estimates; "+" marks totals missing some requests.
+  const costText = (item?: TokenUsage) =>
+    nonNegative(item?.cost.usd) && item?.cost.status !== "unavailable"
+      ? `${item.cost.source === "provider" ? "" : "≈ "}${formatCost(item.cost.usd, true)}${item.cost.status === "partial" ? "+" : ""}`
+      : "—";
+  const runLabel = active ? t("usage.currentRun") : t("usage.lastRun");
+  // One plain sentence on the dashed threshold marker, shown on hover and
+  // read with the bar; the header already shows usage and window size.
+  const compactAt = context?.compactAt;
+  const thresholdHint =
+    nonNegative(compactAt) && nonNegative(totals.window) && totals.window > 0
+      ? nonNegative(totals.tokens) && totals.tokens >= compactAt
+        ? t("usage.compactsNext")
+        : t("usage.compactsAtDetail", {
+            tokens: formatTokens(compactAt),
+            percent: Math.round((compactAt / totals.window) * 100),
+          })
+      : undefined;
   const providerLabel =
     provider?.name ?? metadata?.provider ?? t("usage.providerUnavailable");
   return (
@@ -180,40 +198,46 @@ export function UsagePopover({
           align="end"
           aria-label={t("usage.usageDetails")}
         >
-          <Tabs.Root defaultValue="overview" className="usage-tabs">
+          <Tabs.Root defaultValue="context" className="usage-tabs">
             <div className="usage-heading">
-              <h2 data-slot="usage-title">{t("usage.usage")}</h2>
               <Tabs.List
                 activateOnFocus
                 className="usage-tab-list"
                 aria-label={t("usage.usageView")}
               >
-                <Tabs.Tab data-slot="usage-tab" value="overview">
-                  {t("usage.overview")}
+                <Tabs.Tab data-slot="usage-tab" value="context">
+                  {t("usage.context")}
                 </Tabs.Tab>
-                <Tabs.Tab data-slot="usage-tab" value="details">
-                  {t("usage.tokensTab")}
+                <Tabs.Tab data-slot="usage-tab" value="usage">
+                  {t("usage.usage")}
                 </Tabs.Tab>
                 <Tabs.Indicator className="usage-tab-indicator" />
               </Tabs.List>
             </div>
-            <Tabs.Panel value="overview" className="usage-tab-panel">
+            {/* Context: what fills the window now and when it compacts. */}
+            <Tabs.Panel
+              value="context"
+              className="usage-tab-panel"
+              keepMounted
+              render={inactivePanel}
+            >
               <div className="usage-context" data-known={contextKnown}>
+                {/* The tab names the subject, so the share of the window leads. */}
                 <div className="usage-context-labels">
-                  <span>{t("usage.context")}</span>
+                  <strong>
+                    {compacting ? t("usage.compacting") : percentText}
+                  </strong>
                   <span>
                     {contextKnown
-                      ? `${approximate}${formatTokens(shownTokens)} / ${formatTokens(totals.window)} · `
+                      ? `${approximate}${formatTokens(shownTokens)} / ${formatTokens(totals.window)}`
                       : ""}
-                    <strong>
-                      {compacting ? t("usage.compacting") : percentText}
-                    </strong>
                   </span>
                 </div>
                 <ContextBar
                   context={context}
                   compacting={compacting}
                   size="full"
+                  thresholdHint={thresholdHint}
                   active={highlighted}
                   onActive={setHighlighted}
                 />
@@ -235,85 +259,15 @@ export function UsagePopover({
                     </p>
                   )
                 )}
-                {compactCaption && (
-                  <p className="usage-compact-caption">
-                    <i aria-hidden="true" />
-                    {compactCaption}
-                  </p>
-                )}
               </div>
-              <table className="usage-summary">
-                <thead>
-                  <tr>
-                    <th aria-label={t("usage.scope")} />
-                    <th>Tokens</th>
-                    <th>
-                      {t("usage.cost")}
-                      {costsEstimated ? " ≈" : ""}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    [
-                      active ? t("usage.currentRun") : t("usage.lastRun"),
-                      run,
-                      "run-usage",
-                    ],
-                    [
-                      t("usage.conversation"),
-                      conversation,
-                      "conversation-usage",
-                    ],
-                  ].map(([label, value, testId]) => {
-                    const item = value as TokenUsage | undefined;
-                    const isRun = testId === "run-usage";
-                    return (
-                      <tr key={String(testId)} data-testid={String(testId)}>
-                        <th
-                          scope="row"
-                          aria-label={
-                            isRun ? `${String(label)} · ${state}` : undefined
-                          }
-                        >
-                          {String(label)}
-                        </th>
-                        <td>
-                          <span
-                            aria-label={
-                              item?.status === "partial"
-                                ? `${tokens(item)} · ${t("usage.partialTokenData")}`
-                                : undefined
-                            }
-                          >
-                            {tokens(item)}
-                          </span>
-                        </td>
-                        <td>
-                          <span aria-label={cost(item?.cost)}>
-                            {nonNegative(item?.cost.usd) &&
-                            item?.cost.status !== "unavailable"
-                              ? `${formatCost(item.cost.usd, true)}${costsEstimated || item.cost.source === "provider" ? "" : " ≈"}${item.cost.status === "partial" ? "+" : ""}`
-                              : "—"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {/* A running or completed run is described by its row; other
-                  states and incomplete data need a visible notice. */}
-              {(!run ||
-                !["active", "completed"].includes(run.state) ||
-                run.status === "partial") && (
-                <p className="usage-run-state usage-notice">
-                  <Info size={12} aria-hidden="true" />
-                  {state}
-                  {run?.status === "partial"
-                    ? ` · ${t("usage.partialData")}`
-                    : ""}
-                </p>
+              {/* How much of the resent context the provider served from cache. */}
+              {nonNegative(cacheHit) && (
+                <dl className="usage-facts usage-context-facts">
+                  <div data-testid="cache-usage">
+                    <dt>{t("usage.cacheHitRate")}</dt>
+                    <dd>{Math.round(cacheHit)}%</dd>
+                  </div>
+                </dl>
               )}
               {/* The run's model and how long it took, like the details footer:
                   label on the left, value on the right. */}
@@ -331,11 +285,32 @@ export function UsagePopover({
                 )}
               </div>
             </Tabs.Panel>
-            <Tabs.Panel value="details" className="usage-tab-panel">
+            {/* Spend: what was used, what it cost and where it went; each row
+                names its own scope. */}
+            <Tabs.Panel
+              value="usage"
+              className="usage-tab-panel"
+              keepMounted
+              render={inactivePanel}
+            >
               <div className="usage-breakdown">
-                {/* Scope title; the footer below covers all conversations. */}
-                <div className="usage-breakdown-heading">
-                  <span>{t("usage.thisConversation")}</span>
+                {/* Mirrors the context tab: headline value, its composition,
+                    then details. Each line names its own scope. */}
+                <div
+                  className="usage-context-labels"
+                  data-testid="conversation-usage"
+                >
+                  <span
+                    aria-label={`${tokens(conversation)} · ${t("usage.conversation")}${conversation?.status === "partial" ? ` · ${t("usage.partialTokenData")}` : ""}`}
+                  >
+                    <strong>{tokens(conversation)}</strong>
+                    <span className="usage-scope">
+                      {` · ${t("usage.conversation")}`}
+                    </span>
+                  </span>
+                  <span aria-label={cost(conversation?.cost)}>
+                    {costText(conversation)}
+                  </span>
                 </div>
                 <div
                   className="usage-context-bar"
@@ -388,12 +363,30 @@ export function UsagePopover({
                   onActive={setHighlighted}
                 />
                 <dl className="usage-facts">
-                  {nonNegative(cacheHit) && (
-                    <div data-testid="cache-usage">
-                      <dt>{t("usage.cacheHitRate")}</dt>
-                      <dd>{Math.round(cacheHit)}%</dd>
-                    </div>
-                  )}
+                  <div
+                    data-testid="run-usage"
+                    aria-label={[
+                      runLabel,
+                      state,
+                      runNotice,
+                      run && tokens(run),
+                      run && costText(run),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  >
+                    <dt>
+                      {runLabel}
+                      {/* A second line, so a long state never wraps
+                            mid-sentence after the label. */}
+                      {runNotice && (
+                        <span className="usage-run-state usage-notice">
+                          {runNotice}
+                        </span>
+                      )}
+                    </dt>
+                    <dd>{run ? `${tokens(run)} · ${costText(run)}` : "—"}</dd>
+                  </div>
                   {nonNegative(usage?.cacheSavingsUsd) &&
                     usage.cacheSavingsUsd > 0 && (
                       <div data-testid="cache-savings">

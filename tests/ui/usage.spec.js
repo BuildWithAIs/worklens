@@ -141,7 +141,7 @@ async function fixture(page, options = {}) {
   );
 }
 
-test("prototype header, popover, keyboard and desktop layout", async ({
+test("usage header, popover, keyboard and desktop layout", async ({
   page,
 }, info) => {
   await fixture(page);
@@ -162,8 +162,7 @@ test("prototype header, popover, keyboard and desktop layout", async ({
     await expect(
       page.getByRole("progressbar", { name: "Context usage" }),
     ).toHaveAttribute("aria-valuenow", "34");
-    await expect(page.getByTestId("run-usage")).toContainText("Current run");
-    await expect(page.getByTestId("conversation-usage")).toContainText("44.1k");
+    await expect(page.getByTestId("run-usage")).toBeHidden();
     await expect(page.locator(".usage-popover")).not.toContainText(
       /5-hour|weekly|quota/i,
     );
@@ -182,19 +181,41 @@ test("prototype header, popover, keyboard and desktop layout", async ({
     const overviewHeight = box.height;
     const dividerY = (await page.locator(".usage-model").boundingBox()).y;
     const modelText = await page.locator(".usage-model strong").boundingBox();
-    await page.getByRole("tab", { name: "Tokens", exact: true }).click();
-    await expect(page.getByRole("tabpanel", { name: "Tokens", exact: true })).toContainText("All models total");
-    expect((await page.locator(".usage-popover").boundingBox()).height).toBe(overviewHeight);
-    expect(overviewHeight).toBeLessThanOrEqual(320);
-    expect(Math.abs((await page.locator(".usage-total").boundingBox()).y - dividerY)).toBeLessThanOrEqual(1);
+    await page.getByRole("tab", { name: "Usage", exact: true }).click();
+    await expect(
+      page.getByRole("tabpanel", { name: "Usage", exact: true }),
+    ).toContainText("All models total");
+    expect((await page.locator(".usage-popover").boundingBox()).height).toBe(
+      overviewHeight,
+    );
+    expect(overviewHeight).toBe(288);
+    await expect(page.getByTestId("run-usage")).toContainText("Current run");
+    await expect(page.getByTestId("conversation-usage")).toContainText("44.1k");
+    expect(
+      Math.abs((await page.locator(".usage-total").boundingBox()).y - dividerY),
+    ).toBeLessThanOrEqual(1);
     const totalText = await page.locator(".usage-total strong").boundingBox();
-    expect(Math.abs(totalText.y + totalText.height / 2 - modelText.y - modelText.height / 2)).toBeLessThanOrEqual(1);
-    expect(await page.getByRole("tabpanel", { name: "Tokens", exact: true }).evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
+    expect(
+      Math.abs(
+        totalText.y + totalText.height / 2 - modelText.y - modelText.height / 2,
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      await page
+        .getByRole("tabpanel", { name: "Usage", exact: true })
+        .evaluate((el) => el.scrollHeight <= el.clientHeight),
+    ).toBe(true);
     await expect(page.locator(".usage-cost-note")).toHaveCount(0);
     await expect(page.locator(".usage-composition > span")).toHaveCount(4);
-    await page.screenshot({path: info.outputPath(`usage-details-${width}.png`)});
-    await page.getByRole("tab", { name: "Tokens", exact: true }).press("ArrowLeft");
-    await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
+    await page.screenshot({
+      path: info.outputPath(`usage-details-${width}.png`),
+    });
+    await page
+      .getByRole("tab", { name: "Usage", exact: true })
+      .press("ArrowLeft");
+    await expect(
+      page.getByRole("tab", { name: "Context", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
     await page.keyboard.press("Escape");
     await expect(page.locator(".usage-popover")).toBeHidden();
     await expect(trigger).toBeFocused();
@@ -212,19 +233,22 @@ test("latest completed run keeps usage and marks lifecycle; legacy never falls b
   await fixture(page, { completed: true });
   await expect(page.locator(".usage-live-dot")).toHaveCount(0);
   await page.locator(".usage-trigger").click();
-  // A completed run is described by its row; its duration sits in the
-  // footer beside the model, like the details footer's label and value.
-  await expect(page.getByTestId("run-usage").locator("th")).toHaveText(
-    "Last run",
-  );
-  await expect(page.getByTestId("run-usage").locator("th")).toHaveAttribute(
-    "aria-label",
-    "Last run · Completed",
-  );
   await expect(page.getByTestId("run-duration")).toHaveText("2.8s");
   const footer = await page.locator(".usage-model").boundingBox();
   const duration = await page.getByTestId("run-duration").boundingBox();
-  expect(footer.x + footer.width - (duration.x + duration.width)).toBeLessThan(2);
+  expect(footer.x + footer.width - (duration.x + duration.width)).toBeLessThan(
+    2,
+  );
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
+  // A completed run is described by its row; its duration sits in the
+  // footer beside the model, like the details footer's label and value.
+  await expect(page.getByTestId("run-usage").locator("dt")).toHaveText(
+    "Last run",
+  );
+  await expect(page.getByTestId("run-usage")).toHaveAttribute(
+    "aria-label",
+    /^Last run · Completed/,
+  );
   await expect(page.locator(".usage-run-state")).toHaveCount(0);
   await page.close();
 });
@@ -234,8 +258,11 @@ test("legacy unknown run remains inspectable", async ({ page }) => {
   await expect(page.locator(".usage-trigger")).toContainText("34%");
   await expect(page.locator(".usage-trigger")).not.toContainText("44.1k");
   await page.locator(".usage-trigger").click();
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
   await expect(page.getByTestId("run-usage")).toContainText("—");
-  await expect(page.locator(".usage-run-state")).toContainText("No recorded run");
+  await expect(page.locator(".usage-run-state")).toContainText(
+    "No recorded run",
+  );
   await expect(page.getByTestId("conversation-usage")).toContainText("44.1k");
 });
 
@@ -246,25 +273,33 @@ test("partial independent costs, unknown context, reasoning, dark Chinese", asyn
   await expect(page.locator(".usage-trigger")).toHaveText("—");
   await expect(page.locator(".usage-trigger")).not.toContainText("$");
   await page.locator(".usage-trigger").click();
+  await expect(page.locator(".usage-context")).toContainText("暂不可用");
+  await expect(page.getByRole("progressbar")).toHaveCount(0);
+  await page.getByRole("tab", { name: "用量", exact: true }).click();
   await expect(page.locator(".usage-notice")).toContainText("Token 数据不完整");
-  // Every shown cost is an estimate, so the header says so once.
+  // Each cost marks its own estimate and partial accounting.
+  await expect(page.getByTestId("conversation-usage")).toContainText("$0.184+");
   await expect(page.getByTestId("conversation-usage")).toContainText(
-    "$0.184+",
+    "≈ $0.184+",
   );
-  await expect(page.locator(".usage-summary thead")).toContainText("费用 ≈");
   await expect(page.getByTestId("conversation-usage")).not.toContainText(
     "Token 数据不完整",
   );
-  await page.getByTestId("conversation-usage").locator("td").last().hover();
+  await page
+    .getByTestId("conversation-usage")
+    .locator(":scope > span")
+    .last()
+    .hover();
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
-  await expect(page.locator(".usage-context")).toContainText("暂不可用");
-  await expect(page.getByRole("progressbar")).toHaveCount(0);
-  await page.getByRole("tab", { name: "Token", exact: true }).click();
-  await expect(page.locator(".usage-total")).toHaveText("所有模型累计3.86M+tokens");
+  await expect(page.locator(".usage-total")).toHaveText(
+    "所有模型累计3.86M+tokens",
+  );
   await page.locator(".usage-total strong").hover();
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
   await page.getByRole("button", { name: "关于累计用量" }).hover();
-  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText("所有保留的本地会话 · 数据不完整");
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "所有保留的本地会话 · 数据不完整",
+  );
   await page.mouse.move(0, 0);
   await expect(page.locator(".usage-breakdown")).toContainText(
     "推理 · 包含在输出中",
@@ -280,8 +315,10 @@ test("unavailable total and old live events never masquerade as zero or roll glo
 }) => {
   await fixture(page, { unavailable: true });
   await page.locator(".usage-trigger").click();
-  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
-  await expect(page.locator(".usage-total")).toHaveText("All models total—tokens");
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
+  await expect(page.locator(".usage-total")).toHaveText(
+    "All models total—tokens",
+  );
   await page.evaluate(() => window.usageEmit(10, 4000000));
   await expect(page.locator(".usage-total strong")).toHaveText("4M");
   await page.evaluate(() => window.usageEmit(9, 3000000, 11));
@@ -296,19 +333,22 @@ test("live global arriving before first bootstrap is retained", async ({
 }) => {
   await fixture(page, { bootstrapRace: true });
   await page.locator(".usage-trigger").click();
-  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
   await expect(page.locator(".usage-total strong")).toHaveText("5M");
 });
 
-
 test("usage popover stays above the header fade", async ({ page }) => {
   await fixture(page);
-  await page.getByRole("button", { name: "Open current usage details" }).click();
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
   const popup = page.locator(".usage-popover");
   await expect(popup).toBeVisible();
-  const layers = await popup.evaluate(node => ({
+  const layers = await popup.evaluate((node) => ({
     popup: Number(getComputedStyle(node.parentElement).zIndex),
-    header: Number(getComputedStyle(document.querySelector(".chat-header")).zIndex),
+    header: Number(
+      getComputedStyle(document.querySelector(".chat-header")).zIndex,
+    ),
   }));
   expect(layers.popup).toBeGreaterThan(layers.header);
 });
@@ -342,14 +382,14 @@ test.describe("context composition animation", () => {
     const bar = page.getByRole("progressbar", { name: "Context usage" });
     await expect(bar).toHaveAttribute(
       "aria-valuetext",
-      /System prompt and tools 14k, Earlier turns 12k/,
+      /System prompt and tools 14k, Earlier turns 44k/,
     );
     await expect(page.locator(".usage-context .usage-legend")).toHaveText(
       "System14kEarlier44kLatest10k",
     );
-    // 183.6k threshold minus 68k used.
-    await expect(page.locator(".usage-compact-caption")).toHaveText(
-      "Auto-compacts in 115.6k",
+    await expect(bar).toHaveAttribute(
+      "aria-valuetext",
+      /Auto-compacts at 183.6k \(92%\)/,
     );
     await emit(
       page,
@@ -396,7 +436,7 @@ test.describe("context composition animation", () => {
     });
     await trigger.click();
     await emit(page, { phase: "compacting" }, 2);
-    const bar = page.locator(".usage-popover .usage-context-bar");
+    const bar = page.locator(".usage-context .usage-context-bar");
     await expect(bar).toHaveAttribute("data-compacting", "true");
     await expect(trigger).toContainText("Compacting…");
     await page.waitForTimeout(900);
@@ -406,15 +446,15 @@ test.describe("context composition animation", () => {
       .evaluate((element) =>
         getComputedStyle(element).getPropertyValue("--context-summary").trim(),
       );
-    expect(summaryColor).toBe("#1f9a6a");
+    expect(summaryColor).toBe("#5c947f");
     await expect(segment(page, "turn:3")).toHaveCSS(
       "background-color",
-      "rgb(31, 154, 106)",
+      "rgb(92, 148, 127)",
     );
     // The latest turn is kept by compaction, so it keeps its own color.
     await expect(segment(page, "turn:5")).toHaveCSS(
       "background-color",
-      "rgb(47, 111, 209)",
+      "rgb(100, 133, 196)",
     );
     await page.screenshot({ path: info.outputPath("context-compacting.png") });
 
@@ -446,9 +486,9 @@ test.describe("context composition animation", () => {
       "summary",
     );
     await expect(trigger).toContainText("≈8.5%");
-    await expect(page.locator(".usage-context-labels")).toContainText(
-      "≈17k / 200k",
-    );
+    await expect(
+      page.locator(".usage-context .usage-context-labels"),
+    ).toContainText("≈17k / 200k");
     await page.screenshot({ path: info.outputPath("context-compacted.png") });
   });
 
@@ -482,22 +522,20 @@ test.describe("context composition animation", () => {
   });
 });
 
-test("details show the cache hit rate and approximate savings", async ({
+test("tabs show cache hit rate in context and approximate savings in usage", async ({
   page,
 }) => {
   await fixture(page);
   await page
     .getByRole("button", { name: "Open current usage details" })
     .click();
-  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
   // 9.2k cache reads of 36.1k input tokens.
   await expect(page.getByTestId("cache-usage")).toHaveText("Cache hit rate25%");
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
   await expect(page.getByTestId("cache-savings")).toHaveText(
     "Saved by cache≈ $0.025",
   );
-  await expect(page.locator(".usage-breakdown-heading")).toHaveText(
-    "This conversation",
-  );
+  await expect(page.locator(".usage-scope")).toHaveText("· Conversation");
 });
 
 test("reduced motion shows the final state without exit delays", async ({
@@ -540,25 +578,33 @@ test("the threshold is explained with its value and kept out of the header", asy
   await expect(trigger).toContainText("13.6%");
   await expect(trigger.locator(".usage-context-threshold")).toHaveCount(0);
   await trigger.click();
-  // One number: how much context is left before compaction runs.
-  const caption = page.locator(".usage-compact-caption");
-  await expect(caption).toHaveText("Auto-compacts in 415.6k");
-  await expect(caption.locator("i")).toBeVisible();
+  await page.locator(".usage-context-threshold").hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "Auto-compacts at 483.6k (97%)",
+  );
+  await expect(page.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuetext",
+    /Auto-compacts at 483.6k \(97%\)/,
+  );
   // The legend sits clearly below the bar, with nothing between them.
   const bar = await page
     .locator(".usage-context .usage-context-track")
     .boundingBox();
-  const legend = await page.locator(".usage-context .usage-legend").boundingBox();
+  const legend = await page
+    .locator(".usage-context .usage-legend")
+    .boundingBox();
   expect(legend.y - (bar.y + bar.height)).toBeGreaterThanOrEqual(8);
   const line = await page.locator(".usage-context-threshold").boundingBox();
   expect(line.y + line.height).toBeLessThan(legend.y);
 });
 
-test("overview and details share one bar style and highlight on hover", async ({
+test("context and usage share one bar style and highlight on hover", async ({
   page,
 }) => {
   await fixture(page);
-  await page.getByRole("button", { name: "Open current usage details" }).click();
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
   const overview = page.locator(".usage-context");
   await overview.locator('[data-legend="system"]').hover();
   await expect(overview.locator('[data-segment="system"]')).not.toHaveAttribute(
@@ -575,26 +621,28 @@ test("overview and details share one bar style and highlight on hover", async ({
   await page.mouse.move(0, 0);
   await expect(overview.locator("[data-dim]")).toHaveCount(0);
 
-  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
   const details = page.locator(".usage-breakdown");
   // The same track and legend components as the overview.
   await expect(details.locator(".usage-context-track > span")).toHaveCount(4);
   await expect(details.locator(".usage-legend li")).toHaveCount(4);
   await details.locator('[data-segment="cacheRead"]').hover();
-  await expect(details.locator('[data-legend="cacheRead"]')).not.toHaveAttribute(
-    "data-dim",
-  );
+  await expect(
+    details.locator('[data-legend="cacheRead"]'),
+  ).not.toHaveAttribute("data-dim");
   await expect(details.locator('[data-legend="input"]')).toHaveAttribute(
     "data-dim",
     "true",
   );
 });
 
-test("overview and details section titles share one text style", async ({
+test("context and usage section titles share one text style", async ({
   page,
 }) => {
   await fixture(page, { dark: false });
-  await page.getByRole("button", { name: "Open current usage details" }).click();
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
   const style = (selector) =>
     page.locator(selector).evaluate((element) => {
       const computed = getComputedStyle(element);
@@ -606,9 +654,9 @@ test("overview and details section titles share one text style", async ({
       ];
     });
   // Section titles match across tabs.
-  const overview = await style(".usage-context-labels > span:first-child");
-  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
-  expect(await style(".usage-breakdown-heading > span:first-child")).toEqual(
+  const overview = await style(".usage-context .usage-context-labels strong");
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
+  expect(await style(".usage-breakdown .usage-context-labels strong")).toEqual(
     overview,
   );
 });
@@ -622,8 +670,10 @@ test("a partial conversation still shows the composition of known requests", asy
     window.usageView.usage.conversation.status = "partial";
     window.usageEmit(2, 3860000, 2);
   });
-  await page.getByRole("button", { name: "Open current usage details" }).click();
-  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
   const details = page.locator(".usage-breakdown");
   await expect(details.locator(".usage-composition > span")).toHaveCount(4);
   await expect(details.locator(".usage-legend")).toHaveText(
@@ -635,7 +685,7 @@ test("a partial conversation still shows the composition of known requests", asy
   );
 });
 
-test("the caption says when compaction is next once past the threshold", async ({
+test("the threshold hint says when compaction is next once past the threshold", async ({
   page,
 }) => {
   await fixture(page);
@@ -646,8 +696,11 @@ test("the caption says when compaction is next once past the threshold", async (
     });
     window.usageEmit(2, 3860000, 2);
   });
-  await page.getByRole("button", { name: "Open current usage details" }).click();
-  await expect(page.locator(".usage-compact-caption")).toHaveText(
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
+  await page.locator(".usage-context-threshold").hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
     "Auto-compacts before the next message",
   );
 });
@@ -656,15 +709,177 @@ test("both tabs leave the same space after their bar block", async ({
   page,
 }) => {
   await fixture(page, { completed: true });
-  await page.getByRole("button", { name: "Open current usage details" }).click();
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
   const gap = async (above, below) => {
     const a = await page.locator(above).boundingBox();
     const b = await page.locator(below).boundingBox();
     return Math.round(b.y - (a.y + a.height));
   };
-  const overview = await gap(".usage-context", ".usage-summary");
-  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
-  const details = await gap(".usage-breakdown .usage-legend", ".usage-facts");
+  const overview = await gap(".usage-context", ".usage-context-facts");
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
+  const details = await gap(
+    ".usage-breakdown .usage-legend",
+    ".usage-breakdown .usage-facts",
+  );
   expect(details).toBe(overview);
   expect(overview).toBe(12);
+});
+
+test("a threshold near the end never makes the popover scroll sideways", async ({
+  page,
+}) => {
+  await fixture(page, { completed: true });
+  await page.evaluate(() => {
+    // 1M window: the threshold sits at 98% of the bar.
+    Object.assign(window.usageView.usage.context, {
+      contextWindow: 1000000,
+      compactAt: 983616,
+      tokens: 467400,
+      percent: 46.74,
+    });
+    window.usageEmit(2, 3860000, 2);
+  });
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
+  for (const tab of ["Context", "Usage"]) {
+    await page.getByRole("tab", { name: tab, exact: true }).click();
+    const panel = page.getByRole("tabpanel", { name: tab });
+    expect(
+      await panel.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+  }
+});
+
+for (const zh of [false, true]) {
+  test(`tabs keep aligned footers across content states (${zh ? "Chinese" : "English"})`, async ({
+    page,
+  }) => {
+    await fixture(page, { zh });
+    let revision = 2;
+    for (const empty of [false, true]) {
+      await page.evaluate(
+        ({ empty, revision }) => {
+          const view = window.usageView;
+          if (empty) view.usage = {};
+          else {
+            view.usage.run.state = "cancelled";
+            view.usage.run.status = "partial";
+            view.usage.conversation.reasoning = 3500;
+            view.usage.context.segments.push({
+              id: "summary",
+              kind: "summary",
+              tokens: 2000,
+            });
+          }
+          window.usageEmit(revision, 246000);
+        },
+        { empty, revision: revision++ },
+      );
+      await page.locator(".usage-trigger").click();
+      const popup = page.locator(".usage-popover");
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        const footers = [];
+        for (const tab of [0, 1]) {
+          await page.getByRole("tab").nth(tab).click();
+          await expect(popup).toHaveCSS("height", "288px");
+          const panel = page.getByRole("tabpanel");
+          expect(
+            await panel.evaluate(
+              (el) =>
+                el.scrollHeight <= el.clientHeight &&
+                el.scrollWidth <= el.clientWidth,
+            ),
+          ).toBe(true);
+          const footer = panel.locator(
+            tab === 0 ? ".usage-model" : ".usage-total",
+          );
+          const box = await footer.boundingBox();
+          const popupBox = await popup.boundingBox();
+          expect(popupBox.y + popupBox.height - box.y - box.height).toBe(17); // 16px padding + border.
+          footers.push(box);
+        }
+        expect(footers[0].y).toBe(footers[1].y);
+        expect(footers[0].height).toBe(footers[1].height);
+      }
+      await page.keyboard.press("Escape");
+    }
+  });
+}
+
+for (const dark of [false, true]) {
+  test(`tiny nonzero context remains visible without enlarging the full bar (${dark ? "dark" : "light"})`, async ({
+    page,
+  }) => {
+    await fixture(page, { dark });
+    let revision = 2;
+    for (const percent of [0, 0.4, 2, 50, 99]) {
+      await page.evaluate(
+        ({ percent, revision }) => {
+          Object.assign(window.usageView.usage.context, {
+            tokens: percent * 2000,
+            segments: [
+              { id: "empty", kind: "history", tokens: 0 },
+              { id: "system", kind: "system", tokens: percent * 2000 },
+            ],
+          });
+          window.usageEmit(revision, 246000);
+        },
+        { percent, revision: revision++ },
+      );
+      await expect(page.locator(".usage-trigger")).toContainText(`${percent}%`);
+      const mini = page.locator('.usage-header [data-segment="system"]');
+      await expect
+        .poll(async () => (await mini.boundingBox()).width)
+        .toBeCloseTo(percent > 0 ? Math.max(3, (48 * percent) / 100) : 0, 1);
+      await page.locator(".usage-trigger").click();
+      const bar = page.getByRole("progressbar", { name: "Context usage" });
+      await expect(bar).toHaveAttribute("aria-valuenow", String(percent));
+      const track = await bar.locator(".usage-context-track").boundingBox();
+      const fill = await bar.locator('[data-segment="system"]').boundingBox();
+      expect(fill.width).toBeCloseTo((track.width * percent) / 100, 1);
+      await page.keyboard.press("Escape");
+    }
+    await page.evaluate((revision) => {
+      window.usageView.usage.context = { status: "unavailable" };
+      window.usageEmit(revision, 246000);
+    }, revision);
+    await expect(page.locator(".usage-trigger")).toHaveText("—");
+    await expect(page.locator(".usage-header [data-leading]")).toHaveCount(0);
+  });
+}
+
+test("switching tabs hides the old panel and help control immediately", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await fixture(page);
+  await page.locator(".usage-trigger").click();
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "About total usage" }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Context", exact: true }).click();
+  // Inspect the first committed inactive state, before a 150ms fade could end.
+  const hidden = await page.locator(".usage-total button").evaluate((el) => {
+    const panel = el.closest('[role="tabpanel"]');
+    const style = getComputedStyle(el);
+    return {
+      inert: panel.inert,
+      visibility: style.visibility,
+      transition: style.transitionDuration,
+    };
+  });
+  expect(hidden).toEqual({
+    inert: true,
+    visibility: "hidden",
+    transition: "0s",
+  });
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".usage-total button")).not.toBeFocused();
 });

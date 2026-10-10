@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Hint } from "@/components/ui/tooltip";
 import { useAppTranslation } from "@/i18n";
 import { formatTokens } from "@/lib/usage-format";
 import { nonNegative } from "../../../../shared/usage";
@@ -146,6 +147,9 @@ export function SegmentTrack({
   }[];
   className?: string;
 } & Highlight) {
+  const leading = segments.findIndex(
+    (segment) => segment.percent > 0 && !segment.exiting,
+  );
   return (
     <div
       className={["usage-context-track", className].filter(Boolean).join(" ")}
@@ -155,6 +159,7 @@ export function SegmentTrack({
           key={segment.id}
           data-segment={segment.id}
           data-kind={segment.kind}
+          data-leading={index === leading || undefined}
           data-exiting={segment.exiting || undefined}
           {...highlight(segment.kind, state)}
           style={
@@ -198,11 +203,14 @@ export function ContextBar({
   context,
   compacting,
   size,
+  thresholdHint,
   ...state
 }: {
   context?: ContextUsage;
   compacting: boolean;
   size: "mini" | "full";
+  /** What the dashed marker means, shown on hover and read with the bar. */
+  thresholdHint?: string;
 } & Highlight) {
   const { t } = useAppTranslation();
   const window = context?.contextWindow;
@@ -213,17 +221,25 @@ export function ContextBar({
       : [],
   );
   const { tokens, percent, estimated } = contextTotals(context);
+  // Read one total per category, like the legend, not every turn.
+  const byKind = new Map<string, number>();
+  for (const segment of context?.segments ?? [])
+    byKind.set(segment.kind, (byKind.get(segment.kind) ?? 0) + segment.tokens);
   const label = known
-    ? (context?.segments ?? [])
+    ? [...byKind]
         .map(
-          (segment) =>
-            `${t(`usage.segments.${segment.kind}`)} ${formatTokens(segment.tokens)}`,
+          ([kind, total]) =>
+            `${t(`usage.segments.${kind as ContextSegment["kind"]}`)} ${formatTokens(total)}`,
         )
         .join(", ") || `${formatTokens(tokens)} / ${formatTokens(window)}`
     : t("usage.unavailable");
-  const valueText = estimated
-    ? `${label} · ${t("usage.estimatedUntilReply")}`
-    : label;
+  const valueText = [
+    label,
+    estimated ? t("usage.estimatedUntilReply") : undefined,
+    thresholdHint,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const threshold =
     known && nonNegative(context?.compactAt)
       ? Math.min(100, (context.compactAt / window) * 100)
@@ -255,12 +271,15 @@ export function ContextBar({
         }))}
         {...(size === "full" ? state : {})}
       />
-      {/* The legend names the threshold and its value; the mini bar omits it. */}
+      {/* Hovering the marker explains it; the mini bar omits it. */}
       {threshold !== undefined && size === "full" && (
-        <span
-          className="usage-context-threshold"
-          style={{ "--at": `${threshold}%` } as CSSProperties}
-        />
+        <Hint content={thresholdHint} disabled={!thresholdHint}>
+          <span
+            className="usage-context-threshold"
+            aria-hidden="true"
+            style={{ "--at": `${threshold}%` } as CSSProperties}
+          />
+        </Hint>
       )}
     </div>
   );
