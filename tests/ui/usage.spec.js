@@ -566,3 +566,23 @@ test("overview and details share one bar style and highlight on hover", async ({
     "true",
   );
 });
+
+test("overview and details headline values share one text style", async ({
+  page,
+}) => {
+  await fixture(page, { dark: false });
+  await page.getByRole("button", { name: "Open current usage details" }).click();
+  const style = (selector) =>
+    page.locator(selector).evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return [
+        computed.fontSize,
+        computed.fontWeight,
+        computed.fontFamily,
+        computed.color,
+      ];
+    });
+  const overview = await style(".usage-context-labels strong");
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
+  expect(await style(".usage-breakdown-heading strong")).toEqual(overview);
+});

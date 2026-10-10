@@ -135,6 +135,10 @@
   color: var(--muted);
   white-space: nowrap;
 }
+/* The headline value matches the details headline; only its context is muted. */
+.usage-context-labels strong {
+  color: var(--text);
+}
 .usage-context-labels strong {
   font-size: 13px;
   font-weight: 500;
