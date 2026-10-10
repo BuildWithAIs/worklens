@@ -8,6 +8,7 @@ import { McpService } from "../src/main/mcp-service";
 import { installationId } from "../src/main/installation-id";
 import { schemas } from "../src/main/validation";
 import { requiredMcpCredentials } from "../src/renderer/src/components/worklens/mcp-configuration";
+import { availableMcpName } from "../src/renderer/src/components/worklens/mcp-presets";
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -31,6 +32,80 @@ async function setup() {
   cleanup.push(() => service.shutdown());
   return { directory, service };
 }
+
+test("generated MCP keys remain unique and valid for repeated 80-character display names", () => {
+  const label = "a".repeat(80);
+  const keys = [label];
+  for (let index = 0; index < 3; index++) {
+    const key = availableMcpName(label, keys);
+    expect(key).toMatch(/^[a-zA-Z0-9_-]{1,80}$/);
+    expect(keys).not.toContain(key);
+    keys.push(key);
+  }
+  expect(availableMcpName("same-name", ["same_name", "same_name_2"])).toBe(
+    "same-name-3",
+  );
+});
+
+test("MCP display-name edits survive restart and preserve server keys and masked credentials", async () => {
+  const { service, directory } = await setup();
+  service.save(
+    JSON.stringify({
+      mcpServers: {
+        stable: {
+          ...fixture,
+          displayName: "Paper trail",
+          env: { TOKEN: "synthetic-label-secret" },
+        },
+        legacy: {
+          url: "https://example.invalid/mcp",
+          headers: { Authorization: "Bearer synthetic-remote" },
+        },
+      },
+    }),
+  );
+  expect(
+    JSON.parse(service.snapshot().config).mcpServers.legacy,
+  ).not.toHaveProperty("displayName");
+  const next = JSON.parse(service.snapshot().config);
+  next.mcpServers.stable.displayName = "项目笔记";
+  service.save(JSON.stringify(next));
+  expect(Object.keys(JSON.parse(service.snapshot().config).mcpServers)).toEqual(
+    ["stable", "legacy"],
+  );
+  expect(service.snapshot().servers[0].name).toBe("stable");
+  expect(JSON.parse(service.snapshot().config).mcpServers.stable).toMatchObject(
+    { displayName: "项目笔记" },
+  );
+  const restarted = new McpService(directory, encryption);
+  restarted.initialize();
+  cleanup.push(() => restarted.shutdown());
+  expect(restarted.snapshot()).toEqual(service.snapshot());
+  expect(
+    JSON.parse(restarted.snapshot().config).mcpServers.stable.env.TOKEN,
+  ).toBe("<saved>");
+  expect(
+    await readFile(join(directory, "mcp-settings.json"), "utf8"),
+  ).not.toContain("synthetic-label-secret");
+  const runtime = await ModelRuntime.create({
+    modelsPath: null,
+    authPath: join(directory, "auth.json"),
+    refreshOnCreate: false,
+  });
+  expect(await restarted.test("stable", directory, runtime)).toEqual({
+    tools: 3,
+  });
+  for (const displayName of ["", " ", "a".repeat(81)]) {
+    const invalid = structuredClone(next);
+    invalid.mcpServers.stable.displayName = displayName;
+    expect(() => service.save(JSON.stringify(invalid))).toThrow(
+      "Invalid MCP configuration",
+    );
+    expect(
+      JSON.parse(service.snapshot().config).mcpServers.stable.displayName,
+    ).toBe("项目笔记");
+  }
+});
 
 test("MCP editor credential checks match service rules for remote and local target changes", async () => {
   const { service } = await setup();

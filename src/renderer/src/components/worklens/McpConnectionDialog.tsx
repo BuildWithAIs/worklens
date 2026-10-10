@@ -30,16 +30,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAppTranslation } from "@/i18n";
+import { McpConnectionStatus } from "./McpConnectionStatus";
 import { availableMcpName, mcpPresets, type McpPresetId } from "./mcp-presets";
 import type { McpSnapshot } from "../../../../shared/contracts";
 import {
   parseMcpImport,
   requiredMcpCredentials,
   type McpConnectionConfig,
+  type McpTestResult,
 } from "./mcp-configuration";
 
 type EditorField = "name" | "url" | "command" | "options" | "token";
-const formFields = new Set(["url", "command", "args", "enabled", "type"]);
+const formFields = new Set([
+  "displayName",
+  "url",
+  "command",
+  "args",
+  "enabled",
+  "type",
+]);
 
 function credentialFields(connection?: McpConnectionConfig) {
   const authorization = Object.entries(connection?.headers ?? {}).find(
@@ -62,6 +71,7 @@ export function McpConnectionDialog({
   connection,
   name: savedName,
   names,
+  displayNames,
   server,
   busy,
   result,
@@ -78,14 +88,16 @@ export function McpConnectionDialog({
   connection?: McpConnectionConfig;
   name: string;
   names: string[];
+  displayNames: string[];
   server?: McpSnapshot["servers"][number];
   busy?: string;
-  result?: string;
+  result?: McpTestResult;
   loginActions: ReactNode;
   onSave: (
     config: McpConnectionConfig,
     name: string,
-  ) => Promise<McpConnectionConfig | undefined>;
+    showSaved: (saved: McpConnectionConfig) => void,
+  ) => Promise<boolean>;
   onImport: (raw: string) => Promise<boolean>;
   onRemove: () => Promise<boolean>;
   onTest: () => Promise<boolean>;
@@ -127,7 +139,9 @@ export function McpConnectionDialog({
     serviceDrafts.current.set(service, { name, url, token, options });
     const nextPreset = mcpPresets.find((item) => item.id === nextService);
     const draft = serviceDrafts.current.get(nextService) ?? {
-      name: nextPreset ? availableMcpName(nextPreset.id, names) : "",
+      name: nextPreset
+        ? availableMcpName(nextPreset.id, [...names, ...displayNames])
+        : "",
       url: nextPreset?.url ?? "",
       token: "",
       options: "{}",
@@ -210,13 +224,11 @@ export function McpConnectionDialog({
       message = t("mcp.githubTokenHint");
     if (field === "name") {
       if (!name.trim()) message = t("mcp.nameRequired");
-      else if (!/^[a-zA-Z0-9_-]{1,80}$/.test(name.trim()))
-        message = t("mcp.nameInvalid");
+      else if (name.trim().length > 80) message = t("mcp.nameInvalid");
       else if (
-        adding &&
-        names.some(
+        displayNames.some(
           (existing) =>
-            existing.replaceAll("-", "_") === name.trim().replaceAll("-", "_"),
+            existing.toLocaleLowerCase() === name.trim().toLocaleLowerCase(),
         )
       )
         message = t("mcp.nameDuplicate");
@@ -272,7 +284,7 @@ export function McpConnectionDialog({
     "aria-invalid": !!errors[field],
     "aria-describedby": errors[field]
       ? `mcp-${field}-error`
-      : field === "name" || field === "options"
+      : field === "options"
         ? `mcp-${field}-hint`
         : undefined,
     onBlur: (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -292,6 +304,7 @@ export function McpConnectionDialog({
       return;
     }
     const next: McpConnectionConfig = { ...JSON.parse(options), enabled };
+    next.displayName = name.trim();
     if (connection?.type) next.type = connection.type;
     if (transport === "http") next.url = url.trim();
     else {
@@ -326,21 +339,19 @@ export function McpConnectionDialog({
       setFocusError({ field: authRequired.length ? "token" : "options" });
       return;
     }
-    const saved = await onSave(next, name.trim());
-    if (!saved) return;
-    if (adding) {
-      onClose();
-      return;
-    }
-    // Use the saved, masked snapshot so testing is immediately available,
-    // including when only a credential changed and its mask stayed the same.
-    const savedFields = credentialFields(saved);
-    setUrl(saved.url ?? "");
-    setCommand(saved.command ?? "");
-    setArgs(saved.args?.join("\n") ?? "");
-    setEnabled(saved.enabled !== false);
-    setToken(savedFields.authorization?.[1] ?? "");
-    setOptions(savedFields.options);
+    const displayName = name.trim();
+    await onSave(next, displayName, (saved) => {
+      // Use the saved, masked snapshot so testing is immediately available,
+      // including when only a credential changed and its mask stayed the same.
+      const savedFields = credentialFields(saved);
+      setName(saved.displayName ?? displayName);
+      setUrl(saved.url ?? "");
+      setCommand(saved.command ?? "");
+      setArgs(saved.args?.join("\n") ?? "");
+      setEnabled(saved.enabled !== false);
+      setToken(savedFields.authorization?.[1] ?? "");
+      setOptions(savedFields.options);
+    });
   }
 
   const connectionForm = (
@@ -360,7 +371,6 @@ export function McpConnectionDialog({
             ref={nameInput}
             id="mcp-name"
             value={name}
-            readOnly={!adding}
             maxLength={80}
             autoComplete="off"
             {...validationProps("name")}
@@ -369,11 +379,6 @@ export function McpConnectionDialog({
               clear("name");
             }}
           />
-          {!errors.name && (
-            <FieldDescription id="mcp-name-hint">
-              {t(adding ? "mcp.nameHint" : "mcp.nameFixed")}
-            </FieldDescription>
-          )}
           <FieldError id="mcp-name-error">{errors.name}</FieldError>
         </Field>
         <Field>
@@ -428,7 +433,6 @@ export function McpConnectionDialog({
               <Input
                 id="mcp-url"
                 value={url}
-                readOnly={!!preset}
                 autoComplete="off"
                 {...validationProps("url")}
                 onChange={(event) => {
@@ -682,11 +686,7 @@ export function McpConnectionDialog({
           </div>
         )}
         {loginActions}
-        {result && !dirty && (
-          <p role="status" className="text-sm text-muted-foreground">
-            {result}
-          </p>
-        )}
+        {result && !dirty && <McpConnectionStatus result={result} />}
         <p className="text-xs leading-5 text-muted-foreground">
           {t(!adding && dirty ? "mcp.saveBeforeTesting" : "mcp.nextMessage")}
         </p>

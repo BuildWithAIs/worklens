@@ -22,12 +22,16 @@ import { useAppTranslation } from "@/i18n";
 import type { Bootstrap, McpSnapshot } from "../../../../shared/contracts";
 import { SearchInput } from "./SearchInput";
 import { McpConnectionDialog } from "./McpConnectionDialog";
+import { McpConnectionStatus } from "./McpConnectionStatus";
+import { mcpConnectionId } from "./mcp-presets";
 import { settingsFailure } from "./settings-notification";
 import {
   mcpEndpoint,
+  mcpDisplayName,
   parseMcpImport,
   readMcpConfiguration,
   type McpConnectionConfig,
+  type McpTestResult,
 } from "./mcp-configuration";
 
 export function McpSettings({
@@ -41,13 +45,20 @@ export function McpSettings({
 }) {
   const { t, language } = useAppTranslation();
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<{ id: string; adding: boolean }>();
+  // The key stays stable when a new connection receives its saved ID.
+  const [editing, setEditing] = useState<{
+    key: string;
+    id: string;
+    adding: boolean;
+  }>();
   const [busy, setBusy] = useState<string>();
   const acting = useRef(false);
   const cancelRequested = useRef(false);
   const [results, setResults] = useState<
-    Record<string, { config: string; tools: number }>
+    Record<string, { config: string; result: McpTestResult }>
   >({});
+  const snapshotRef = useRef(data.mcp);
+  snapshotRef.current = data.mcp;
   const [url, setUrl] = useState("");
   const loginId = useRef<string | undefined>(undefined);
   const reportedError = useRef<string | undefined>(undefined);
@@ -56,7 +67,7 @@ export function McpSettings({
 
   const search = query.trim().toLocaleLowerCase();
   const filteredServers = servers.filter((server) =>
-    `${server.name} ${mcpEndpoint(configuration.mcpServers[server.name])}`
+    `${mcpDisplayName(server.name, configuration.mcpServers[server.name])} ${mcpEndpoint(configuration.mcpServers[server.name])}`
       .toLocaleLowerCase()
       .includes(search),
   );
@@ -113,14 +124,12 @@ export function McpSettings({
       toast.add(
         settingsFailure(
           t(
-            operation === "test"
-              ? "mcp.testFailed"
-              : operation === "login"
-                ? "mcp.loginFailed"
-                : operation === "logout"
-                  ? "mcp.logoutFailed"
-                  : "mcp.actionFailed",
-            { name: key.slice(key.indexOf(":") + 1) },
+            operation === "login"
+              ? "mcp.loginFailed"
+              : operation === "logout"
+                ? "mcp.logoutFailed"
+                : "mcp.actionFailed",
+            { name: connectionName(key.slice(key.indexOf(":") + 1)) },
           ),
           String(error),
           language,
@@ -137,27 +146,112 @@ export function McpSettings({
     }
   }
   const openEditor = (id?: string) => {
-    setEditing({ id: id ?? `mcp-${crypto.randomUUID()}`, adding: !id });
+    const key = id ?? `mcp-${crypto.randomUUID()}`;
+    setEditing({ key, id: key, adding: !id });
   };
-  async function importConnections(raw: string, operationId: string) {
-    return act(
-      `import:${operationId}`,
-      async () => {
-        const next = readMcpConfiguration(data.mcp?.config);
-        const imported = parseMcpImport(raw, Object.keys(next.mcpServers));
-        if ("error" in imported)
-          throw new Error(
-            t(`mcp.${imported.error}`, { name: imported.name ?? "" }),
-          );
-        next.mcpServers = { ...next.mcpServers, ...imported.servers };
-        onMcpChange(
-          await window.worklens.invoke("mcpSave", {
-            config: JSON.stringify(next),
+  function connectionName(id: string) {
+    return mcpDisplayName(
+      id,
+      readMcpConfiguration(snapshotRef.current?.config).mcpServers[id],
+    );
+  }
+  function acceptSnapshot(snapshot: McpSnapshot) {
+    snapshotRef.current = snapshot;
+    onMcpChange(snapshot);
+  }
+  async function verifyConnection(
+    id: string,
+    snapshot: McpSnapshot,
+    notify = true,
+  ) {
+    const config = readMcpConfiguration(snapshot.config).mcpServers[id];
+    const setResult = (result: McpTestResult) =>
+      setResults((current) => ({
+        ...current,
+        [id]: { config: JSON.stringify(config), result },
+      }));
+    setBusy(`test:${id}`);
+    setResult({ state: "testing" });
+    try {
+      const result = await window.worklens.invoke("mcpTest", { name: id });
+      setResult({ state: "passed", tools: result.tools });
+      if (notify)
+        onSuccess(
+          t("settingsFeedback.modelConnected", {
+            service: mcpDisplayName(id, config),
           }),
         );
-      },
-      t("mcp.saved"),
-    );
+      return true;
+    } catch (error) {
+      const message = String(error);
+      if (message.includes("Sign in to this MCP server first")) {
+        setResult({ state: "signIn" });
+      } else {
+        setResult({ state: "failed", error: message });
+        if (notify)
+          toast.add(
+            settingsFailure(
+              t("mcp.testFailed", { name: mcpDisplayName(id, config) }),
+              message,
+              language,
+              false,
+              t("settingsFeedback.mcpUnknown"),
+            ),
+          );
+      }
+      return false;
+    }
+  }
+  async function importConnections(raw: string, operationId: string) {
+    let snapshot: McpSnapshot | undefined;
+    let ids: string[] = [];
+    const saved = await act(`import:${operationId}`, async () => {
+      const next = readMcpConfiguration(snapshotRef.current?.config);
+      const imported = parseMcpImport(raw, Object.keys(next.mcpServers));
+      if ("error" in imported)
+        throw new Error(
+          t(`mcp.${imported.error}`, { name: imported.name ?? "" }),
+        );
+      next.mcpServers = { ...next.mcpServers, ...imported.servers };
+      snapshot = await window.worklens.invoke("mcpSave", {
+        config: JSON.stringify(next),
+      });
+      acceptSnapshot(snapshot);
+      ids = Object.keys(imported.servers);
+      ids.forEach(clearResult);
+      ids = ids.filter((id) => imported.servers[id].enabled !== false);
+    });
+    if (!saved) return false;
+    if (!snapshot || !ids.length) {
+      onSuccess(t("mcp.imported"));
+      return true;
+    }
+    // Close the import dialog first. Rows show each result; like built-in
+    // connectors, one toast reports the outcome once testing finishes.
+    void act(`test:${ids[0]}`, async () => {
+      const failed = await verifyAll(ids, snapshot!);
+      if (!failed) onSuccess(t("mcp.imported"));
+      else
+        toast.add({
+          type: "error",
+          timeout: 0,
+          priority: "high",
+          title: t("mcp.importAttention", { count: failed }),
+          description: t("mcp.importAttentionDescription"),
+        });
+    });
+    return true;
+  }
+  /** Tests a few connections at a time and returns how many did not pass. */
+  async function verifyAll(ids: string[], snapshot: McpSnapshot) {
+    const queue = [...ids];
+    let failed = 0;
+    const worker = async () => {
+      for (let id = queue.shift(); id; id = queue.shift())
+        if (!(await verifyConnection(id, snapshot, false))) failed++;
+    };
+    await Promise.all(Array.from({ length: Math.min(3, ids.length) }, worker));
+    return failed;
   }
   const clearResult = (id: string) =>
     setResults((current) => {
@@ -165,36 +259,62 @@ export function McpSettings({
       delete next[id];
       return next;
     });
+  /** Connections on the same OAuth server share one sign-in. */
+  function sameEndpoint(
+    connections: Record<string, McpConnectionConfig>,
+    a: string,
+    b: string,
+  ) {
+    const left = connections[a]?.url;
+    const right = connections[b]?.url;
+    return !!left && !!right && new URL(left).href === new URL(right).href;
+  }
+  function clearTargetResults(id: string, snapshot: McpSnapshot) {
+    const connections = readMcpConfiguration(snapshot.config).mcpServers;
+    setResults((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([name]) => name !== id && !sameEndpoint(connections, id, name),
+        ),
+      ),
+    );
+  }
   async function saveConnection(
     id: string,
     connection: McpConnectionConfig,
-    operationId = id,
+    adding: boolean,
+    showSaved: (saved: McpConnectionConfig) => void,
   ) {
-    let saved: McpConnectionConfig | undefined;
-    await act(
-      `save:${operationId}`,
-      async () => {
-        const next = readMcpConfiguration(data.mcp?.config);
-        next.mcpServers = { ...next.mcpServers, [id]: connection };
-        const snapshot = await window.worklens.invoke("mcpSave", {
-          config: JSON.stringify(next),
-        });
-        onMcpChange(snapshot);
-        saved = readMcpConfiguration(snapshot.config).mcpServers[id];
-        clearResult(id);
-      },
-      t("mcp.saved"),
-    );
-    return saved;
+    return act(`save:${id}`, async () => {
+      const next = readMcpConfiguration(snapshotRef.current?.config);
+      const stored = { ...connection };
+      // Legacy names remain the fallback; store a label only when it differs.
+      if (stored.displayName === id) delete stored.displayName;
+      next.mcpServers = { ...next.mcpServers, [id]: stored };
+      const snapshot = await window.worklens.invoke("mcpSave", {
+        config: JSON.stringify(next),
+      });
+      acceptSnapshot(snapshot);
+      clearResult(id);
+      // Reset the editor to the saved, masked values before testing so the
+      // draft is clean and the test status stays visible.
+      showSaved(readMcpConfiguration(snapshot.config).mcpServers[id]);
+      if (adding)
+        setEditing((current) => current && { ...current, id, adding: false });
+      let passed = true;
+      if (connection.enabled === false) onSuccess(t("mcp.saved"));
+      else passed = await verifyConnection(id, snapshot);
+      if (adding && passed) setEditing(undefined);
+    });
   }
   async function removeConnection(id: string) {
     return act(
       `remove:${id}`,
       async () => {
-        const next = readMcpConfiguration(data.mcp?.config);
+        const next = readMcpConfiguration(snapshotRef.current?.config);
         delete next.mcpServers[id];
         // Removing a configuration does not revoke the account's OAuth login.
-        onMcpChange(
+        acceptSnapshot(
           await window.worklens.invoke("mcpSave", {
             config: JSON.stringify(next),
           }),
@@ -205,51 +325,36 @@ export function McpSettings({
     );
   }
   function testConnection(id: string) {
-    return act(
-      `test:${id}`,
-      async () => {
-        clearResult(id);
-        const result = await window.worklens.invoke("mcpTest", { name: id });
-        setResults((current) => ({
-          ...current,
-          [id]: {
-            config: JSON.stringify(configuration.mcpServers[id]),
-            tools: result.tools,
-          },
-        }));
-      },
-      t("settingsFeedback.modelConnected", { service: id }),
-    );
+    return act(`test:${id}`, () => verifyConnection(id, snapshotRef.current!));
   }
   function signIn(id: string) {
-    return act(
-      `login:${id}`,
-      async () => {
-        const login = crypto.randomUUID();
-        loginId.current = login;
-        await window.worklens.invoke("mcpLogin", { name: id, loginId: login });
-        if (data.mcp)
-          onMcpChange({
-            ...data.mcp,
-            servers: servers.map((server) =>
-              configuration.mcpServers[server.name]?.url &&
-              new URL(configuration.mcpServers[server.name].url!).href ===
-                new URL(configuration.mcpServers[id].url!).href
-                ? { ...server, signedIn: true }
-                : server,
-            ),
-          });
-        clearResult(id);
-      },
-      t("mcp.signedIn"),
-    );
+    return act(`login:${id}`, async () => {
+      const login = crypto.randomUUID();
+      loginId.current = login;
+      await window.worklens.invoke("mcpLogin", { name: id, loginId: login });
+      loginId.current = undefined;
+      const snapshot = snapshotRef.current!;
+      const config = readMcpConfiguration(snapshot.config);
+      clearTargetResults(id, snapshot);
+      const updated = {
+        ...snapshot,
+        servers: snapshot.servers.map((server) =>
+          sameEndpoint(config.mcpServers, id, server.name)
+            ? { ...server, signedIn: true }
+            : server,
+        ),
+      };
+      acceptSnapshot(updated);
+      if (config.mcpServers[id].enabled !== false)
+        await verifyConnection(id, updated);
+    });
   }
   const resultFor = (id: string) => {
     const result = results[id];
     return result &&
       result.config === JSON.stringify(configuration.mcpServers[id])
-      ? t("mcp.tested", { count: result.tools })
-      : undefined;
+      ? result.result
+      : { state: "untested" as const };
   };
   function cancelSignIn() {
     if (!loginId.current || cancelRequested.current) return;
@@ -307,7 +412,9 @@ export function McpSettings({
       <DialogContent className="settings-dialog settings-disconnect-dialog">
         <DialogHeader>
           <DialogTitle>
-            {t("mcp.signInTitle", { name: busy.slice("login:".length) })}
+            {t("mcp.signInTitle", {
+              name: connectionName(busy.slice("login:".length)),
+            })}
           </DialogTitle>
           <DialogDescription className="flex items-center gap-2">
             <LoaderCircle
@@ -335,7 +442,7 @@ export function McpSettings({
       <section className="settings-section">
         <div className="settings-mcp-heading">
           <h2 className="settings-group-bar" data-slot="settings-section-title">
-            {t("common.connected")}
+            {t("mcp.connections")}
             <span className="settings-group-count" aria-hidden="true">
               {filteredServers.length}
             </span>
@@ -377,7 +484,7 @@ export function McpSettings({
           <ItemGroup className="settings-list settings-connection-list">
             {filteredServers.map((server) => {
               const connection = configuration.mcpServers[server.name];
-              const name = server.name;
+              const name = mcpDisplayName(server.name, connection);
               const result = resultFor(server.name);
               return (
                 <Item
@@ -403,13 +510,8 @@ export function McpSettings({
                         <span className="block">{mcpEndpoint(connection)}</span>
                       )}
                     </ItemDescription>
-                    {result && (
-                      <p
-                        className="text-xs text-muted-foreground"
-                        role="status"
-                      >
-                        {result}
-                      </p>
+                    {server.enabled && result.state !== "untested" && (
+                      <McpConnectionStatus result={result} />
                     )}
                   </ItemContent>
                   <ItemActions className="settings-entry-actions flex-wrap">
@@ -444,18 +546,36 @@ export function McpSettings({
       </section>
       {editing && (
         <McpConnectionDialog
-          key={editing.id}
+          key={editing.key}
           adding={editing.adding}
           connection={configuration.mcpServers[editing.id]}
-          name={editing.adding ? "" : editing.id}
+          name={
+            editing.adding
+              ? ""
+              : mcpDisplayName(editing.id, configuration.mcpServers[editing.id])
+          }
           names={servers.map((server) => server.name)}
+          displayNames={servers
+            .filter((server) => server.name !== editing.id)
+            .map((server) =>
+              mcpDisplayName(
+                server.name,
+                configuration.mcpServers[server.name],
+              ),
+            )}
           server={servers.find((server) => server.name === editing.id)}
           busy={busy}
           result={resultFor(editing.id)}
           loginActions={loginActions}
-          onSave={(connection, name) =>
-            saveConnection(name, connection, editing.id)
-          }
+          onSave={(connection, name, showSaved) => {
+            const id = editing.adding
+              ? mcpConnectionId(
+                  name,
+                  servers.map((server) => server.name),
+                )
+              : editing.id;
+            return saveConnection(id, connection, editing.adding, showSaved);
+          }}
           onImport={(raw) => importConnections(raw, editing.id)}
           onRemove={() => removeConnection(editing.id)}
           onTest={() => testConnection(editing.id)}
@@ -464,12 +584,11 @@ export function McpSettings({
             void act(
               `logout:${editing.id}`,
               async () => {
-                onMcpChange(
-                  await window.worklens.invoke("mcpLogout", {
-                    name: editing.id,
-                  }),
-                );
-                clearResult(editing.id);
+                const snapshot = await window.worklens.invoke("mcpLogout", {
+                  name: editing.id,
+                });
+                acceptSnapshot(snapshot);
+                clearTargetResults(editing.id, snapshot);
               },
               t("mcp.signedOut"),
             )

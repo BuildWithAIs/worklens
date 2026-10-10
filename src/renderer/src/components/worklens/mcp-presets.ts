@@ -35,6 +35,16 @@ export function availableMcpName(base: string, names: string[]) {
   const used = new Set(names.map((name) => name.replaceAll("-", "_")));
   let name = base;
   for (let suffix = 2; used.has(name.replaceAll("-", "_")); suffix++)
-    name = `${base}-${suffix}`;
+    name = `${base.slice(0, 80 - String(suffix).length - 1)}-${suffix}`;
   return name;
+}
+
+/** Derives a stable tool namespace from a display name, e.g. "My GitHub" → "my-github". */
+export function mcpConnectionId(displayName: string, names: string[]) {
+  const slug = displayName
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .slice(0, 80)
+    .replace(/^[-_]+|[-_]+$/g, "");
+  return availableMcpName(slug || "mcp", names);
 }

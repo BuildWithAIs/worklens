@@ -97,7 +97,13 @@ async function mockMcp(
           return snapshot();
         }
         if (name === "mcpTest") {
-          await new Promise((resolve) => setTimeout(resolve, 120));
+          await new Promise((resolve) =>
+            setTimeout(resolve, state.mcpTestDelay ?? 120),
+          );
+          if (state.mcpTestErrors?.[input.name])
+            throw Error(state.mcpTestErrors[input.name]);
+          if (state.mcpNeedsLogin && !signedIn.has(input.name))
+            throw Error("Sign in to this MCP server first");
           if (state.failMcpTest) throw Error("Fixture connection failure");
           return { tools: state.mcpTestCount };
         }
@@ -201,6 +207,398 @@ async function testSavedConnection(page: Page, name: string, language = "en") {
 
 for (const theme of ["light", "dark"])
   for (const language of ["en", "zh"]) {
+    test(`MCP display names keep identity, credentials and baseline layout: ${theme}, ${language}`, async ({
+      page,
+    }, info) => {
+      await mockMcp(page, {
+        theme,
+        language,
+        connections: {
+          stable: {
+            displayName: "Paper trail",
+            url: "https://example.invalid/notes",
+            headers: {
+              Authorization: "Bearer synthetic-name-secret",
+              "X-Space": "synthetic-space",
+            },
+          },
+          local: { command: "node", env: { TOKEN: "synthetic-env-secret" } },
+        },
+      });
+      const section = await openMcp(page, language);
+      const editor = await manage(page, "Paper trail", language);
+      await expect(editor.locator("#mcp-name")).toBeEditable();
+      await editor.locator("#mcp-name").fill("项目笔记");
+      await editor
+        .getByRole("button", {
+          name: language === "en" ? "Save" : "保存",
+          exact: true,
+        })
+        .click();
+      const updated = page.getByRole("dialog", {
+        name:
+          language === "en"
+            ? "Manage connection: 项目笔记"
+            : "管理连接：项目笔记",
+        exact: true,
+      });
+      await expectSavedEditor(updated, language);
+      await expect(updated.locator("#mcp-options")).not.toContainText(
+        "displayName",
+      );
+      await expect(updated.getByRole("status")).toHaveAttribute(
+        "data-mcp-status",
+        "passed",
+      );
+      await updated
+        .getByRole("button", {
+          name: language === "en" ? "Close" : "关闭",
+          exact: true,
+        })
+        .click();
+      const config = await saved(page);
+      expect(Object.keys(config)).toEqual(["stable", "local"]);
+      expect(config.stable.displayName).toBe("项目笔记");
+      expect(config.stable.headers).toEqual({
+        Authorization: "<saved>",
+        "X-Space": "<saved>",
+      });
+      expect(config.local.env).toEqual({ TOKEN: "<saved>" });
+      expect(
+        await page.evaluate(() =>
+          (window as any).calls
+            .filter((call: any) => call.name === "mcpTest")
+            .map((call: any) => call.input.name),
+        ),
+      ).toEqual(["stable"]);
+      await expect(section).not.toContainText("stable");
+      const search = section.getByRole("textbox", {
+        name: language === "en" ? "Search connections" : "搜索连接",
+        exact: true,
+      });
+      await search.fill("项目");
+      await expect(section.getByRole("listitem")).toHaveCount(1);
+      await search.fill("Paper trail");
+      await expect(section.getByRole("listitem")).toHaveCount(0);
+      await search.fill("");
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(
+          await section.evaluate(
+            (element) => element.scrollWidth <= element.clientWidth,
+          ),
+        ).toBe(true);
+        await page.screenshot({
+          path: info.outputPath(`display-names-${width}.png`),
+        });
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const renamed = await manage(page, "项目笔记", language);
+      await renamed.locator("#mcp-name").fill("Discarded label");
+      await renamed
+        .getByRole("button", {
+          name: language === "en" ? "Cancel" : "取消",
+          exact: true,
+        })
+        .click();
+      expect((await saved(page)).stable.displayName).toBe("项目笔记");
+      const restored = await manage(page, "项目笔记", language);
+      await restored.locator("#mcp-name").fill("stable");
+      await restored
+        .getByRole("button", {
+          name: language === "en" ? "Save" : "保存",
+          exact: true,
+        })
+        .click();
+      const fallback = page.getByRole("dialog", {
+        name:
+          language === "en" ? "Manage connection: stable" : "管理连接：stable",
+        exact: true,
+      });
+      await expectSavedEditor(fallback, language);
+      await expect(fallback.locator("#mcp-name")).toHaveValue("stable");
+      expect((await saved(page)).stable.displayName).toBeUndefined();
+    });
+
+    test(`MCP failed first save keeps configuration and truthful feedback: ${theme}, ${language}`, async ({
+      page,
+    }, info) => {
+      await mockMcp(page, { theme, language });
+      const section = await openMcp(page, language);
+      await page.evaluate(() => {
+        (window as any).failMcpTest = true;
+      });
+      const add = language === "en" ? "Add connection" : "添加连接";
+      await section.getByRole("button", { name: add, exact: true }).click();
+      const adding = page.getByRole("dialog", { name: add, exact: true });
+      await adding.locator("#mcp-name").fill("项目笔记");
+      await adding.locator("#mcp-url").fill("https://example.invalid/notes");
+      await adding.locator("#mcp-token").fill("Bearer synthetic-new-secret");
+      await adding.getByRole("button", { name: add, exact: true }).click();
+      const editor = page.getByRole("dialog", {
+        name:
+          language === "en"
+            ? "Manage connection: 项目笔记"
+            : "管理连接：项目笔记",
+        exact: true,
+      });
+      await expectSavedEditor(editor, language);
+      await expect(editor.getByRole("status")).toHaveAttribute(
+        "data-mcp-status",
+        "failed",
+      );
+      await expect(editor.getByRole("status")).toContainText(
+        language === "en" ? "Test failed." : "测试失败。",
+      );
+      const config = await saved(page);
+      expect(Object.keys(config)).toEqual(["mcp"]);
+      expect(config.mcp.displayName).toBe("项目笔记");
+      expect(config.mcp.headers.Authorization).toBe("<saved>");
+      await expect(page.locator('[data-slot="toast-title"]')).not.toContainText(
+        /connection successful|连接成功|MCP settings saved|MCP 设置已保存/,
+      );
+      expect(
+        await page.evaluate(() =>
+          (window as any).calls
+            .filter((call: any) => call.name.startsWith("mcp"))
+            .map((call: any) => call.name),
+        ),
+      ).toEqual(["mcpSave", "mcpTest"]);
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(
+          await editor.evaluate(
+            (element) => element.scrollWidth <= element.clientWidth,
+          ),
+        ).toBe(true);
+        await page.screenshot({
+          path: info.outputPath(`failed-save-${width}.png`),
+        });
+      }
+      await page.evaluate(() => {
+        (window as any).failMcpTest = false;
+      });
+      await editor
+        .getByRole("button", {
+          name: language === "en" ? "Test connection" : "测试连接",
+          exact: true,
+        })
+        .click();
+      await expect(editor.getByRole("status")).toHaveAttribute(
+        "data-mcp-status",
+        "passed",
+      );
+      await editor.locator("#mcp-url").fill("https://example.invalid/updated");
+      await expect(editor.locator("#mcp-token")).toHaveValue("<saved>");
+      await editor
+        .getByRole("button", {
+          name: language === "en" ? "Save" : "保存",
+          exact: true,
+        })
+        .click();
+      await expect(editor.locator("#mcp-token-error")).toBeVisible();
+      await editor
+        .locator("#mcp-token")
+        .fill("Bearer synthetic-updated-secret");
+      await page.evaluate(() => {
+        (window as any).failMcpTest = true;
+      });
+      await editor
+        .getByRole("button", {
+          name: language === "en" ? "Save" : "保存",
+          exact: true,
+        })
+        .click();
+      await expectSavedEditor(editor, language);
+      await expect(editor.getByRole("status")).toHaveAttribute(
+        "data-mcp-status",
+        "failed",
+      );
+      expect((await saved(page)).mcp.url).toBe(
+        "https://example.invalid/updated",
+      );
+    });
+  }
+
+test("MCP editable presets retain custom URLs and test after OAuth sign-in", async ({
+  page,
+}) => {
+  await mockMcp(page);
+  const section = await openMcp(page);
+  await page.evaluate(() => {
+    (window as any).mcpNeedsLogin = true;
+  });
+  await section
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  const adding = page.getByRole("dialog", {
+    name: "Add connection",
+    exact: true,
+  });
+  const service = adding.locator("#mcp-service");
+  await service.selectOption("atlassian");
+  await adding
+    .locator("#mcp-url")
+    .fill("https://example.invalid/custom/mcp?tools=all");
+  await adding.locator("#mcp-name").fill("Team notes");
+  await service.selectOption("notion");
+  await service.selectOption("atlassian");
+  await expect(adding.locator("#mcp-url")).toHaveValue(
+    "https://example.invalid/custom/mcp?tools=all",
+  );
+  await expect(adding.locator("#mcp-name")).toHaveValue("Team notes");
+  await adding
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  const editor = await page.getByRole("dialog", {
+    name: "Manage connection: Team notes",
+    exact: true,
+  });
+  await expectSavedEditor(editor);
+  await expect(editor.getByRole("status")).toHaveAttribute(
+    "data-mcp-status",
+    "signIn",
+  );
+  await expect(editor.getByRole("status")).toContainText(
+    "Sign in to finish testing",
+  );
+  await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
+  await editor.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(editor.getByRole("status")).toHaveAttribute(
+    "data-mcp-status",
+    "passed",
+  );
+  await expect(
+    editor.getByRole("button", { name: "Sign out", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      (window as any).calls
+        .filter((call: any) => call.name.startsWith("mcp"))
+        .map((call: any) => call.name),
+    ),
+  ).toEqual(["mcpSave", "mcpTest", "mcpLogin", "mcpTest"]);
+});
+
+test("MCP imports test enabled connections once and retain per-connection failures", async ({
+  page,
+}) => {
+  await mockMcp(page);
+  const section = await openMcp(page);
+  await page.evaluate(() => {
+    (window as any).mcpTestErrors = { second: "Fixture connection failure" };
+  });
+  await section
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", {
+    name: "Add connection",
+    exact: true,
+  });
+  await editor.getByRole("tab", { name: "Import JSON", exact: true }).click();
+  await editor.locator("#mcp-import").fill(
+    JSON.stringify({
+      mcpServers: {
+        first: {
+          displayName: "First notes",
+          url: "https://example.invalid/first",
+        },
+        second: {
+          displayName: "Second notes",
+          url: "https://example.invalid/second",
+        },
+        dormant: { url: "https://example.invalid/dormant", enabled: false },
+      },
+    }),
+  );
+  await editor
+    .getByRole("button", { name: "Import connections", exact: true })
+    .click();
+  await expect(editor).not.toBeVisible();
+  await expect(
+    section.locator('[data-mcp-connection="first"] [data-mcp-status]'),
+  ).toHaveAttribute("data-mcp-status", "passed");
+  await expect(
+    section.locator('[data-mcp-connection="second"] [data-mcp-status]'),
+  ).toHaveAttribute("data-mcp-status", "failed");
+  await expect(
+    section.locator('[data-mcp-connection="dormant"]'),
+  ).toContainText("Disabled");
+  await expect(
+    section.locator('[data-mcp-connection="dormant"] [data-mcp-status]'),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      (window as any).calls
+        .filter((call: any) => call.name === "mcpTest")
+        .map((call: any) => call.input.name),
+    ),
+  ).toEqual(["first", "second"]);
+  expect(Object.keys(await saved(page))).toEqual([
+    "first",
+    "second",
+    "dormant",
+  ]);
+});
+
+for (const theme of ["light", "dark"])
+  test(`MCP controls follow the built-in connector baseline: ${theme}`, async ({
+    page,
+  }) => {
+    await mockMcp(page, {
+      theme,
+      connections: {
+        stable: {
+          displayName: "Paper trail",
+          url: "https://example.invalid/notes",
+        },
+      },
+    });
+    const section = await openMcp(page);
+    const measure = (locator: Locator) =>
+      locator.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          fontSize: style.fontSize,
+          fontWeight: style.fontWeight,
+          color: style.color,
+          lineHeight: style.lineHeight,
+          padding: style.padding,
+          borderRadius: style.borderRadius,
+          height: element.getBoundingClientRect().height,
+        };
+      });
+    const mcpTitle = await measure(section.locator('[data-slot="item-title"]'));
+    const editor = await manage(page, "Paper trail");
+    const mcpInput = await measure(editor.locator("#mcp-url"));
+    const mcpLabel = await measure(editor.locator('label[for="mcp-url"]'));
+    expect(await measure(editor.locator("#mcp-name"))).toEqual(mcpInput);
+    await editor.locator("#mcp-name").focus();
+    await page.keyboard.press("Tab");
+    await expect(editor.locator("#mcp-url")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(editor).not.toBeVisible();
+    await page.getByRole("tab", { name: "Built-in", exact: true }).click();
+    const builtin = page.getByRole("tabpanel", {
+      name: "Built-in",
+      exact: true,
+    });
+    const row = builtin.locator('[data-connection="github"]');
+    expect(await measure(row.locator('[data-slot="item-title"]'))).toEqual(
+      mcpTitle,
+    );
+    await row
+      .getByRole("button", { name: "Connect GitHub", exact: true })
+      .click();
+    const github = page.getByRole("dialog", { name: "GitHub", exact: true });
+    expect(await measure(github.locator("#github-url"))).toEqual(mcpInput);
+    expect(await measure(github.locator('label[for="github-url"]'))).toEqual(
+      mcpLabel,
+    );
+  });
+
+for (const theme of ["light", "dark"])
+  for (const language of ["en", "zh"]) {
     test(`MCP first-use, dialog and multiple connections: ${theme}, ${language}`, async ({
       page,
     }, info) => {
@@ -299,7 +697,7 @@ for (const theme of ["light", "dark"])
       await expect(section.locator("[data-mcp-connection]")).toHaveCount(2);
       await expect(
         section.getByRole("heading", {
-          name: language === "en" ? "Connected" : "已连接",
+          name: language === "en" ? "Connections" : "连接",
           exact: true,
         }),
       ).toBeVisible();
@@ -362,7 +760,8 @@ for (const theme of ["light", "dark"])
       await section.getByRole("button", { name: add, exact: true }).click();
       const editor = page.getByRole("dialog", { name: add, exact: true });
       const name = editor.locator("#mcp-name");
-      await expect(editor.locator("#mcp-name-hint")).toBeVisible();
+      await expect(editor.locator("#mcp-name-hint")).toHaveCount(0);
+      await expect(name).not.toHaveAttribute("aria-describedby");
       await expect(name).toBeFocused();
       await editor.locator("#mcp-url").focus();
       await expect(editor.locator("#mcp-name-error")).toHaveText(
@@ -370,10 +769,11 @@ for (const theme of ["light", "dark"])
       );
       await expect(editor.locator("#mcp-name-hint")).toHaveCount(0);
       await expect(name).toHaveAttribute("aria-describedby", "mcp-name-error");
-      await name.fill("invalid name");
+      await name.fill(" ");
       await editor.locator("#mcp-url").focus();
-      await expect(editor.locator("#mcp-name-error")).toContainText("1–80");
-      await expect(editor.locator("#mcp-name-hint")).toHaveCount(0);
+      await expect(editor.locator("#mcp-name-error")).toContainText(
+        language === "en" ? "Enter a connection name." : "请输入连接名称。",
+      );
       await editor.locator("#mcp-url").fill("https://example.invalid/mcp");
       await editor.locator("summary").click();
       await expect(editor.getByText(/Keep <saved>|保留 <saved>/)).toHaveCount(
@@ -381,8 +781,7 @@ for (const theme of ["light", "dark"])
       );
       await page.screenshot({ path: info.outputPath("expanded-error.png") });
       await name.fill("company-jira");
-      await expect(editor.locator("#mcp-name-hint")).toBeVisible();
-      await expect(name).toHaveAttribute("aria-describedby", "mcp-name-hint");
+      await expect(name).not.toHaveAttribute("aria-describedby");
       await expect(editor.locator("#mcp-name-error")).toHaveCount(0);
       await page.screenshot({ path: info.outputPath("expanded-ready.png") });
       await editor
@@ -416,7 +815,7 @@ test("MCP close button dismisses manual and JSON drafts over native drag regions
     await expect(editor).toHaveCSS("-webkit-app-region", "no-drag");
     await editor.getByRole("tab", { name: method, exact: true }).click();
     if (method === "Manual setup") {
-      await editor.locator("#mcp-name").fill("invalid name");
+      await editor.locator("#mcp-name").fill(" ");
       await editor.locator("#mcp-url").focus();
       await expect(editor.locator("#mcp-name-error")).toBeVisible();
     } else {
@@ -460,7 +859,7 @@ test("MCP editing preserves other connections and advanced settings; cancel neve
   ).not.toContainText("synthetic-query");
   const before = await saved(page);
   let editor = await manage(page, "company_jira");
-  await expect(editor.locator("#mcp-name")).toHaveAttribute("readonly", "");
+  await expect(editor.locator("#mcp-name")).toBeEditable();
   await editor
     .getByRole("switch", {
       name: "Enable connection",
@@ -503,7 +902,7 @@ test("MCP editing preserves other connections and advanced settings; cancel neve
   });
 });
 
-test("MCP validates names, namespaces, addresses and JSON beside their fields", async ({
+test("MCP validates display names, addresses and JSON beside their fields", async ({
   page,
 }) => {
   await mockMcp(page, {
@@ -518,18 +917,22 @@ test("MCP validates names, namespaces, addresses and JSON beside their fields", 
     exact: true,
   });
   const name = editor.locator("#mcp-name");
-  await name.fill("公司 Jira");
+  await name.fill(" ");
   await editor.locator("#mcp-url").fill("http://example.invalid/mcp");
   await expect(editor.locator("#mcp-name-error")).toBeVisible();
+  await expect(
+    editor.getByRole("button", { name: "Add connection", exact: true }),
+  ).toBeDisabled();
+  await name.fill("项目笔记");
   await editor
     .getByRole("button", { name: "Add connection", exact: true })
     .click();
-  await expect(name).toBeFocused();
+  await expect(editor.locator("#mcp-url")).toBeFocused();
   await expect(editor.locator("#mcp-url-error")).toBeVisible();
   await name.fill("company-jira");
   await editor.locator("#mcp-url").fill("https://example.invalid/mcp");
-  await expect(editor.locator("#mcp-name-error")).toHaveText(/already in use/);
-  await name.fill("another-jira");
+  await expect(editor.locator("#mcp-name-error")).not.toBeVisible();
+  await name.fill("项目笔记");
   await editor.locator("summary").click();
   await editor.locator("#mcp-options").fill('{"headers":');
   await editor
@@ -564,7 +967,9 @@ test("MCP local setup and connection test feedback", async ({ page }) => {
     enabled: true,
   });
   const row = section.locator("[data-mcp-connection]");
-  await expect(row.getByRole("status")).toHaveCount(0);
+  await expect(row.getByRole("status")).toHaveText(
+    "Last test passed · 3 tools available",
+  );
   await testSavedConnection(page, "local-files");
   await expect(row.getByRole("status")).toHaveText(
     "Last test passed · 3 tools available",
@@ -576,7 +981,7 @@ test("MCP local setup and connection test feedback", async ({ page }) => {
   await expect(
     page.locator('[data-slot="toast"]').filter({ hasText: "Couldn’t connect" }),
   ).toContainText("Couldn’t connect");
-  await expect(row.getByRole("status")).toHaveCount(0);
+  await expect(row.getByRole("status")).toContainText("Test failed.");
 });
 
 test("MCP JSON import preserves existing connections, drafts and failed submissions", async ({
@@ -812,7 +1217,7 @@ test("MCP token changes clear previous test feedback without changing custom hea
   await expectSavedEditor(editor);
   await editor.getByRole("button", { name: "Close", exact: true }).click();
   await expect(editor).not.toBeVisible();
-  await expect(row.getByRole("status")).toHaveCount(0);
+  await expect(row.getByRole("status")).toContainText("Last test passed");
   const payload = await page.evaluate(() => {
     const calls = (window as any).calls.filter(
       (call: any) => call.name === "mcpSave",
@@ -1208,22 +1613,16 @@ for (const language of ["en", "zh"]) {
     });
     const section = await openMcp(page, language);
     await testSavedConnection(page, "jira", language);
-    await expect(
-      page.locator('[data-slot="toast"]').filter({
-        hasText:
-          language === "en" ? "Couldn’t connect to jira" : "无法连接 jira",
-      }),
-    ).toContainText(
+    const feedback = section.locator('[data-mcp-status="signIn"]');
+    await expect(feedback).toContainText(
       language === "en"
-        ? "Sign in to this MCP connection, then try again."
-        : "请先登录此 MCP 连接，再重试。",
+        ? "Sign in to finish testing this connection."
+        : "请登录以完成此连接的测试。",
     );
-    await expect(
-      page.locator('[data-slot="toast"]').filter({
-        hasText:
-          language === "en" ? "Couldn’t connect to jira" : "无法连接 jira",
-      }),
-    ).not.toContainText(/Error:|remote method|internal\.js/);
+    await expect(feedback).not.toContainText(
+      /Error:|remote method|internal\.js/,
+    );
+    await expect(page.locator('[data-slot="toast"]')).toHaveCount(0);
     await section
       .getByRole("button", {
         name: language === "en" ? "Manage connection: jira" : "管理连接：jira",
@@ -1314,7 +1713,7 @@ for (const theme of ["light", "dark"])
           id === "notion" ? "notion-3" : id,
         );
         await expect(editor.locator("#mcp-url")).toHaveValue(url);
-        await expect(editor.locator("#mcp-url")).not.toBeEditable();
+        await expect(editor.locator("#mcp-url")).toBeEditable();
         await expect(editor.locator("#mcp-token")).toHaveValue("");
         await expect(editor.locator("#mcp-options")).toHaveValue("{}");
         await expect(editor.locator("[aria-invalid=true]")).toHaveCount(0);
@@ -1648,7 +2047,9 @@ for (const language of ["en", "zh"]) {
     await editor.locator("#mcp-service").selectOption("notion");
     await editor.getByRole("button", { name: add, exact: true }).click();
     await expect(editor).not.toBeVisible();
-    await notice(language === "en" ? "MCP settings saved" : "MCP 设置已保存");
+    await notice(
+      language === "en" ? "notion connection successful" : "notion 连接成功",
+    );
     const row = section.locator('[data-mcp-connection="notion"]');
     await testSavedConnection(page, "notion", language);
     await notice(
@@ -1676,7 +2077,9 @@ for (const language of ["en", "zh"]) {
         exact: true,
       })
       .click();
-    await notice(language === "en" ? "MCP sign-in complete" : "MCP 登录完成");
+    await notice(
+      language === "en" ? "notion connection successful" : "notion 连接成功",
+    );
     await editor
       .getByRole("button", {
         name: language === "en" ? "Sign out" : "退出登录",
@@ -1731,7 +2134,7 @@ for (const language of ["en", "zh"]) {
         exact: true,
       })
       .click();
-    await notice(language === "en" ? "MCP settings saved" : "MCP 设置已保存");
+    await notice(language === "en" ? "Connections imported" : "连接已导入");
     await expect(
       section.locator('[data-mcp-connection="imported"]'),
     ).toBeVisible();
@@ -1996,7 +2399,7 @@ for (const theme of ["light", "dark"])
             data.github = {
               url: "https://github.com",
               configured: false,
-              error: "Fixture validation failure",
+              error: "GitHub returned HTTP 401",
             };
             data.tavily = { url: "https://api.tavily.com", configured: true };
           }
@@ -2042,9 +2445,12 @@ for (const theme of ["light", "dark"])
       });
       const github = added.locator('[data-connection="github"]');
       await expect(
-        github.getByText(language === "en" ? "Needs attention" : "需要处理", {
-          exact: true,
-        }),
+        github.getByText(
+          language === "en"
+            ? "Needs attention. Check your token and account."
+            : "需要处理。请检查 Token 和账户。",
+          { exact: true },
+        ),
       ).toBeVisible();
       await expect(
         github.getByText("https://github.com", { exact: true }),
@@ -2151,7 +2557,145 @@ test("MCP edits stay open for testing and reset masked credentials only after sa
   await saveButton.click();
   await expectSavedEditor(editor);
   await expect(token).toHaveValue("<saved>");
-  await expect(editor.getByRole("status")).toHaveCount(0);
+  await expect(editor.getByRole("status")).toContainText("3 tools available");
   await testButton.click();
   await expect(editor.getByRole("status")).toContainText("3 tools available");
+});
+
+test("MCP saved edits keep the automatic test visible while it runs", async ({
+  page,
+}) => {
+  await mockMcp(page, {
+    connections: {
+      jira: {
+        url: "https://example.invalid/mcp",
+        headers: { Authorization: "Bearer synthetic-old" },
+      },
+    },
+  });
+  await openMcp(page);
+  const editor = await manage(page, "jira");
+  await editor.locator("#mcp-token").fill("Bearer synthetic-new");
+  await page.evaluate(() => {
+    (window as any).mcpTestDelay = 800;
+  });
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor.getByRole("status")).toHaveAttribute(
+    "data-mcp-status",
+    "testing",
+  );
+  await expect(editor.locator("#mcp-token")).toHaveValue("<saved>");
+  await expect(editor).not.toContainText(
+    "Save your changes before testing this connection.",
+  );
+  await expect(editor.getByRole("status")).toHaveAttribute(
+    "data-mcp-status",
+    "passed",
+  );
+});
+
+test("MCP new connections derive tool IDs from display names and keep one dialog", async ({
+  page,
+}) => {
+  await mockMcp(page, {
+    connections: {
+      notes: {
+        displayName: "Team notes",
+        url: "https://example.invalid/notes",
+      },
+    },
+  });
+  const section = await openMcp(page);
+  await expect(
+    section.locator('[data-mcp-connection="notes"] [data-mcp-status]'),
+  ).toHaveCount(0);
+  await section
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  const adding = page.getByRole("dialog", {
+    name: "Add connection",
+    exact: true,
+  });
+  await adding.locator("#mcp-name").fill("team NOTES");
+  await adding.locator("#mcp-url").fill("https://example.invalid/github");
+  await adding
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  await expect(adding.locator("#mcp-name-error")).toHaveText(
+    "Choose another name. This name is already in use.",
+  );
+  await adding.locator("#mcp-name").fill("My GitHub");
+  await adding.evaluate((element) => {
+    (element as any).dataset.mounted = "first";
+  });
+  await page.evaluate(() => {
+    (window as any).mcpTestErrors = { "my-github": "Fixture failure" };
+  });
+  await adding
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", {
+    name: "Manage connection: My GitHub",
+    exact: true,
+  });
+  await expect(editor.getByRole("status")).toHaveAttribute(
+    "data-mcp-status",
+    "failed",
+  );
+  // The saved connection reuses the same dialog instead of remounting it.
+  await expect(editor).toHaveAttribute("data-mounted", "first");
+  const config = await saved(page);
+  expect(Object.keys(config)).toEqual(["notes", "my-github"]);
+  expect(config["my-github"].displayName).toBe("My GitHub");
+});
+
+test("MCP imports close first and report each test in its row", async ({
+  page,
+}) => {
+  await mockMcp(page);
+  const section = await openMcp(page);
+  await page.evaluate(() => {
+    (window as any).mcpTestDelay = 800;
+    (window as any).mcpTestErrors = { second: "Fixture connection failure" };
+  });
+  await section
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", {
+    name: "Add connection",
+    exact: true,
+  });
+  await editor.getByRole("tab", { name: "Import JSON", exact: true }).click();
+  await editor.locator("#mcp-import").fill(
+    JSON.stringify({
+      mcpServers: {
+        first: { url: "https://example.invalid/first" },
+        second: { url: "https://example.invalid/second" },
+      },
+    }),
+  );
+  await editor
+    .getByRole("button", { name: "Import connections", exact: true })
+    .click();
+  await expect(editor).not.toBeVisible();
+  for (const name of ["first", "second"])
+    await expect(
+      section.locator(`[data-mcp-connection="${name}"] [data-mcp-status]`),
+    ).toHaveAttribute("data-mcp-status", "testing");
+  // Like built-in connectors, the outcome toast waits for the test results.
+  const toasts = page.locator('[data-slot="toast"]:not([data-ending-style])');
+  await expect(toasts).toHaveCount(0);
+  await expect(
+    section.locator('[data-mcp-connection="first"] [data-mcp-status]'),
+  ).toHaveAttribute("data-mcp-status", "passed");
+  await expect(
+    section.locator('[data-mcp-connection="second"] [data-mcp-status]'),
+  ).toHaveAttribute("data-mcp-status", "failed");
+  await expect(toasts).toHaveCount(1);
+  await expect(toasts.locator('[data-slot="toast-title"]')).toHaveText(
+    "1 imported connection needs attention",
+  );
+  await expect(toasts).toContainText(
+    "Check the test results in the connection list.",
+  );
 });
