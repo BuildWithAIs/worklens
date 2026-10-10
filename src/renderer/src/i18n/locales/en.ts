@@ -775,6 +775,23 @@ const en = {
     tokenCompositionUnavailable: "Token composition unavailable",
     allModelsTotal: "All models total",
     aboutTotalUsage: "About total usage",
+    compacting: "Compacting…",
+    autoCompact: "Auto-compact",
+    estimatedUntilReply: "estimated until the next reply",
+    segments: {
+      system: "System prompt and tools",
+      summary: "Summary",
+      history: "Earlier turns",
+      turn: "Latest turn",
+    },
+    segmentsShort: {
+      system: "System",
+      summary: "Summary",
+      history: "Earlier",
+      turn: "Latest",
+    },
+    cacheHit: "Cache hit {{percent}}%",
+    cacheSaved: "about {{cost}} saved",
   },
   clipboard: {
     error: "Couldn’t copy. Select the text and copy it manually.",

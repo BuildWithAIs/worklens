@@ -129,13 +129,17 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+.usage-context-labels > span:last-child {
+  color: var(--muted);
+  white-space: nowrap;
 }
 .usage-context-labels strong {
   font-size: 13px;
   font-weight: 500;
 }
-.usage-progress,
-.usage-composition {
+.usage-progress {
   height: 8px;
   margin-top: 10px;
   background: var(--soft);
@@ -155,12 +159,12 @@
 }
 .usage-summary {
   width: 100%;
-  margin: 15px 0 8px;
+  margin: 4px 0 2px;
   border-collapse: collapse;
 }
 .usage-summary th,
 .usage-summary td {
-  padding: 5px 0;
+  padding: 4px 0;
   font-size: 12px;
   font-weight: 400;
   text-align: right;
@@ -210,10 +214,6 @@
   font-weight: 500;
   font-size: 13px;
 }
-.usage-composition {
-  display: flex;
-  margin-bottom: 16px;
-}
 .usage-popover [data-kind="input"] {
   background: var(--usage-blue);
 }
@@ -225,33 +225,6 @@
 }
 .usage-popover [data-kind="cacheWrite"] {
   background: var(--usage-write);
-}
-.usage-breakdown dl {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px 22px;
-  margin: 0 0 16px;
-}
-.usage-breakdown dl > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-}
-.usage-breakdown dt {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.usage-breakdown dt i {
-  width: 5px;
-  height: 5px;
-  border-radius: 1px;
-  flex-shrink: 0;
-}
-.usage-breakdown dd {
-  margin: 0;
 }
 .usage-reasoning {
   display: flex;
@@ -300,4 +273,187 @@
     background: var(--surface);
     backdrop-filter: none;
   }
+}
+
+/* Context composition. Hues validated for CVD separation and contrast on the
+   light and dark surfaces; history is neutral so the latest turn stands out. */
+.usage-header,
+.usage-popover {
+  --context-system: #d4692a;
+  --context-summary: #1f9a6a;
+  --context-history: #a1a1aa;
+  --context-turn: #2f6fd1;
+}
+:root[data-theme="dark"] .usage-header,
+:root[data-theme="dark"] .usage-popover {
+  --context-system: #d26c36;
+  --context-summary: #33ab7c;
+  --context-history: #71717a;
+  --context-turn: #5b93e8;
+}
+.usage-context-bar {
+  position: relative;
+}
+.usage-context-track {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--soft);
+}
+.usage-context-bar[data-size="mini"] {
+  width: 48px;
+}
+.usage-context-bar[data-size="mini"] .usage-context-track {
+  gap: 1px;
+  height: 6px;
+  border-radius: 2px;
+}
+.usage-context-track > span {
+  flex: 0 0 auto;
+  width: var(--width);
+  min-width: 0;
+  border-radius: 2px;
+  background: var(--context-history);
+  transition:
+    width 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 400ms ease,
+    opacity 150ms ease;
+}
+/* New segments grow from zero, like a turn being appended. */
+@starting-style {
+  .usage-context-track > span {
+    width: 0;
+  }
+}
+.usage-context-track > [data-kind="system"] {
+  background: var(--context-system);
+}
+.usage-context-track > [data-kind="summary"] {
+  background: var(--context-summary);
+}
+.usage-context-track > [data-kind="turn"] {
+  background: var(--context-turn);
+}
+.usage-context-bar[data-estimated] .usage-context-track > span {
+  opacity: 0.75;
+}
+/* While Pi summarizes, history turns into summary one block at a time and a
+   highlight sweeps across the bar. */
+/* Pi keeps the most recent turn, so only history becomes summary. */
+.usage-context-bar[data-compacting]
+  .usage-context-track
+  > [data-kind="history"] {
+  background: var(--context-summary);
+  transition-delay: calc(var(--index) * 60ms);
+}
+.usage-context-bar[data-compacting] .usage-context-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--surface) 70%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: context-sweep 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.usage-context-bar[data-compacting] .usage-context-track {
+  position: relative;
+}
+@keyframes context-sweep {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+.usage-context-threshold {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: var(--at);
+  border-left: 1px dashed var(--muted);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .usage-context-track > span {
+    transition: none;
+  }
+  .usage-context-bar[data-compacting] .usage-context-track::after {
+    animation: none;
+    background: color-mix(in srgb, var(--surface) 25%, transparent);
+  }
+}
+.usage-context .usage-context-bar {
+  margin: 8px 0;
+}
+.usage-breakdown .usage-context-bar {
+  margin: 8px 0;
+}
+.usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.usage-breakdown .usage-legend {
+  margin-bottom: 6px;
+}
+.usage-legend li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transition: opacity 150ms ease;
+}
+.usage-legend strong {
+  font-weight: 400;
+  color: var(--text);
+}
+.usage-legend i {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+/* The threshold entry repeats the bar's dashed marker. */
+.usage-legend i[data-marker] {
+  width: 0;
+  height: 10px;
+  border-radius: 0;
+  border-left: 1px dashed var(--muted);
+}
+.usage-popover [data-kind="system"] {
+  background: var(--context-system);
+}
+.usage-popover [data-kind="summary"] {
+  background: var(--context-summary);
+}
+.usage-popover [data-kind="history"] {
+  background: var(--context-history);
+}
+.usage-popover [data-kind="turn"] {
+  background: var(--context-turn);
+}
+/* Hovering a segment or legend entry highlights that category. */
+.usage-context-track > [data-dim] {
+  opacity: 0.3;
+}
+.usage-legend [data-dim] {
+  opacity: 0.45;
+}
+.usage-trigger[data-near] > span {
+  color: var(--warning);
 }

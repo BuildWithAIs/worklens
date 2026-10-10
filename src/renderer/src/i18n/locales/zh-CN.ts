@@ -726,6 +726,23 @@ const zhCN = {
     tokenCompositionUnavailable: "Token 组成暂不可用",
     allModelsTotal: "所有模型累计",
     aboutTotalUsage: "关于累计用量",
+    compacting: "压缩中…",
+    autoCompact: "自动压缩",
+    estimatedUntilReply: "下一次回复前为估算值",
+    segments: {
+      system: "系统提示词和工具",
+      summary: "摘要",
+      history: "之前的对话",
+      turn: "最近一轮",
+    },
+    segmentsShort: {
+      system: "系统",
+      summary: "摘要",
+      history: "之前",
+      turn: "本轮",
+    },
+    cacheHit: "缓存命中 {{percent}}%",
+    cacheSaved: "约节省 {{cost}}",
   },
   clipboard: {
     error: "复制失败，请选择文字后手动复制。",

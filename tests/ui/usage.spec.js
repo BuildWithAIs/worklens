@@ -55,7 +55,17 @@ async function fixture(page, options = {}) {
           tokens: 68000,
           contextWindow: 200000,
           percent: 34,
+          compactAt: 183616,
+          segments: [
+            { id: "system", kind: "system", tokens: 14000 },
+            { id: "turn:1", kind: "history", tokens: 12000 },
+            { id: "turn:2", kind: "history", tokens: 9000 },
+            { id: "turn:3", kind: "history", tokens: 15000 },
+            { id: "turn:4", kind: "history", tokens: 8000 },
+            { id: "turn:5", kind: "turn", tokens: 10000 },
+          ],
         },
+        cacheSavingsUsd: 0.025,
       },
     };
     const global = {
@@ -88,6 +98,8 @@ async function fixture(page, options = {}) {
       delete global.totalTokens;
       view.usage.run = undefined;
     }
+    // Tests change the live view, then publish it with usageEmit.
+    window.usageView = view;
     let listener;
     window.worklens.onChat = (fn) => {
       listener = fn;
@@ -285,4 +297,272 @@ test("usage popover stays above the header fade", async ({ page }) => {
     header: Number(getComputedStyle(document.querySelector(".chat-header")).zIndex),
   }));
   expect(layers.popup).toBeGreaterThan(layers.header);
+});
+
+test.describe("context composition animation", () => {
+  test.use({ reducedMotion: "no-preference" });
+  const segment = (page, id) =>
+    page.locator(`.usage-popover [data-segment="${id}"]`);
+  const width = (locator) =>
+    locator.evaluate((element) => element.getBoundingClientRect().width);
+  const emit = (page, change, sequence) =>
+    page.evaluate(
+      ({ change, sequence }) => {
+        const view = window.usageView;
+        if (change.phase) view.phase = change.phase;
+        if (change.context)
+          view.usage.context = { ...view.usage.context, ...change.context };
+        window.usageEmit(sequence, 3860000, sequence);
+      },
+      { change, sequence },
+    );
+
+  test("a new turn grows in while the previous one becomes history", async ({
+    page,
+  }, info) => {
+    await fixture(page);
+    const trigger = page.getByRole("button", {
+      name: "Open current usage details",
+    });
+    await trigger.click();
+    const bar = page.getByRole("progressbar", { name: "Context usage" });
+    await expect(bar).toHaveAttribute(
+      "aria-valuetext",
+      /System prompt and tools 14k, Earlier turns 12k/,
+    );
+    await expect(page.locator(".usage-context .usage-legend")).toHaveText(
+      "System14kEarlier44kLatest10kAuto-compact183.6k",
+    );
+    await emit(
+      page,
+      {
+        context: {
+          tokens: 80000,
+          percent: 40,
+          segments: [
+            { id: "system", kind: "system", tokens: 14000 },
+            { id: "turn:1", kind: "history", tokens: 12000 },
+            { id: "turn:2", kind: "history", tokens: 9000 },
+            { id: "turn:3", kind: "history", tokens: 15000 },
+            { id: "turn:4", kind: "history", tokens: 8000 },
+            { id: "turn:5", kind: "history", tokens: 10000 },
+            { id: "turn:6", kind: "turn", tokens: 12000 },
+          ],
+        },
+      },
+      2,
+    );
+    // The same element changes kind, so its color can transition.
+    await expect(segment(page, "turn:5")).toHaveAttribute(
+      "data-kind",
+      "history",
+    );
+    const grown = segment(page, "turn:6");
+    await expect(grown).toHaveAttribute("data-kind", "turn");
+    const early = await width(grown);
+    await page.waitForTimeout(700);
+    const final = await width(grown);
+    expect(early).toBeLessThan(final);
+    // 12k of a 200k window on a ~300px track.
+    expect(final).toBeGreaterThan(14);
+    await expect(trigger).toContainText("40%");
+    await page.screenshot({ path: info.outputPath("context-grown.png") });
+  });
+
+  test("compaction sweeps history into a summary and collapses the bar", async ({
+    page,
+  }, info) => {
+    await fixture(page);
+    const trigger = page.getByRole("button", {
+      name: "Open current usage details",
+    });
+    await trigger.click();
+    await emit(page, { phase: "compacting" }, 2);
+    const bar = page.locator(".usage-popover .usage-context-bar");
+    await expect(bar).toHaveAttribute("data-compacting", "true");
+    await expect(trigger).toContainText("Compacting…");
+    await page.waitForTimeout(900);
+    // History blocks turn summary-green one after another.
+    const summaryColor = await page
+      .locator(".usage-popover")
+      .evaluate((element) =>
+        getComputedStyle(element).getPropertyValue("--context-summary").trim(),
+      );
+    expect(summaryColor).toBe("#1f9a6a");
+    await expect(segment(page, "turn:3")).toHaveCSS(
+      "background-color",
+      "rgb(31, 154, 106)",
+    );
+    // The latest turn is kept by compaction, so it keeps its own color.
+    await expect(segment(page, "turn:5")).toHaveCSS(
+      "background-color",
+      "rgb(47, 111, 209)",
+    );
+    await page.screenshot({ path: info.outputPath("context-compacting.png") });
+
+    // Pi cannot report the size until the next reply; segments estimate it.
+    await emit(
+      page,
+      {
+        phase: "generating",
+        context: {
+          status: "unavailable",
+          tokens: undefined,
+          percent: undefined,
+          segments: [
+            { id: "system", kind: "system", tokens: 14000 },
+            { id: "summary:9", kind: "summary", tokens: 3000 },
+          ],
+        },
+      },
+      3,
+    );
+    await expect(bar).not.toHaveAttribute("data-compacting", "true");
+    await expect(segment(page, "turn:3")).toHaveAttribute(
+      "data-exiting",
+      "true",
+    );
+    await expect(segment(page, "turn:3")).toHaveCount(0);
+    await expect(segment(page, "summary:9")).toHaveAttribute(
+      "data-kind",
+      "summary",
+    );
+    await expect(trigger).toContainText("≈8.5%");
+    await expect(page.locator(".usage-context-labels")).toContainText(
+      "≈17k / 200k",
+    );
+    await page.screenshot({ path: info.outputPath("context-compacted.png") });
+  });
+
+  test("approaching the threshold is flagged in the header", async ({
+    page,
+  }) => {
+    await fixture(page);
+    await emit(
+      page,
+      {
+        context: {
+          tokens: 170000,
+          percent: 85,
+          segments: [
+            { id: "system", kind: "system", tokens: 14000 },
+            { id: "turn:1", kind: "history", tokens: 140000 },
+            { id: "turn:2", kind: "turn", tokens: 16000 },
+          ],
+        },
+      },
+      2,
+    );
+    const trigger = page.getByRole("button", {
+      name: "Open current usage details",
+    });
+    await expect(trigger).toHaveAttribute("data-near", "true");
+    await expect(trigger.locator("> span")).toHaveCSS(
+      "color",
+      "rgb(161, 98, 7)",
+    );
+  });
+});
+
+test("details show the cache hit rate and approximate savings", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
+  // 9.2k cache reads of 36.1k input tokens.
+  await expect(page.getByTestId("cache-usage")).toHaveText(
+    "Cache hit 25% · about $0.025 saved",
+  );
+});
+
+test("reduced motion shows the final state without exit delays", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page
+    .getByRole("button", { name: "Open current usage details" })
+    .click();
+  await page.evaluate(() => {
+    const view = window.usageView;
+    view.usage.context.segments = [
+      { id: "system", kind: "system", tokens: 14000 },
+      { id: "summary:9", kind: "summary", tokens: 3000 },
+    ];
+    window.usageEmit(2, 3860000, 2);
+  });
+  await expect(page.locator(".usage-popover [data-exiting]")).toHaveCount(0);
+  await expect(
+    page.locator('.usage-popover [data-segment="turn:3"]'),
+  ).toHaveCount(0);
+});
+
+test("the threshold is explained with its value and kept out of the header", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.evaluate(() => {
+    // A large window puts the threshold near the end (window - 16,384).
+    Object.assign(window.usageView.usage.context, {
+      contextWindow: 500000,
+      compactAt: 483616,
+      percent: 13.6,
+    });
+    window.usageEmit(2, 3860000, 2);
+  });
+  const trigger = page.getByRole("button", {
+    name: "Open current usage details",
+  });
+  await expect(trigger).toContainText("13.6%");
+  await expect(trigger.locator(".usage-context-threshold")).toHaveCount(0);
+  await trigger.click();
+  const marker = page.locator('.usage-legend [data-legend="marker"]');
+  await expect(marker).toHaveText("Auto-compact483.6k");
+  await expect(marker.locator("i[data-marker]")).toBeVisible();
+  // The legend sits clearly below the bar, with nothing between them.
+  const bar = await page
+    .locator(".usage-context .usage-context-track")
+    .boundingBox();
+  const legend = await page.locator(".usage-context .usage-legend").boundingBox();
+  expect(legend.y - (bar.y + bar.height)).toBeGreaterThanOrEqual(8);
+  const line = await page.locator(".usage-context-threshold").boundingBox();
+  expect(line.y + line.height).toBeLessThan(legend.y);
+});
+
+test("overview and details share one bar style and highlight on hover", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.getByRole("button", { name: "Open current usage details" }).click();
+  const overview = page.locator(".usage-context");
+  await overview.locator('[data-legend="system"]').hover();
+  await expect(overview.locator('[data-segment="system"]')).not.toHaveAttribute(
+    "data-dim",
+  );
+  await expect(overview.locator('[data-segment="turn:5"]')).toHaveAttribute(
+    "data-dim",
+    "true",
+  );
+  await expect(overview.locator('[data-legend="history"]')).toHaveAttribute(
+    "data-dim",
+    "true",
+  );
+  await page.mouse.move(0, 0);
+  await expect(overview.locator("[data-dim]")).toHaveCount(0);
+
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
+  const details = page.locator(".usage-breakdown");
+  // The same track and legend components as the overview.
+  await expect(details.locator(".usage-context-track > span")).toHaveCount(4);
+  await expect(details.locator(".usage-legend li")).toHaveCount(4);
+  await details.locator('[data-segment="cacheRead"]').hover();
+  await expect(details.locator('[data-legend="cacheRead"]')).not.toHaveAttribute(
+    "data-dim",
+  );
+  await expect(details.locator('[data-legend="input"]')).toHaveAttribute(
+    "data-dim",
+    "true",
+  );
 });
