@@ -271,3 +271,53 @@ test("a corrupt accounting line stays partial through reopen and does not duplic
     sessionCount: 1,
   });
 });
+
+test("live context segments follow turns and Pi's real automatic compaction", async () => {
+  // 20k reported prompt tokens cross the 32k window's threshold (32k - 16,384).
+  // Responses take long enough for the compacting phase to be published.
+  const { send, end, events, service } = await setup({
+    promptTokens: 20000,
+    reply: "OK",
+    delayMs: 300,
+  });
+  const first = await send("x".repeat(100_000));
+  const firstEnd = await end(first.runId);
+  const before = firstEnd.view.usage!.context!;
+  expect(before.compactAt).toBe(32000 - 16384);
+  // The full system prompt and tools, then the only turn; nothing else.
+  expect(before.segments?.map((segment) => segment.kind)).toEqual([
+    "system",
+    "turn",
+  ]);
+  const scaled = before.segments!.reduce((sum, s) => sum + s.tokens, 0);
+  expect(Math.abs(scaled - before.tokens!)).toBeLessThanOrEqual(1);
+
+  // A second long turn fills the recent window, so the first gets summarized.
+  const second = await send("y".repeat(100_000), first.id);
+  const secondEnd = await end(second.runId);
+  const compacting = events.find(
+    (event) =>
+      event.runId === second.runId && event.view.phase === "compacting",
+  );
+  // While compacting, the bar still shows the full context: no summary yet.
+  const during = compacting!.view.usage!.context!;
+  expect(during.segments?.map((segment) => segment.kind)).toEqual([
+    "system",
+    "history",
+    "turn",
+  ]);
+  // Pi cannot report the size until the next reply: the total stays unknown
+  // while segments estimate the summarized context. The first turn became the
+  // summary and the recent turn was kept. (The fixture reports a fixed prompt
+  // size, so sizes before and after are not comparable here.)
+  const after = secondEnd.view.usage!.context!;
+  expect(after.tokens).toBeUndefined();
+  expect(after.segments?.map((segment) => segment.kind)).toEqual([
+    "system",
+    "summary",
+    "turn",
+  ]);
+  expect(after.segments?.at(-1)?.id).toBe(during.segments?.at(-1)?.id);
+  // A reopened chat shows the same composition as the live view.
+  expect((await service.open(first.id)).usage?.context).toEqual(after);
+});
