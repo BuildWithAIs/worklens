@@ -216,12 +216,13 @@
   align-items: center;
   justify-content: space-between;
 }
-/* The scope is secondary to the title, like the context value line. */
-.usage-breakdown-heading > span:last-child {
-  color: var(--muted);
-}
-.usage-elapsed {
-  color: var(--faint);
+.usage-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
 }
 .usage-facts {
   display: flex;

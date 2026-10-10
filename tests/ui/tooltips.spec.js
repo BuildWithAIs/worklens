@@ -32,7 +32,7 @@ test("sidebar and usage info use shared hints while the usage entry stays quiet"
   await expect(page.locator(".usage-popover [title]")).toHaveCount(0);
   await page.locator(".usage-model").hover();
   await expect(hint).toBeHidden();
-  await page.getByRole("tab", { name: "Details", exact: true }).click();
+  await page.getByRole("tab", { name: "Tokens", exact: true }).click();
   await page.locator(".usage-total strong").hover();
   await expect(hint).toBeHidden();
   const info = page.getByRole("button", { name: "About total usage" });

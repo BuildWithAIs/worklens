@@ -135,9 +135,9 @@ export function UsagePopover({
     (sum, [field]) => sum + (conversation?.[field] ?? 0),
     0,
   );
-  const elapsed = nonNegative(run?.elapsedMs)
-    ? ` · ${formatDuration(run.elapsedMs, language, true)}`
-    : "";
+  const duration = nonNegative(run?.elapsedMs)
+    ? formatDuration(run.elapsedMs, language, true)
+    : undefined;
   // When every shown cost is an estimate, say so once in the header.
   const shownCosts = [run, conversation].filter(
     (item) =>
@@ -192,7 +192,7 @@ export function UsagePopover({
                   {t("usage.overview")}
                 </Tabs.Tab>
                 <Tabs.Tab data-slot="usage-tab" value="details">
-                  {t("usage.details")}
+                  {t("usage.tokensTab")}
                 </Tabs.Tab>
                 <Tabs.Indicator className="usage-tab-indicator" />
               </Tabs.List>
@@ -273,15 +273,10 @@ export function UsagePopover({
                         <th
                           scope="row"
                           aria-label={
-                            isRun
-                              ? `${String(label)} · ${state}${elapsed}`
-                              : undefined
+                            isRun ? `${String(label)} · ${state}` : undefined
                           }
                         >
                           {String(label)}
-                          {isRun && elapsed && (
-                            <span className="usage-elapsed">{elapsed}</span>
-                          )}
                         </th>
                         <td>
                           <span
@@ -313,26 +308,33 @@ export function UsagePopover({
                 !["active", "completed"].includes(run.state) ||
                 run.status === "partial") && (
                 <p className="usage-run-state usage-notice">
-                  <Clock3 size={12} aria-hidden="true" />
+                  <Info size={12} aria-hidden="true" />
                   {state}
-                  {elapsed}
                   {run?.status === "partial"
                     ? ` · ${t("usage.partialData")}`
                     : ""}
                 </p>
               )}
+              {/* The run's model and how long it took, like the details footer:
+                  label on the left, value on the right. */}
               <div
                 className="usage-model"
-                aria-label={`${modelLabel} · ${providerLabel}`}
+                aria-label={`${modelLabel} · ${providerLabel}${duration ? ` · ${duration}` : ""}`}
               >
                 <ProviderIcon provider={metadata?.provider ?? ""} />
                 <strong>{modelLabel}</strong>
+                {duration && (
+                  <span className="usage-duration" data-testid="run-duration">
+                    <Clock3 size={12} aria-hidden="true" />
+                    {duration}
+                  </span>
+                )}
               </div>
             </Tabs.Panel>
             <Tabs.Panel value="details" className="usage-tab-panel">
               <div className="usage-breakdown">
+                {/* Scope title; the footer below covers all conversations. */}
                 <div className="usage-breakdown-heading">
-                  <span>{t("usage.tokenBreakdown")}</span>
                   <span>{t("usage.thisConversation")}</span>
                 </div>
                 <div

@@ -31,7 +31,7 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
   };
   const total = async (page: Page, expected: string) => {
     await page.locator(".usage-trigger").click();
-    await page.getByRole("tab", { name: "Details", exact: true }).click();
+    await page.getByRole("tab", { name: "Tokens", exact: true }).click();
     await expect(page.locator(".usage-total strong")).toHaveText(expected);
     await page.keyboard.press("Escape");
   };
