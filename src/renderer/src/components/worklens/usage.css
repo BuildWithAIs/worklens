@@ -41,6 +41,8 @@
   margin: 6px 0 0;
 }
 .usage-popover {
+  /* Space between a bar block and the section after it, in both tabs. */
+  --usage-section-gap: 12px;
   --usage-slate: #9984bd;
   --usage-cache: #a8bddf;
   --usage-write: #d7cbe9;
@@ -163,7 +165,7 @@
 }
 .usage-summary {
   width: 100%;
-  margin: 12px 0 2px;
+  margin: var(--usage-section-gap) 0 2px;
   border-collapse: collapse;
 }
 .usage-summary th,
@@ -434,7 +436,7 @@
   color: var(--muted);
 }
 .usage-breakdown .usage-legend {
-  margin-bottom: 6px;
+  margin-bottom: var(--usage-section-gap);
 }
 .usage-legend li {
   display: flex;

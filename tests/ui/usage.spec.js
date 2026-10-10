@@ -646,3 +646,20 @@ test("the caption says when compaction is next once past the threshold", async (
     "Auto-compacts before the next message",
   );
 });
+
+test("both tabs leave the same space after their bar block", async ({
+  page,
+}) => {
+  await fixture(page, { completed: true });
+  await page.getByRole("button", { name: "Open current usage details" }).click();
+  const gap = async (above, below) => {
+    const a = await page.locator(above).boundingBox();
+    const b = await page.locator(below).boundingBox();
+    return Math.round(b.y - (a.y + a.height));
+  };
+  const overview = await gap(".usage-context", ".usage-summary");
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
+  const details = await gap(".usage-breakdown .usage-legend", ".usage-facts");
+  expect(details).toBe(overview);
+  expect(overview).toBe(12);
+});
