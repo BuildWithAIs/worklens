@@ -163,7 +163,7 @@
 }
 .usage-summary {
   width: 100%;
-  margin: 4px 0 2px;
+  margin: 12px 0 2px;
   border-collapse: collapse;
 }
 .usage-summary th,
@@ -214,9 +214,30 @@
   align-items: center;
   justify-content: space-between;
 }
-.usage-breakdown-heading strong {
-  font-weight: 500;
-  font-size: 13px;
+/* The scope is secondary to the title, like the context value line. */
+.usage-breakdown-heading > span:last-child {
+  color: var(--muted);
+}
+.usage-elapsed {
+  color: var(--faint);
+}
+.usage-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.usage-facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.usage-facts dd {
+  margin: 0;
+  color: var(--text);
 }
 .usage-popover [data-kind="input"] {
   background: var(--usage-blue);
@@ -432,11 +453,16 @@
   border-radius: 1px;
   flex-shrink: 0;
 }
-/* The threshold entry repeats the bar's dashed marker. */
-.usage-legend i[data-marker] {
-  width: 0;
+/* One plain sentence about compaction, below the legend. */
+.usage-compact-caption {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+/* Repeats the bar's dashed threshold marker. */
+.usage-compact-caption i {
   height: 10px;
-  border-radius: 0;
   border-left: 1px dashed var(--muted);
 }
 .usage-popover [data-kind="system"] {

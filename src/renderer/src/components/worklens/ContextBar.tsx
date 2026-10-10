@@ -172,12 +172,9 @@ export function SegmentTrack({
 /** Legend for a SegmentTrack; hovering an entry highlights its segments. */
 export function UsageLegend({
   items,
-  marker,
   ...state
 }: {
   items: { kind: string; label: string; description: string; value: string }[];
-  /** A dashed threshold line drawn on the bar, explained with its value. */
-  marker?: { label: string; value: string };
 } & Highlight) {
   return (
     <ul className="usage-legend">
@@ -193,13 +190,6 @@ export function UsageLegend({
           <strong>{value}</strong>
         </li>
       ))}
-      {marker && (
-        <li data-legend="marker" aria-label={`${marker.label} ${marker.value}`}>
-          <i data-marker aria-hidden="true" />
-          {marker.label}
-          <strong>{marker.value}</strong>
-        </li>
-      )}
     </ul>
   );
 }

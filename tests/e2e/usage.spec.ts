@@ -38,7 +38,12 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
   const completedRun = async (page: Page, tokens: string) => {
     await expect(page.getByRole("button", { name: "Stop task", exact: true })).toHaveCount(0, { timeout: 30000 });
     await page.locator(".usage-trigger").click();
-    await expect(page.locator(".usage-run-state")).toContainText("Completed");
+    // A completed run is described by its row; only other states add a notice.
+    await expect(page.getByTestId("run-usage").locator("th")).toHaveAttribute(
+      "aria-label",
+      /^Last run · Completed/,
+    );
+    await expect(page.locator(".usage-run-state")).toHaveCount(0);
     await expect(page.getByTestId("run-usage")).toContainText(tokens);
     await page.keyboard.press("Escape");
   };
@@ -104,7 +109,10 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await completedRun(page, "280");
     expect(await readFile(target, "utf8")).toBe("usage verified");
     await page.locator(".usage-trigger").click();
-    await expect(page.locator(".usage-run-state")).toContainText("Completed");
+    await expect(page.getByTestId("run-usage").locator("th")).toHaveAttribute(
+      "aria-label",
+      /^Last run · Completed/,
+    );
     await expect(page.getByTestId("conversation-usage")).toContainText("280");
     await page.screenshot({
       path: info.outputPath("usage-real-electron.png"),
@@ -198,7 +206,10 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await expect(restored.getByTestId("conversation-usage")).toContainText(
       "420",
     );
-    await expect(restored.locator(".usage-run-state")).toContainText("Completed");
+    await expect(restored.getByTestId("run-usage").locator("th")).toHaveAttribute(
+      "aria-label",
+      /^Last run · Completed/,
+    );
     await restored.screenshot({
       path: info.outputPath("usage-restored-dark.png"),
       fullPage: true,

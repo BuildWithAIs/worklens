@@ -212,8 +212,15 @@ test("latest completed run keeps usage and marks lifecycle; legacy never falls b
   await fixture(page, { completed: true });
   await expect(page.locator(".usage-live-dot")).toHaveCount(0);
   await page.locator(".usage-trigger").click();
-  await expect(page.getByTestId("run-usage")).toContainText("Last run");
-  await expect(page.locator(".usage-run-state")).toContainText("Completed");
+  // A completed run is described by its row: label, duration and state.
+  await expect(page.getByTestId("run-usage").locator("th")).toHaveText(
+    "Last run · 2.8s",
+  );
+  await expect(page.getByTestId("run-usage").locator("th")).toHaveAttribute(
+    "aria-label",
+    "Last run · Completed · 2.8s",
+  );
+  await expect(page.locator(".usage-run-state")).toHaveCount(0);
   await page.close();
 });
 
@@ -235,9 +242,11 @@ test("partial independent costs, unknown context, reasoning, dark Chinese", asyn
   await expect(page.locator(".usage-trigger")).not.toContainText("$");
   await page.locator(".usage-trigger").click();
   await expect(page.locator(".usage-notice")).toContainText("Token 数据不完整");
+  // Every shown cost is an estimate, so the header says so once.
   await expect(page.getByTestId("conversation-usage")).toContainText(
-    "$0.184 ≈+",
+    "$0.184+",
   );
+  await expect(page.locator(".usage-summary thead")).toContainText("费用 ≈");
   await expect(page.getByTestId("conversation-usage")).not.toContainText(
     "Token 数据不完整",
   );
@@ -331,7 +340,11 @@ test.describe("context composition animation", () => {
       /System prompt and tools 14k, Earlier turns 12k/,
     );
     await expect(page.locator(".usage-context .usage-legend")).toHaveText(
-      "System14kEarlier44kLatest10kAuto-compact183.6k",
+      "System14kEarlier44kLatest10k",
+    );
+    // 183.6k threshold minus 68k used.
+    await expect(page.locator(".usage-compact-caption")).toHaveText(
+      "Auto-compacts in 115.6k",
     );
     await emit(
       page,
@@ -473,8 +486,12 @@ test("details show the cache hit rate and approximate savings", async ({
     .click();
   await page.getByRole("tab", { name: "Details", exact: true }).click();
   // 9.2k cache reads of 36.1k input tokens.
-  await expect(page.getByTestId("cache-usage")).toHaveText(
-    "Cache hit 25% · about $0.025 saved",
+  await expect(page.getByTestId("cache-usage")).toHaveText("Cache hit rate25%");
+  await expect(page.getByTestId("cache-savings")).toHaveText(
+    "Saved by cache≈ $0.025",
+  );
+  await expect(page.locator(".usage-breakdown-heading")).toHaveText(
+    "Token breakdownThis conversation",
   );
 });
 
@@ -518,9 +535,10 @@ test("the threshold is explained with its value and kept out of the header", asy
   await expect(trigger).toContainText("13.6%");
   await expect(trigger.locator(".usage-context-threshold")).toHaveCount(0);
   await trigger.click();
-  const marker = page.locator('.usage-legend [data-legend="marker"]');
-  await expect(marker).toHaveText("Auto-compact483.6k");
-  await expect(marker.locator("i[data-marker]")).toBeVisible();
+  // One number: how much context is left before compaction runs.
+  const caption = page.locator(".usage-compact-caption");
+  await expect(caption).toHaveText("Auto-compacts in 415.6k");
+  await expect(caption.locator("i")).toBeVisible();
   // The legend sits clearly below the bar, with nothing between them.
   const bar = await page
     .locator(".usage-context .usage-context-track")
@@ -567,7 +585,7 @@ test("overview and details share one bar style and highlight on hover", async ({
   );
 });
 
-test("overview and details headline values share one text style", async ({
+test("overview and details section titles share one text style", async ({
   page,
 }) => {
   await fixture(page, { dark: false });
@@ -582,9 +600,12 @@ test("overview and details headline values share one text style", async ({
         computed.color,
       ];
     });
-  const overview = await style(".usage-context-labels strong");
+  // Section titles match across tabs.
+  const overview = await style(".usage-context-labels > span:first-child");
   await page.getByRole("tab", { name: "Details", exact: true }).click();
-  expect(await style(".usage-breakdown-heading strong")).toEqual(overview);
+  expect(await style(".usage-breakdown-heading > span:first-child")).toEqual(
+    overview,
+  );
 });
 
 test("a partial conversation still shows the composition of known requests", async ({
@@ -599,9 +620,6 @@ test("a partial conversation still shows the composition of known requests", asy
   await page.getByRole("button", { name: "Open current usage details" }).click();
   await page.getByRole("tab", { name: "Details", exact: true }).click();
   const details = page.locator(".usage-breakdown");
-  await expect(details.locator(".usage-breakdown-heading strong")).toHaveText(
-    "44.1k+",
-  );
   await expect(details.locator(".usage-composition > span")).toHaveCount(4);
   await expect(details.locator(".usage-legend")).toHaveText(
     "Input25.6k+Output8k+Cache read9.2k+Cache write1.3k+",
@@ -609,5 +627,22 @@ test("a partial conversation still shows the composition of known requests", asy
   await expect(details.getByRole("img")).toHaveAttribute(
     "aria-label",
     /Partial token data$/,
+  );
+});
+
+test("the caption says when compaction is next once past the threshold", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.evaluate(() => {
+    Object.assign(window.usageView.usage.context, {
+      tokens: 190000,
+      percent: 95,
+    });
+    window.usageEmit(2, 3860000, 2);
+  });
+  await page.getByRole("button", { name: "Open current usage details" }).click();
+  await expect(page.locator(".usage-compact-caption")).toHaveText(
+    "Auto-compacts before the next message",
   );
 });

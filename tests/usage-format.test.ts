@@ -15,4 +15,8 @@ test("compact tokens and estimated cost distinguish unknown, zero and sub-cent v
   expect(formatCost(0)).toBe("$0.00");
   expect(formatCost(0.003)).toBe("$0.003");
   expect(formatCost(0.0001)).toBe("<$0.001");
+  // Detailed costs keep three decimals below $1 and use cents above it.
+  expect(formatCost(0.184, true)).toBe("$0.184");
+  expect(formatCost(48.513, true)).toBe("$48.51");
+  expect(formatCost(84.867, true)).toBe("$84.87");
 });

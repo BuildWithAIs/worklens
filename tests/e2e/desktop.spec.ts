@@ -182,9 +182,12 @@ test("PRD 001, 030-063: actual Electron setup, file task, themes and restart", a
         timeout: 30000,
       });
       await page.locator(".usage-trigger").click();
-      await expect(page.locator(".usage-run-state")).toContainText(state, {
-        timeout: 30000,
-      });
+      // The run row names its state; only unusual states add a notice.
+      await expect(page.getByTestId("run-usage").locator("th")).toHaveAttribute(
+        "aria-label",
+        new RegExp(` · ${state}`),
+        { timeout: 30000 },
+      );
       await page.keyboard.press("Escape");
     };
     const target = join(directory, "actual-file.txt");

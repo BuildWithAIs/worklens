@@ -134,6 +134,26 @@ export function UsagePopover({
     (sum, [field]) => sum + (conversation?.[field] ?? 0),
     0,
   );
+  const elapsed = nonNegative(run?.elapsedMs)
+    ? ` · ${(run.elapsedMs / 1000).toFixed(1)}s`
+    : "";
+  // When every shown cost is an estimate, say so once in the header.
+  const shownCosts = [run, conversation].filter(
+    (item) =>
+      nonNegative(item?.cost.usd) && item?.cost.status !== "unavailable",
+  );
+  const costsEstimated =
+    shownCosts.length > 0 &&
+    shownCosts.every((item) => item!.cost.source !== "provider");
+  const compactCaption = (() => {
+    if (!nonNegative(context?.compactAt)) return undefined;
+    if (!nonNegative(totals.tokens))
+      return t("usage.compactsAt", { tokens: formatTokens(context.compactAt) });
+    const left = context.compactAt - totals.tokens;
+    return left > 0
+      ? t("usage.compactsIn", { tokens: formatTokens(left) })
+      : t("usage.compactsNext");
+  })();
   const providerLabel =
     provider?.name ?? metadata?.provider ?? t("usage.providerUnavailable");
   return (
@@ -204,14 +224,6 @@ export function UsagePopover({
                       description: t(`usage.segments.${kind}`),
                       value: formatTokens(tokens),
                     }))}
-                    marker={
-                      nonNegative(context?.compactAt)
-                        ? {
-                            label: t("usage.autoCompact"),
-                            value: formatTokens(context.compactAt),
-                          }
-                        : undefined
-                    }
                     active={highlighted}
                     onActive={setHighlighted}
                   />
@@ -222,13 +234,22 @@ export function UsagePopover({
                     </p>
                   )
                 )}
+                {compactCaption && (
+                  <p className="usage-compact-caption">
+                    <i aria-hidden="true" />
+                    {compactCaption}
+                  </p>
+                )}
               </div>
               <table className="usage-summary">
                 <thead>
                   <tr>
                     <th aria-label={t("usage.scope")} />
                     <th>Tokens</th>
-                    <th>{t("usage.cost")}</th>
+                    <th>
+                      {t("usage.cost")}
+                      {costsEstimated ? " ≈" : ""}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -245,9 +266,22 @@ export function UsagePopover({
                     ],
                   ].map(([label, value, testId]) => {
                     const item = value as TokenUsage | undefined;
+                    const isRun = testId === "run-usage";
                     return (
                       <tr key={String(testId)} data-testid={String(testId)}>
-                        <th scope="row">{String(label)}</th>
+                        <th
+                          scope="row"
+                          aria-label={
+                            isRun
+                              ? `${String(label)} · ${state}${elapsed}`
+                              : undefined
+                          }
+                        >
+                          {String(label)}
+                          {isRun && elapsed && (
+                            <span className="usage-elapsed">{elapsed}</span>
+                          )}
+                        </th>
                         <td>
                           <span
                             aria-label={
@@ -263,7 +297,7 @@ export function UsagePopover({
                           <span aria-label={cost(item?.cost)}>
                             {nonNegative(item?.cost.usd) &&
                             item?.cost.status !== "unavailable"
-                              ? `${formatCost(item.cost.usd, true)}${item.cost.source === "provider" ? "" : " ≈"}${item.cost.status === "partial" ? "+" : ""}`
+                              ? `${formatCost(item.cost.usd, true)}${costsEstimated || item.cost.source === "provider" ? "" : " ≈"}${item.cost.status === "partial" ? "+" : ""}`
                               : "—"}
                           </span>
                         </td>
@@ -272,16 +306,20 @@ export function UsagePopover({
                   })}
                 </tbody>
               </table>
-              <p className="usage-run-state usage-notice">
-                <Clock3 size={12} aria-hidden="true" />
-                {state}
-                {nonNegative(run?.elapsedMs)
-                  ? ` · ${(run.elapsedMs / 1000).toFixed(1)}s`
-                  : ""}
-                {run?.status === "partial"
-                  ? ` · ${t("usage.partialData")}`
-                  : ""}
-              </p>
+              {/* A running or completed run is described by its row; other
+                  states and incomplete data need a visible notice. */}
+              {(!run ||
+                !["active", "completed"].includes(run.state) ||
+                run.status === "partial") && (
+                <p className="usage-run-state usage-notice">
+                  <Clock3 size={12} aria-hidden="true" />
+                  {state}
+                  {elapsed}
+                  {run?.status === "partial"
+                    ? ` · ${t("usage.partialData")}`
+                    : ""}
+                </p>
+              )}
               <div
                 className="usage-model"
                 aria-label={`${modelLabel} · ${providerLabel}`}
@@ -293,8 +331,8 @@ export function UsagePopover({
             <Tabs.Panel value="details" className="usage-tab-panel">
               <div className="usage-breakdown">
                 <div className="usage-breakdown-heading">
-                  <span>{t("usage.conversationTokens")}</span>
-                  <strong>{tokens(conversation)}</strong>
+                  <span>{t("usage.tokenBreakdown")}</span>
+                  <span>{t("usage.thisConversation")}</span>
                 </div>
                 <div
                   className="usage-context-bar"
@@ -346,23 +384,27 @@ export function UsagePopover({
                   active={highlighted}
                   onActive={setHighlighted}
                 />
-                {nonNegative(cacheHit) && (
-                  <p className="usage-cache" data-testid="cache-usage">
-                    {t("usage.cacheHit", {
-                      percent: Math.round(cacheHit),
-                    })}
-                    {nonNegative(usage?.cacheSavingsUsd) &&
-                    usage.cacheSavingsUsd > 0
-                      ? ` · ${t("usage.cacheSaved", { cost: formatCost(usage.cacheSavingsUsd, true) })}`
-                      : ""}
-                  </p>
-                )}
-                {nonNegative(conversation?.reasoning) && (
-                  <p className="usage-reasoning">
-                    {t("usage.reasoningPartOfOutput")}
-                    <span>{formatTokens(conversation.reasoning)}</span>
-                  </p>
-                )}
+                <dl className="usage-facts">
+                  {nonNegative(cacheHit) && (
+                    <div data-testid="cache-usage">
+                      <dt>{t("usage.cacheHitRate")}</dt>
+                      <dd>{Math.round(cacheHit)}%</dd>
+                    </div>
+                  )}
+                  {nonNegative(usage?.cacheSavingsUsd) &&
+                    usage.cacheSavingsUsd > 0 && (
+                      <div data-testid="cache-savings">
+                        <dt>{t("usage.cacheSavedLabel")}</dt>
+                        <dd>≈ {formatCost(usage.cacheSavingsUsd, true)}</dd>
+                      </div>
+                    )}
+                  {nonNegative(conversation?.reasoning) && (
+                    <div className="usage-reasoning">
+                      <dt>{t("usage.reasoningPartOfOutput")}</dt>
+                      <dd>{formatTokens(conversation.reasoning)}</dd>
+                    </div>
+                  )}
+                </dl>
               </div>
               <div
                 className="usage-total"

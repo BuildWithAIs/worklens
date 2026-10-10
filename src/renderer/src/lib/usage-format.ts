@@ -9,5 +9,6 @@ export function formatTokens(value?: number): string {
 export function formatCost(value?: number, detailed = false): string {
   if (!nonNegative(value)) return "—";
   if (value > 0 && value < 0.001) return "<$0.001";
-  return `$${value.toFixed(detailed || (value > 0 && value < 0.01) ? 3 : 2)}`;
+  // Detail matters for small amounts; cents are enough from $1 upwards.
+  return `$${value.toFixed((detailed && value < 1) || (value > 0 && value < 0.01) ? 3 : 2)}`;
 }
