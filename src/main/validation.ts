@@ -129,18 +129,29 @@ export const schemas = {
       codemodeEnabled: z.boolean().optional(),
       proxy: proxySettings.optional(),
       backgroundEffect: z
-        .enum(["none", "surface", "fluid", "aurora"])
+        .enum([
+          "none",
+          "surface",
+          "fluid",
+          "aurora",
+          "silk",
+          "caustics",
+          "nebula",
+        ])
         .optional(),
       backgroundIntensity: z
         .object({
           surface: z.number().int().min(0).max(100).optional(),
           fluid: z.number().int().min(0).max(100).optional(),
           aurora: z.number().int().min(0).max(100).optional(),
+          silk: z.number().int().min(0).max(100).optional(),
+          caustics: z.number().int().min(0).max(100).optional(),
+          nebula: z.number().int().min(0).max(100).optional(),
         })
         .strict()
         .optional(),
       backgroundTone: z
-        .enum(["violet", "electric", "ice", "sunset"])
+        .enum(["violet", "electric", "ice", "sunset", "neon"])
         .optional(),
       riskAccepted: z.boolean().optional(),
       defaults: selection.optional(),

@@ -43,8 +43,22 @@ test("background preferences preserve legacy settings and survive reload", async
 });
 
 test("background input accepts only supported settings", () => {
-  for (const backgroundEffect of ["none", "surface", "fluid", "aurora"]) {
-    for (const backgroundTone of ["violet", "electric", "ice", "sunset"]) {
+  for (const backgroundEffect of [
+    "none",
+    "surface",
+    "fluid",
+    "aurora",
+    "silk",
+    "caustics",
+    "nebula",
+  ]) {
+    for (const backgroundTone of [
+      "violet",
+      "electric",
+      "ice",
+      "sunset",
+      "neon",
+    ]) {
       expect(
         schemas.settings.safeParse({ backgroundEffect, backgroundTone })
           .success,

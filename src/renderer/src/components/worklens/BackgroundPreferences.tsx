@@ -33,11 +33,13 @@ export function BackgroundPreferences({
   const [draft, setDraft] = useState<number | null>(null);
   useEffect(() => () => onPreview(null), [onPreview]);
   const effect = settings.backgroundEffect ?? "none";
-  // Retain stored electric/ice IDs so existing preferences remain valid.
+  // Retain stored electric/ice IDs so existing preferences remain valid;
+  // ice once named Silver mist and now holds Ocean.
   const tones = [
     ["violet", t("appearance.blueViolet")],
+    ["neon", t("appearance.neon")],
+    ["ice", t("appearance.ocean")],
     ["electric", t("appearance.jade")],
-    ["ice", t("appearance.silverMist")],
     ["sunset", t("appearance.dusk")],
   ] as const;
   const tone = settings.backgroundTone ?? "violet";
@@ -102,6 +104,15 @@ export function BackgroundPreferences({
           </NativeSelectOption>
           <NativeSelectOption value="fluid">
             {t("appearance.fluidTexture")}
+          </NativeSelectOption>
+          <NativeSelectOption value="silk">
+            {t("appearance.silk")}
+          </NativeSelectOption>
+          <NativeSelectOption value="caustics">
+            {t("appearance.caustics")}
+          </NativeSelectOption>
+          <NativeSelectOption value="nebula">
+            {t("appearance.nebula")}
           </NativeSelectOption>
         </NativeSelect>
       </Item>

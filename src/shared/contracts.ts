@@ -109,12 +109,19 @@ export interface ProviderInfo {
   models: ModelInfo[];
   connection?: { ok: boolean; message: string; checkedAt: string };
 }
+export type BackgroundEffectName =
+  | "surface"
+  | "fluid"
+  | "aurora"
+  | "silk"
+  | "caustics"
+  | "nebula";
 export interface Settings {
   version: 1;
   theme: "light" | "dark" | "system";
-  backgroundEffect?: "none" | "surface" | "fluid" | "aurora";
-  backgroundIntensity?: Partial<Record<"surface" | "fluid" | "aurora", number>>;
-  backgroundTone?: "violet" | "electric" | "ice" | "sunset";
+  backgroundEffect?: "none" | BackgroundEffectName;
+  backgroundIntensity?: Partial<Record<BackgroundEffectName, number>>;
+  backgroundTone?: "violet" | "electric" | "ice" | "sunset" | "neon";
   riskAccepted: boolean;
   defaults?: Selection;
   hiddenModels?: string[];
