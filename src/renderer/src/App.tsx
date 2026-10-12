@@ -417,7 +417,24 @@ export function App() {
     }
   }
   async function settings(patch: Partial<Settings>) {
-    const result = await api.invoke("settings", patch);
+    // Show a theme at once instead of after the save round trip; restore the
+    // previous one if saving fails.
+    const theme = data?.settings.theme;
+    const showTheme = (next?: Settings["theme"]) =>
+      next &&
+      setData((previous) =>
+        previous
+          ? { ...previous, settings: { ...previous.settings, theme: next } }
+          : previous,
+      );
+    if (patch.theme) showTheme(patch.theme);
+    let result: Settings;
+    try {
+      result = await api.invoke("settings", patch);
+    } catch (error) {
+      if (patch.theme) showTheme(theme);
+      throw error;
+    }
     if (patch.defaults && !current) setSelection(patch.defaults);
     setData((previous) =>
       previous ? { ...previous, settings: result } : previous,
