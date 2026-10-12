@@ -1260,6 +1260,10 @@ kbd {
   padding-inline: 12px;
   gap: 8px;
 }
+/* An opaque ghost hover can match tinted glass; darken it like other sidebar rows. */
+.sidebar-settings-button:hover {
+  background: var(--selection-fill);
+}
 
 /* Shared titlebar clearance for every native window surface. */
 :root { --window-controls-height: 54px; }

@@ -105,3 +105,13 @@ for (const width of [1280, 1000, 850]) {
     expect((await page.locator(".settings-pane").boundingBox())!.x).toBe(chatWidth);
   });
 }
+
+test("sidebar settings hover shares the navigation selection fill", async ({ page }) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Settings", exact: true });
+  await button.hover();
+  const hover = await button.evaluate(el => getComputedStyle(el).backgroundColor);
+  await button.click();
+  await expect(page.locator('.settings-navigation [aria-current="page"]')).toHaveCSS("background-color", hover);
+});
