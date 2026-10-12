@@ -29,6 +29,7 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { toast } from "@/components/ui/toast";
+import { Hint } from "@/components/ui/tooltip";
 import { useAppTranslation } from "@/i18n";
 import type {
   ProxyDetection,
@@ -91,18 +92,21 @@ export function NetworkProxySetting({
     }
   }
 
+  const address =
+    proxy.mode === "custom"
+      ? proxy.url
+      : proxy.mode === "system"
+        ? detection?.system
+        : undefined;
   const status =
-    proxy.mode === "off"
-      ? t("settings.proxyDirect")
-      : proxy.mode === "custom"
-        ? t("settings.proxyUsing", { proxy: proxy.url ?? "" })
-        : !detection
-          ? t("settings.proxyChecking")
-          : detection.system
-            ? t("settings.proxyUsing", { proxy: detection.system })
-            : detection.unsupported
-              ? t("settings.proxyUnsupported")
-              : t("settings.proxyNoSystem");
+    proxy.mode === "system" && !address
+      ? !detection
+        ? t("settings.proxyChecking")
+        : detection.unsupported
+          ? t("settings.proxyUnsupported")
+          : t("settings.proxyNoSystem")
+      : undefined;
+  const bypass = proxy.mode === "custom" ? proxy.bypass?.trim() : undefined;
 
   return (
     <section className="settings-section">
@@ -120,13 +124,57 @@ export function NetworkProxySetting({
             <ItemTitle className="settings-entry-title">
               {t("settings.proxy")}
             </ItemTitle>
-            <ItemDescription
-              className="settings-entry-description"
-              id="network-proxy-status"
-              role="status"
-            >
-              {status}
-            </ItemDescription>
+            {(address || bypass) && (
+              <dl
+                className="settings-entry-description settings-entry-details"
+                id="network-proxy-details"
+              >
+                {address && (
+                  <>
+                    <dt>{t("settings.proxyAddressLabel")}</dt>
+                    <dd
+                      className="settings-entry-value truncate"
+                      id="network-proxy-address"
+                      role="status"
+                    >
+                      {proxy.mode === "system" ? (
+                        <Hint
+                          content={
+                            <span className="link-target-hint">{address}</span>
+                          }
+                        >
+                          <span className="block truncate" tabIndex={0}>
+                            {address}
+                          </span>
+                        </Hint>
+                      ) : (
+                        address
+                      )}
+                    </dd>
+                  </>
+                )}
+                {bypass && (
+                  <>
+                    <dt>{t("settings.proxyBypassLabel")}</dt>
+                    <dd
+                      className="settings-entry-value truncate"
+                      id="network-proxy-bypass-summary"
+                    >
+                      {bypass}
+                    </dd>
+                  </>
+                )}
+              </dl>
+            )}
+            {status && (
+              <ItemDescription
+                className="settings-entry-description"
+                id="network-proxy-status"
+                role="status"
+              >
+                {status}
+              </ItemDescription>
+            )}
           </ItemContent>
           <ItemActions className="settings-entry-actions">
             {proxy.mode === "custom" && (
@@ -135,6 +183,9 @@ export function NetworkProxySetting({
                 disabled={pending}
                 onClick={() => setEditing(true)}
                 aria-label={t("settings.proxyEditLabel")}
+                aria-describedby={
+                  address || bypass ? "network-proxy-details" : undefined
+                }
               >
                 <Pencil data-icon="inline-start" aria-hidden="true" />
                 {t("settings.proxyEdit")}
@@ -142,7 +193,13 @@ export function NetworkProxySetting({
             )}
             <NativeSelect
               aria-label={t("settings.proxy")}
-              aria-describedby="network-proxy-status"
+              aria-describedby={
+                address || bypass
+                  ? "network-proxy-details"
+                  : status
+                    ? "network-proxy-status"
+                    : undefined
+              }
               aria-busy={pending}
               disabled={pending}
               value={editing ? "custom" : proxy.mode}

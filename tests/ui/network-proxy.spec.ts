@@ -44,9 +44,7 @@ test("network proxy follows the detected system proxy by default", async ({
   await expect(row.getByRole("combobox", { name: "Proxy" })).toHaveValue(
     "system",
   );
-  await expect(row.getByRole("status")).toHaveText(
-    "Using http://127.0.0.1:7890",
-  );
+  await expect(row.getByRole("status")).toHaveText("http://127.0.0.1:7890");
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath("network-system.png") });
 });
@@ -80,10 +78,10 @@ test("custom proxy is prefilled, validated, tested and applied only after saving
   await expect(address).toBeFocused();
   await expect(dialog.locator("#network-proxy-url-hint")).toHaveCount(0);
 
-  await address.fill("127.0.0.1:1087");
+  await address.fill("127.0.0.1:9080");
   await dialog
     .getByLabel("Bypass proxy for")
-    .fill("internal.example, 160.0.0.0/8");
+    .fill("internal.example, 192.0.2.0/24");
   await expect(dialog.locator("#network-proxy-bypass-hint")).toContainText(
     "CIDR ranges",
   );
@@ -91,7 +89,7 @@ test("custom proxy is prefilled, validated, tested and applied only after saving
   const toast = page.locator('[data-slot="toast"]').filter({
     hasText: "Proxy connection successful",
   });
-  await expect(toast).toContainText("Connected through http://127.0.0.1:1087");
+  await expect(toast).toContainText("Connected through http://127.0.0.1:9080");
   expect(await settingsCalls(page)).toEqual([]);
 
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
@@ -104,14 +102,12 @@ test("custom proxy is prefilled, validated, tested and applied only after saving
   expect(await settingsCalls(page)).toEqual([
     {
       mode: "custom",
-      url: "http://127.0.0.1:1087",
-      bypass: "internal.example, 160.0.0.0/8",
+      url: "http://127.0.0.1:9080",
+      bypass: "internal.example, 192.0.2.0/24",
     },
   ]);
   await expect(select).toHaveValue("custom");
-  await expect(row.getByRole("status")).toHaveText(
-    "Using http://127.0.0.1:1087",
-  );
+  await expect(row.getByRole("status")).toHaveText("http://127.0.0.1:9080");
 
   // The edit button matches the select beside it.
   const edit = row.getByRole("button", { name: "Edit custom proxy" });
@@ -124,7 +120,7 @@ test("custom proxy is prefilled, validated, tested and applied only after saving
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath("network-custom-row.png") });
   await edit.click();
-  await expect(address).toHaveValue("http://127.0.0.1:1087");
+  await expect(address).toHaveValue("http://127.0.0.1:9080");
   await expect(dialog.locator("#network-proxy-url-hint")).toHaveCount(0);
   await page.evaluate(() => {
     (window as any).failProxyTest = true;
@@ -143,9 +139,8 @@ test("turning the proxy off saves immediately", async ({ page }) => {
     "No system proxy detected. Requests connect directly.",
   );
   await row.getByRole("combobox", { name: "Proxy" }).selectOption("off");
-  await expect(row.getByRole("status")).toHaveText(
-    "Requests connect directly.",
-  );
+  await expect(row.getByRole("status")).toHaveCount(0);
+  await expect(row.getByRole("combobox", { name: "Proxy" })).toHaveValue("off");
   expect(await settingsCalls(page)).toEqual([{ mode: "off" }]);
 });
 
@@ -155,7 +150,7 @@ test("custom proxy falls back to the login shell and reports unsupported system 
   const row = await openGeneral(
     page,
     { unsupported: "SOCKS5 127.0.0.1:7891" },
-    { environment: "http://127.0.0.1:1087" },
+    { environment: "http://127.0.0.1:9080" },
     "zh",
   );
   await expect(
@@ -167,7 +162,7 @@ test("custom proxy falls back to the login shell and reports unsupported system 
   await row.getByRole("combobox", { name: "代理" }).selectOption("custom");
   const dialog = page.getByRole("dialog", { name: "自定义代理" });
   await expect(dialog.getByLabel("代理地址")).toHaveValue(
-    "http://127.0.0.1:1087",
+    "http://127.0.0.1:9080",
   );
   await expect(dialog.locator("#network-proxy-url-hint")).toHaveText(
     "已从 shell 环境变量中填入。",

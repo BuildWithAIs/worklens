@@ -89,7 +89,7 @@ for (const theme of ["light", "dark"]) {
       const codeMode = general.getByRole("switch", { name: "Code Mode", exact: true });
       const hint = general.getByRole("button", { name: language === "en" ? "About Code Mode" : "关于 Code Mode", exact: true });
       const description = language === "en"
-        ? "Let the agent use code to combine built-in and MCP tool calls and process results. MCP is optional. Changes apply on each chat’s next message."
+        ? "Use code to combine built-in and MCP tool calls and process results. MCP is optional. Changes apply on each chat’s next message."
         : "允许助手通过代码组合调用内置工具和 MCP 工具，并处理结果。无需配置 MCP 即可使用。更改在各会话的下一条消息中生效。";
       await expect(codeMode).toHaveAccessibleDescription(description);
       await expect(hint).toHaveAccessibleDescription(description);
