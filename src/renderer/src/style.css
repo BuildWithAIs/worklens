@@ -71,9 +71,9 @@
     0 20px 64px -24px #20283814, inset 0 1px 0 #ffffff;
 }
 :root[data-theme="dark"] {
-  --bg: #181818;
+  --bg: #1c1c1e;
   --sidebar: #111113;
-  --surface: #18181b;
+  --surface: #1c1c1f;
   --text: #fafafa;
   --muted: #d4d4d8;
   --accent: #fafafa;
@@ -1295,6 +1295,10 @@ kbd {
   border-width: 0;
   padding-inline: 12px;
   gap: 8px;
+}
+/* An opaque ghost hover can match tinted glass; darken it like other sidebar rows. */
+.sidebar-settings-button:hover {
+  background: var(--selection-fill);
 }
 
 /* Shared titlebar clearance for every native window surface. */

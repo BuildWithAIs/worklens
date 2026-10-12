@@ -87,10 +87,10 @@ test("dark native sidebars share a translucent neutral scrim", async ({ page }) 
   const sidebar = page.locator(".sidebar");
   const scrim = await sidebar.evaluate(el => getComputedStyle(el).backgroundColor);
   expect(scrim).toBe("rgba(32, 32, 32, 0.6)");
-  await expect(page.locator(".main-content")).toHaveCSS("background-color", "rgb(24, 24, 24)");
+  await expect(page.locator(".main-content")).toHaveCSS("background-color", "rgb(28, 28, 30)");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.locator(".settings-navigation")).toHaveCSS("background-color", scrim);
-  await expect(page.locator(".settings-pane")).toHaveCSS("background-color", "rgb(24, 24, 24)");
+  await expect(page.locator(".settings-pane")).toHaveCSS("background-color", "rgb(28, 28, 30)");
 });
 
 for (const width of [1280, 1000, 850]) {
@@ -105,3 +105,13 @@ for (const width of [1280, 1000, 850]) {
     expect((await page.locator(".settings-pane").boundingBox())!.x).toBe(chatWidth);
   });
 }
+
+test("sidebar settings hover shares the navigation selection fill", async ({ page }) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Settings", exact: true });
+  await button.hover();
+  const hover = await button.evaluate(el => getComputedStyle(el).backgroundColor);
+  await button.click();
+  await expect(page.locator('.settings-navigation [aria-current="page"]')).toHaveCSS("background-color", hover);
+});

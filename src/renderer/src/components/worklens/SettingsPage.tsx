@@ -312,11 +312,6 @@ export function SettingsPage({
         </nav>
       </aside>
       <div className="settings-pane">
-        <BackgroundEffect
-          intensity={backgroundPreview ?? undefined}
-          settings={data.settings}
-          edge
-        />
         <header
           className="settings-page-heading"
           data-settings-section={section}

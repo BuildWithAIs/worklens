@@ -3,6 +3,16 @@ import type { Settings } from "../../../../shared/contracts";
 import { backgroundShader } from "./background-shader";
 import "./background-effect.css";
 
+// Shader branch for each effect; keep in sync with background-shader.ts.
+const shapes = {
+  fluid: 0,
+  surface: 1,
+  aurora: 2,
+  silk: 3,
+  caustics: 4,
+  nebula: 5,
+} as const;
+
 export function useDarkAppearance(settings: Settings) {
   const [systemDark, setSystemDark] = useState(
     () => matchMedia("(prefers-color-scheme: dark)").matches,
@@ -20,11 +30,9 @@ export function useDarkAppearance(settings: Settings) {
 
 export function BackgroundEffect({
   settings,
-  edge = false,
   intensity,
 }: {
   settings: Settings;
-  edge?: boolean;
   intensity?: number;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -99,7 +107,7 @@ export function BackgroundEffect({
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
     const uniforms = Object.fromEntries(
-      ["resolution", "time", "tone", "shape", "edge", "dark", "strength"].map(
+      ["resolution", "time", "tone", "shape", "dark", "strength"].map(
         (key) => [key, gl.getUniformLocation(program, key)],
       ),
     );
@@ -112,35 +120,18 @@ export function BackgroundEffect({
     const draw = () => {
       if (lost) return;
       gl.viewport(0, 0, element.width, element.height);
-      gl.disable(gl.SCISSOR_TEST);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.uniform2f(uniforms.resolution, element.width, element.height);
       gl.uniform1f(uniforms.time, time);
       gl.uniform1f(
         uniforms.tone,
-        { violet: 1, electric: 2, ice: 3, sunset: 4 }[tone],
+        { violet: 1, electric: 2, ice: 3, sunset: 4, neon: 5 }[tone],
       );
-      gl.uniform1f(
-        uniforms.shape,
-        effect === "surface" ? 1 : effect === "aurora" ? 2 : 0,
-      );
-      gl.uniform1f(uniforms.edge, Number(edge));
+      gl.uniform1f(uniforms.shape, shapes[effect]);
       gl.uniform1f(uniforms.dark, Number(dark));
       gl.uniform1f(uniforms.strength, strength.current);
-      if (edge) {
-        gl.enable(gl.SCISSOR_TEST);
-        gl.scissor(
-          Math.max(0, element.width - 24),
-          0,
-          Math.min(24, element.width),
-          element.height,
-        );
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-        gl.scissor(0, 0, element.width, Math.min(28, element.height));
-      }
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      gl.disable(gl.SCISSOR_TEST);
     };
     redraw.current = draw;
     const tick = (now: number) => {
@@ -201,14 +192,13 @@ export function BackgroundEffect({
       release();
       // StrictMode reuses this canvas after cleanup; release resources, not its context.
     };
-  }, [effect, tone, edge, dark]);
-  if (effect === "none" || (edge && !dark)) return null;
+  }, [effect, tone, dark]);
+  if (effect === "none") return null;
   return (
     <div
       className="background-effect"
       data-intensity={amount}
       style={{ "--background-strength": amount / 50 } as CSSProperties}
-      data-edge={edge || undefined}
       data-tone={tone}
       data-fallback={failed || undefined}
       aria-hidden="true"

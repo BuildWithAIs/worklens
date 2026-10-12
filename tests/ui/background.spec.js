@@ -31,7 +31,7 @@ test("both appearances expose effects, save quietly and preserve choices", async
   await expect(
     page.getByRole("radio", { name: "Blue violet", exact: true }),
   ).toBeChecked();
-  await page.getByRole("radio", { name: "Silver mist", exact: true }).click();
+  await page.getByRole("radio", { name: "Ocean", exact: true }).click();
   await page
     .getByRole("combobox", { name: "Background effect", exact: true })
     .selectOption("fluid");
@@ -77,7 +77,7 @@ test("both appearances expose effects, save quietly and preserve choices", async
     page.getByRole("combobox", { name: "Background effect", exact: true }),
   ).toHaveValue("fluid");
   await expect(
-    page.getByRole("radio", { name: "Silver mist", exact: true }),
+    page.getByRole("radio", { name: "Ocean", exact: true }),
   ).toBeChecked();
   await page
     .getByRole("combobox", { name: "Appearance", exact: true })
@@ -87,7 +87,7 @@ test("both appearances expose effects, save quietly and preserve choices", async
     page.getByRole("combobox", { name: "Background effect" }),
   ).toHaveValue("fluid");
   await expect(
-    page.getByRole("radio", { name: "Silver mist", exact: true }),
+    page.getByRole("radio", { name: "Ocean", exact: true }),
   ).toBeChecked();
   await page.emulateMedia({ colorScheme: "dark" });
   await page
@@ -138,7 +138,7 @@ test("unsupported WebGL falls back without affecting settings", async ({
     .getByRole("combobox", { name: "Background effect", exact: true })
     .selectOption("surface");
   await expect(page.locator(".background-effect[data-fallback]")).toHaveCount(
-    2,
+    1,
   );
 });
 
@@ -189,11 +189,18 @@ for (const appearance of ["light", "dark"]) {
       .getByRole("combobox", { name: "Appearance", exact: true })
       .selectOption(appearance);
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    for (const effect of ["surface", "aurora", "fluid"]) {
+    for (const effect of [
+      "surface",
+      "aurora",
+      "fluid",
+      "silk",
+      "caustics",
+      "nebula",
+    ]) {
       await page
         .getByRole("combobox", { name: "Background effect", exact: true })
         .selectOption(effect);
-      for (const color of ["Blue violet", "Jade", "Silver mist", "Dusk"]) {
+      for (const color of ["Blue violet", "Neon", "Ocean", "Jade", "Dusk"]) {
         const choice = page.getByRole("radio", { name: color, exact: true });
         await choice.click();
         await expect(choice).toBeChecked();
@@ -229,7 +236,7 @@ for (const appearance of ["light", "dark"]) {
     await blue.focus();
     await page.keyboard.press("ArrowRight");
     await expect(
-      page.getByRole("radio", { name: "Jade", exact: true }),
+      page.getByRole("radio", { name: "Neon", exact: true }),
     ).toBeChecked();
     await page.setViewportSize({ width: 390, height: 900 });
     await expect(
@@ -246,6 +253,34 @@ for (const appearance of ["light", "dark"]) {
     await page.screenshot({ path: info.outputPath("home.png") });
   });
 }
+
+test("navigation surfaces with an effect drop the unpigmented border column and steady the glass", async ({
+  page,
+}) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  await expect(page.locator(".sidebar")).toHaveCSS("border-right-width", "1px");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Appearance", exact: true })
+    .selectOption("dark");
+  await page
+    .getByRole("combobox", { name: "Background effect", exact: true })
+    .selectOption("silk");
+  await expect(page.locator(".settings-navigation")).toHaveCSS(
+    "border-right-width",
+    "0px",
+  );
+  await page.evaluate(() => {
+    document.documentElement.dataset.nativeVibrancy = "true";
+  });
+  await expect(page.locator(".settings-navigation")).toHaveCSS(
+    "background-color",
+    "rgba(72, 72, 74, 0.9)",
+  );
+  await page.getByRole("button", { name: "Back to app", exact: true }).click();
+  await expect(page.locator(".sidebar")).toHaveCSS("border-right-width", "0px");
+});
 
 test("background save errors remain visible and preserve the selected effect", async ({
   page,
