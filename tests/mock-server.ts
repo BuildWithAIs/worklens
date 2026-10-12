@@ -1,7 +1,16 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 export async function mockServer(
-  options: { failFirst?: number; failAlways?: boolean } = {},
+  options: {
+    failFirst?: number;
+    failAlways?: boolean;
+    /** Reported prompt size, e.g. to cross the compaction threshold. */
+    promptTokens?: number;
+    /** A fixed answer instead of echoing very long prompts back. */
+    reply?: string;
+    /** Delay before each response, like a model that takes time to answer. */
+    delayMs?: number;
+  } = {},
 ) {
   const requests: any[] = [];
   const server = createServer(async (request, response) => {
@@ -9,6 +18,8 @@ export async function mockServer(
     for await (const chunk of request) body += chunk;
     const input = JSON.parse(body);
     requests.push(input);
+    if (options.delayMs)
+      await new Promise((resolve) => setTimeout(resolve, options.delayMs));
     if (options.failAlways || requests.length <= (options.failFirst ?? 0)) {
       response.writeHead(options.failAlways ? 400 : 503, {
         "content-type": "application/json",
@@ -60,8 +71,9 @@ export async function mockServer(
       });
       chunk({}, "tool_calls");
     } else {
-      const answer =
-        userText === "Reply with OK only."
+      const answer = options.reply
+        ? options.reply
+        : userText === "Reply with OK only."
           ? "OK"
           : `已完成：${toolResult ? toolResult.content : userText}`;
       for (const part of answer.match(/.{1,8}/gs) ?? []) {
@@ -75,7 +87,7 @@ export async function mockServer(
     }
     if (!response.destroyed)
       response.write(
-        `data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", choices: [], usage: { prompt_tokens: 100, completion_tokens: 40, total_tokens: 140, prompt_tokens_details: { cached_tokens: 20 } } })}\n\n`,
+        `data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", choices: [], usage: { prompt_tokens: options.promptTokens ?? 100, completion_tokens: 40, total_tokens: (options.promptTokens ?? 100) + 40, prompt_tokens_details: { cached_tokens: 20 } } })}\n\n`,
       );
     response.end("data: [DONE]\n\n");
   });

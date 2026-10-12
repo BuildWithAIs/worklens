@@ -34,6 +34,7 @@ import { SkillsService } from "./skills";
 import { McpService } from "./mcp-service";
 import { installationId } from "./installation-id";
 import { NetworkProxy, readShellProxy } from "./network-proxy";
+import { trustSystemCertificates } from "./system-certificates";
 
 // Keep the original safeStorage identity: changing case selects a different
 // macOS Keychain key. The application bundle controls the Dock display name.
@@ -70,6 +71,8 @@ else {
   void app
     .whenReady()
     .then(async () => {
+      // Before any connector, MCP server or model request opens a TLS connection.
+      trustSystemCertificates();
       app.setAppUserModelId("com.buildwithais.worklens");
       const applicationIcon = app.isPackaged
         ? join(process.resourcesPath, "icon.png")

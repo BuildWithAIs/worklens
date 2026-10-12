@@ -55,11 +55,23 @@ export interface GlobalUsage {
   /** Monotonic within this main-process lifetime; never a billing ledger ID. */
   revision: number;
 }
+/** What occupies the context window, in prompt order. */
+export interface ContextSegment {
+  /** Stable across updates, so a turn keeps its identity as it ages. */
+  id: string;
+  kind: "system" | "summary" | "history" | "turn";
+  tokens: number;
+}
 export interface ContextUsage {
   status: UsageDataStatus;
   tokens?: number;
   contextWindow?: number;
   percent?: number;
+  /** Approximate composition. Scaled to `tokens` when it is known; otherwise
+   * (for example right after compaction) an estimate that `tokens` omits. */
+  segments?: ContextSegment[];
+  /** Context size at which automatic compaction runs. */
+  compactAt?: number;
 }
 export interface RunUsage extends TokenUsage {
   runId: string;
@@ -73,6 +85,8 @@ export interface UsageSnapshot {
   run?: RunUsage;
   conversation: TokenUsage;
   context?: ContextUsage;
+  /** Approximate saving from cache reads versus uncached input prices. */
+  cacheSavingsUsd?: number;
 }
 export interface ModelInfo {
   id: string;

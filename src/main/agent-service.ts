@@ -8,6 +8,7 @@ import {
   createAgentSession,
   convertToLlm,
   buildSessionContext,
+  DEFAULT_COMPACTION_SETTINGS,
   SessionManager,
   type AgentSession,
   type AgentSessionEvent,
@@ -33,6 +34,10 @@ import {
   getHistoricalContext,
   auditSessionFile,
   incompleteUsage,
+  withContextSegments,
+  estimateToolTokens,
+  readToolTokens,
+  getCacheSavings,
 } from "./usage";
 import { resources, toolNames } from "./resources";
 import { observeToolWait } from "./tool-wait";
@@ -115,13 +120,21 @@ export class AgentService {
         this.lookupModel,
         activeId,
       ),
-      context: runtime.session
-        ? buildContextUsage(runtime.session.getContextUsage())
-        : getHistoricalContext(
-            runtime.manager,
-            this.selection(runtime),
-            this.lookupModel,
-          ),
+      context: withContextSegments(
+        runtime.session
+          ? buildContextUsage(runtime.session.getContextUsage())
+          : getHistoricalContext(
+              runtime.manager,
+              this.selection(runtime),
+              this.lookupModel,
+            ),
+        runtime.manager.buildSessionContext().messages,
+        // Recorded per run, so a reopened chat matches what was shown live.
+        readToolTokens(runtime.manager.getBranch()),
+        runtime.session?.settingsManager.getCompactionSettings()
+          .reserveTokens ?? DEFAULT_COMPACTION_SETTINGS.reserveTokens,
+      ),
+      cacheSavingsUsd: getCacheSavings(entries, this.lookupModel),
     };
     if (runtime.accountingDamaged) {
       runtime.usage.conversation = incompleteUsage(runtime.usage.conversation);
@@ -1099,6 +1112,9 @@ export class AgentService {
               editOf: edit?.messageId,
               imageNames: images.map((image) => image.name),
               startedAt: runtime.updated,
+              toolTokens: runtime.session
+                ? estimateToolTokens(runtime.session.getAllTools())
+                : undefined,
             },
           );
           this.refreshUsage(runtime);

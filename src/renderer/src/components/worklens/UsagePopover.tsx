@@ -1,7 +1,7 @@
 import { Hint } from "@/components/ui/tooltip";
 import { Tabs } from "@base-ui/react/tabs";
 import { ProviderIcon } from "./ProviderIcon";
-import { Gauge, Clock3, Info, ChevronDown } from "lucide-react";
+import { Clock3, Info, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { useAppTranslation } from "@/i18n";
 import { formatCost, formatTokens } from "@/lib/usage-format";
+import { formatDuration } from "@/lib/duration";
 import { nonNegative } from "../../../../shared/usage";
 import type {
   CostUsage,
@@ -19,6 +20,14 @@ import type {
   TokenUsage,
   UsageSnapshot,
 } from "../../../../shared/contracts";
+import { useState } from "react";
+import {
+  ContextBar,
+  SegmentTrack,
+  UsageLegend,
+  contextTotals,
+  useAnimatedNumber,
+} from "./ContextBar";
 import "./usage.css";
 
 export function UsagePopover({
@@ -26,13 +35,18 @@ export function UsagePopover({
   usage,
   selection,
   providers,
+  compacting = false,
 }: {
   global?: GlobalUsage;
   usage?: UsageSnapshot;
   selection?: Selection;
   providers: ProviderInfo[];
+  /** Pi is summarizing the conversation to free context. */
+  compacting?: boolean;
 }) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
+  // Hovering a segment or legend entry highlights that category.
+  const [highlighted, setHighlighted] = useState<string>();
   const run = usage?.run;
   const conversation = usage?.conversation;
   const context = usage?.context;
@@ -67,12 +81,13 @@ export function UsagePopover({
   const modelName =
     provider?.models.find((item) => item.id === metadata?.model)?.name ??
     metadata?.model;
-  const contextKnown =
-    context?.status !== "unavailable" &&
-    nonNegative(context?.tokens) &&
-    nonNegative(context?.percent) &&
-    nonNegative(context?.contextWindow);
-  const percent = contextKnown ? Math.min(100, context!.percent!) : 0;
+  // Right after compaction Pi cannot report the size yet; segments then carry
+  // an estimate, shown with "≈" until the next response reports it.
+  const totals = contextTotals(context);
+  const contextKnown = nonNegative(totals.tokens) && nonNegative(totals.window);
+  const shownTokens = useAnimatedNumber(totals.tokens);
+  const shownPercent = useAnimatedNumber(totals.percent);
+  const approximate = totals.estimated ? "≈" : "";
   const breakdown = [
     ["input", t("usage.input")],
     ["output", t("usage.output")],
@@ -88,18 +103,67 @@ export function UsagePopover({
     >,
     string,
   ][];
-  const percentText = contextKnown
-    ? `${context!.percent!.toFixed(1).replace(/\.0$/, "")}%`
-    : "—";
+  const percentText =
+    contextKnown && nonNegative(shownPercent)
+      ? `${approximate}${shownPercent.toFixed(1).replace(/\.0$/, "")}%`
+      : "—";
+  const kinds = (["system", "summary", "history", "turn"] as const).flatMap(
+    (kind) => {
+      const tokens = (context?.segments ?? [])
+        .filter((segment) => segment.kind === kind)
+        .reduce((sum, segment) => sum + segment.tokens, 0);
+      return tokens > 0 ? [{ kind, tokens }] : [];
+    },
+  );
+  const cacheInput =
+    nonNegative(conversation?.input) &&
+    nonNegative(conversation?.cacheRead) &&
+    nonNegative(conversation?.cacheWrite)
+      ? conversation.input + conversation.cacheRead + conversation.cacheWrite
+      : 0;
+  const cacheHit =
+    cacheInput > 0 ? (conversation!.cacheRead! / cacheInput) * 100 : undefined;
   const modelLabel = `${modelName ?? "—"}${metadata ? ` · ${metadata.thinking[0].toUpperCase()}${metadata.thinking.slice(1)}` : ""}`;
   const segments = breakdown.filter(([field]) => field !== "reasoning");
-  const compositionKnown =
-    conversation?.status === "complete" &&
-    segments.every(([field]) => nonNegative(conversation?.[field]));
+  // Requests without accounting (e.g. stopped mid-stream) make the totals a
+  // lower bound. The known requests still show their composition, marked "+".
+  const compositionKnown = segments.every(([field]) =>
+    nonNegative(conversation?.[field]),
+  );
+  const compositionPartial = conversation?.status === "partial";
   const compositionTotal = segments.reduce(
     (sum, [field]) => sum + (conversation?.[field] ?? 0),
     0,
   );
+  // Running and completed runs need no note; other states and incomplete
+  // data are named in the run's row, so no extra line is needed.
+  const runNotice = [
+    !run || !["active", "completed"].includes(run.state) ? state : undefined,
+    run?.status === "partial" ? t("usage.partialData") : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const duration = nonNegative(run?.elapsedMs)
+    ? formatDuration(run.elapsedMs, language, true)
+    : undefined;
+  // "≈" marks estimates; "+" marks totals missing some requests.
+  const costText = (item?: TokenUsage) =>
+    nonNegative(item?.cost.usd) && item?.cost.status !== "unavailable"
+      ? `${item.cost.source === "provider" ? "" : "≈ "}${formatCost(item.cost.usd, true)}${item.cost.status === "partial" ? "+" : ""}`
+      : "—";
+  const runLabel = active ? t("usage.currentRun") : t("usage.lastRun");
+  // One plain sentence on the dashed threshold marker, shown on hover and
+  // read with the bar; the header already shows usage and window size.
+  const compactAt = context?.compactAt;
+  const thresholdHint =
+    nonNegative(compactAt) && nonNegative(totals.window) && totals.window > 0
+      ? nonNegative(totals.tokens) && totals.tokens >= compactAt
+        ? t("usage.compactsNext")
+        : t("usage.compactsAtDetail", {
+            tokens: formatTokens(compactAt),
+            percent: Math.round((compactAt / totals.window) * 100),
+          })
+      : undefined;
   const providerLabel =
     provider?.name ?? metadata?.provider ?? t("usage.providerUnavailable");
   return (
@@ -108,15 +172,11 @@ export function UsagePopover({
         <PopoverTrigger
           render={<Button variant="ghost" size="sm" />}
           className="usage-trigger"
+          data-near={totals.near || undefined}
           aria-label={t("usage.openCurrentUsageDetails")}
         >
-          <Gauge
-            data-slot="usage-icon"
-            className="size-4"
-            strokeWidth={1.75}
-            aria-hidden="true"
-          />
-          <span>{percentText}</span>
+          <ContextBar context={context} compacting={compacting} size="mini" />
+          <span>{compacting ? t("usage.compacting") : percentText}</span>
           <ChevronDown
             data-icon="inline-end"
             className="size-3"
@@ -129,120 +189,113 @@ export function UsagePopover({
           align="end"
           aria-label={t("usage.usageDetails")}
         >
-          <Tabs.Root defaultValue="overview" className="usage-tabs">
+          <Tabs.Root defaultValue="context" className="usage-tabs">
             <div className="usage-heading">
-              <h2 data-slot="usage-title">{t("usage.usage")}</h2>
               <Tabs.List
                 activateOnFocus
                 className="usage-tab-list"
                 aria-label={t("usage.usageView")}
               >
-                <Tabs.Tab data-slot="usage-tab" value="overview">
-                  {t("usage.overview")}
+                <Tabs.Tab data-slot="usage-tab" value="context">
+                  {t("usage.context")}
                 </Tabs.Tab>
-                <Tabs.Tab data-slot="usage-tab" value="details">
-                  {t("usage.details")}
+                <Tabs.Tab data-slot="usage-tab" value="usage">
+                  {t("usage.usage")}
                 </Tabs.Tab>
                 <Tabs.Indicator className="usage-tab-indicator" />
               </Tabs.List>
             </div>
-            <Tabs.Panel value="overview" className="usage-tab-panel">
+            {/* Context: what fills the window now and when it compacts. */}
+            <Tabs.Panel value="context" className="usage-tab-panel">
               <div className="usage-context" data-known={contextKnown}>
+                {/* The tab names the subject, so the share of the window leads. */}
                 <div className="usage-context-labels">
-                  <span>{t("usage.context")}</span>
-                  <strong>{percentText}</strong>
+                  <strong>
+                    {compacting ? t("usage.compacting") : percentText}
+                  </strong>
+                  <span>
+                    {contextKnown
+                      ? `${approximate}${formatTokens(shownTokens)} / ${formatTokens(totals.window)}`
+                      : ""}
+                  </span>
                 </div>
-                <div
-                  className="usage-progress"
-                  role={contextKnown ? "progressbar" : undefined}
-                  aria-label={t("usage.contextUsage")}
-                  aria-valuemin={contextKnown ? 0 : undefined}
-                  aria-valuemax={contextKnown ? 100 : undefined}
-                  aria-valuenow={contextKnown ? percent : undefined}
-                >
-                  <span style={{ width: `${percent}%` }} />
-                </div>
-                <p>
-                  {contextKnown
-                    ? `${formatTokens(context!.tokens)} / ${formatTokens(context!.contextWindow)} tokens`
-                    : `${t("usage.unavailable")}${nonNegative(context?.contextWindow) ? ` / ${formatTokens(context.contextWindow)}` : ""}`}
-                </p>
+                <ContextBar
+                  context={context}
+                  compacting={compacting}
+                  size="full"
+                  thresholdHint={thresholdHint}
+                  active={highlighted}
+                  onActive={setHighlighted}
+                />
+                {kinds.length > 0 ? (
+                  <UsageLegend
+                    items={kinds.map(({ kind, tokens }) => ({
+                      kind,
+                      label: t(`usage.segmentsShort.${kind}`),
+                      description: t(`usage.segments.${kind}`),
+                      value: formatTokens(tokens),
+                    }))}
+                    active={highlighted}
+                    onActive={setHighlighted}
+                  />
+                ) : (
+                  !contextKnown && (
+                    <p>
+                      {`${t("usage.unavailable")}${nonNegative(context?.contextWindow) ? ` / ${formatTokens(context.contextWindow)}` : ""}`}
+                    </p>
+                  )
+                )}
               </div>
-              <table className="usage-summary">
-                <thead>
-                  <tr>
-                    <th aria-label={t("usage.scope")} />
-                    <th>Tokens</th>
-                    <th>{t("usage.cost")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    [
-                      active ? t("usage.currentRun") : t("usage.lastRun"),
-                      run,
-                      "run-usage",
-                    ],
-                    [
-                      t("usage.conversation"),
-                      conversation,
-                      "conversation-usage",
-                    ],
-                  ].map(([label, value, testId]) => {
-                    const item = value as TokenUsage | undefined;
-                    return (
-                      <tr key={String(testId)} data-testid={String(testId)}>
-                        <th scope="row">{String(label)}</th>
-                        <td>
-                          <span
-                            aria-label={
-                              item?.status === "partial"
-                                ? `${tokens(item)} · ${t("usage.partialTokenData")}`
-                                : undefined
-                            }
-                          >
-                            {tokens(item)}
-                          </span>
-                        </td>
-                        <td>
-                          <span aria-label={cost(item?.cost)}>
-                            {nonNegative(item?.cost.usd) &&
-                            item?.cost.status !== "unavailable"
-                              ? `${formatCost(item.cost.usd, true)}${item.cost.source === "provider" ? "" : " ≈"}${item.cost.status === "partial" ? "+" : ""}`
-                              : "—"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <p className="usage-run-state usage-notice">
-                <Clock3 size={12} aria-hidden="true" />
-                {state}
-                {nonNegative(run?.elapsedMs)
-                  ? ` · ${(run.elapsedMs / 1000).toFixed(1)}s`
-                  : ""}
-                {run?.status === "partial"
-                  ? ` · ${t("usage.partialData")}`
-                  : ""}
-              </p>
+              {/* How much of the resent context the provider served from cache. */}
+              {nonNegative(cacheHit) && (
+                <dl className="usage-facts usage-context-facts">
+                  <div data-testid="cache-usage">
+                    <dt>{t("usage.cacheHitRate")}</dt>
+                    <dd>{Math.round(cacheHit)}%</dd>
+                  </div>
+                </dl>
+              )}
+              {/* The run's model and how long it took, like the details footer:
+                  label on the left, value on the right. */}
               <div
                 className="usage-model"
-                aria-label={`${modelLabel} · ${providerLabel}`}
+                aria-label={`${modelLabel} · ${providerLabel}${duration ? ` · ${duration}` : ""}`}
               >
                 <ProviderIcon provider={metadata?.provider ?? ""} />
                 <strong>{modelLabel}</strong>
+                {duration && (
+                  <span className="usage-duration" data-testid="run-duration">
+                    <Clock3 size={12} aria-hidden="true" />
+                    {duration}
+                  </span>
+                )}
               </div>
             </Tabs.Panel>
-            <Tabs.Panel value="details" className="usage-tab-panel">
+            {/* Spend: what was used, what it cost and where it went; each row
+                names its own scope. */}
+            <Tabs.Panel value="usage" className="usage-tab-panel">
               <div className="usage-breakdown">
-                <div className="usage-breakdown-heading">
-                  <span>{t("usage.conversationTokens")}</span>
-                  <strong>{tokens(conversation)}</strong>
+                {/* Mirrors the context tab: headline value, its composition,
+                    then details. Each line names its own scope. */}
+                <div
+                  className="usage-context-labels"
+                  data-testid="conversation-usage"
+                >
+                  <span
+                    aria-label={`${tokens(conversation)} · ${t("usage.conversation")}${conversation?.status === "partial" ? ` · ${t("usage.partialTokenData")}` : ""}`}
+                  >
+                    <strong>{tokens(conversation)}</strong>
+                    <span className="usage-scope">
+                      {` · ${t("usage.conversation")}`}
+                    </span>
+                  </span>
+                  <span aria-label={cost(conversation?.cost)}>
+                    {costText(conversation)}
+                  </span>
                 </div>
                 <div
-                  className="usage-composition"
+                  className="usage-context-bar"
+                  data-size="full"
                   role="img"
                   aria-label={
                     compositionKnown
@@ -251,39 +304,84 @@ export function UsagePopover({
                             ([field, label]) =>
                               `${label}: ${formatTokens(conversation?.[field])}`,
                           )
-                          .join(", ")
+                          .join(", ") +
+                        (compositionPartial
+                          ? ` · ${t("usage.partialTokenData")}`
+                          : "")
                       : t("usage.tokenCompositionUnavailable")
                   }
                 >
-                  {compositionKnown &&
-                    compositionTotal > 0 &&
-                    segments.map(([field]) => (
-                      <span
-                        key={field}
-                        data-kind={field}
-                        style={{
-                          width: `${((conversation?.[field] ?? 0) / compositionTotal) * 100}%`,
-                        }}
-                      />
-                    ))}
+                  <SegmentTrack
+                    className="usage-composition"
+                    segments={
+                      compositionKnown && compositionTotal > 0
+                        ? segments.map(([field]) => ({
+                            id: field,
+                            kind: field,
+                            percent:
+                              ((conversation?.[field] ?? 0) /
+                                compositionTotal) *
+                              100,
+                          }))
+                        : []
+                    }
+                    active={highlighted}
+                    onActive={setHighlighted}
+                  />
                 </div>
-                <dl>
-                  {segments.map(([field, label]) => (
-                    <div key={field}>
-                      <dt>
-                        <i data-kind={field} aria-hidden="true" />
-                        {label}
-                      </dt>
-                      <dd>{formatTokens(conversation?.[field])}</dd>
+                <UsageLegend
+                  items={segments.map(([field, label]) => ({
+                    kind: field,
+                    label,
+                    description: label,
+                    value:
+                      formatTokens(conversation?.[field]) +
+                      (compositionPartial && nonNegative(conversation?.[field])
+                        ? "+"
+                        : ""),
+                  }))}
+                  active={highlighted}
+                  onActive={setHighlighted}
+                />
+                <dl className="usage-facts">
+                  <div
+                    data-testid="run-usage"
+                    aria-label={[
+                      runLabel,
+                      state,
+                      runNotice,
+                      run && tokens(run),
+                      run && costText(run),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  >
+                    <dt>
+                      {runLabel}
+                      {/* A second line, so a long state never wraps
+                            mid-sentence after the label. */}
+                      {runNotice && (
+                        <span className="usage-run-state usage-notice">
+                          {runNotice}
+                        </span>
+                      )}
+                    </dt>
+                    <dd>{run ? `${tokens(run)} · ${costText(run)}` : "—"}</dd>
+                  </div>
+                  {nonNegative(usage?.cacheSavingsUsd) &&
+                    usage.cacheSavingsUsd > 0 && (
+                      <div data-testid="cache-savings">
+                        <dt>{t("usage.cacheSavedLabel")}</dt>
+                        <dd>≈ {formatCost(usage.cacheSavingsUsd, true)}</dd>
+                      </div>
+                    )}
+                  {nonNegative(conversation?.reasoning) && (
+                    <div className="usage-reasoning">
+                      <dt>{t("usage.reasoningPartOfOutput")}</dt>
+                      <dd>{formatTokens(conversation.reasoning)}</dd>
                     </div>
-                  ))}
+                  )}
                 </dl>
-                {nonNegative(conversation?.reasoning) && (
-                  <p className="usage-reasoning">
-                    {t("usage.reasoningPartOfOutput")}
-                    <span>{formatTokens(conversation.reasoning)}</span>
-                  </p>
-                )}
               </div>
               <div
                 className="usage-total"

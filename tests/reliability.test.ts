@@ -328,10 +328,17 @@ test("PRD 046: Pi compaction persists a recoverable summary", async () => {
   expect(history.usage?.conversation.total).toBe(
     session.getSessionStats().tokens.total,
   );
-  expect(history.usage?.context).toEqual({
+  // The size stays unknown until the next reply; only an estimated
+  // composition (system prompt and tools, then the summary) is offered.
+  expect(history.usage?.context).toMatchObject({
     status: "unavailable",
     contextWindow: fixtureModel.contextWindow,
   });
+  expect(history.usage?.context?.tokens).toBeUndefined();
+  expect(history.usage?.context?.percent).toBeUndefined();
+  expect(
+    history.usage?.context?.segments?.slice(0, 2).map((s) => s.kind),
+  ).toEqual(["system", "summary"]);
   expect(history.usage?.run?.total).toBe(140);
   await restored.shutdown();
 });

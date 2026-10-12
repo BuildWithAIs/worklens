@@ -763,6 +763,7 @@ export function App() {
                   usage={currentView?.usage}
                   selection={currentView?.selection ?? selection}
                   providers={data.providers}
+                  compacting={currentView?.phase === "compacting"}
                 />
               </div>
             )}

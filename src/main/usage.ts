@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -443,4 +444,139 @@ export function getHistoricalContext(
     contextWindow: window,
     percent: (tokens / window) * 100,
   });
+}
+
+type ContextMessage = Parameters<typeof estimateTokens>[0];
+
+/**
+ * Identifies a message by its time and content, not its position, so a turn
+ * kept by compaction keeps its segment (and animation) identity.
+ */
+function messageKey(message: ContextMessage, seen: Map<string, number>) {
+  const stamp = (message as { timestamp?: unknown }).timestamp;
+  const digest = createHash("sha1")
+    .update(JSON.stringify(message))
+    .digest("hex")
+    .slice(0, 12);
+  const key = `${typeof stamp === "number" ? stamp : "-"}:${digest}`;
+  const count = (seen.get(key) ?? 0) + 1;
+  seen.set(key, count);
+  return count > 1 ? `${key}:${count}` : key;
+}
+const summaryRoles = new Set(["compactionSummary", "branchSummary"]);
+
+/**
+ * Splits the context into system prompt and tools, summaries, earlier turns and
+ * the latest turn. Message sizes are estimates; when the provider reported the
+ * context size, all segments are scaled to it. The system part is the session's
+ * system messages plus the recorded tool schemas; with neither known, it is
+ * inferred as the reported remainder.
+ */
+export function withContextSegments(
+  context: ContextUsage,
+  messages: readonly ContextMessage[],
+  toolTokens: number | undefined,
+  reserveTokens: number,
+): ContextUsage {
+  const window = context.contextWindow;
+  const result: ContextUsage = { ...context };
+  if (nonNegative(window) && window > reserveTokens)
+    result.compactAt = window - reserveTokens;
+  const parts: { id: string; kind: "summary" | "turn"; tokens: number }[] = [];
+  let turn: (typeof parts)[number] | undefined;
+  let systemMessages: number | undefined;
+  const seen = new Map<string, number>();
+  messages.forEach((message) => {
+    if ((message.role as string) === "system") {
+      // Pi keeps the full system prompt as a context message.
+      systemMessages = (systemMessages ?? 0) + estimateTokens(message);
+      return;
+    }
+    const tokens = estimateTokens(message);
+    const key = messageKey(message, seen);
+    if (summaryRoles.has(message.role)) {
+      parts.push({ id: `summary:${key}`, kind: "summary", tokens });
+      turn = undefined;
+    } else if (message.role === "user" || !turn) {
+      turn = { id: `turn:${key}`, kind: "turn", tokens };
+      parts.push(turn);
+    } else turn.tokens += tokens;
+  });
+  const messageTokens = parts.reduce((sum, part) => sum + part.tokens, 0);
+  const known = nonNegative(context.tokens);
+  const recorded =
+    systemMessages !== undefined || nonNegative(toolTokens)
+      ? (systemMessages ?? 0) + (toolTokens ?? 0)
+      : undefined;
+  const system = nonNegative(recorded)
+    ? recorded
+    : known
+      ? Math.max(0, context.tokens! - messageTokens)
+      : undefined;
+  if (system === undefined || system + messageTokens <= 0) return result;
+  const scale = known ? context.tokens! / (system + messageTokens) : 1;
+  const lastTurn = parts.findLast((part) => part.kind === "turn");
+  result.segments = [
+    { id: "system", kind: "system" as const, tokens: system },
+    ...parts.map((part) => ({
+      id: part.id,
+      kind:
+        part.kind === "summary"
+          ? ("summary" as const)
+          : part === lastTurn
+            ? ("turn" as const)
+            : ("history" as const),
+      tokens: part.tokens,
+    })),
+  ]
+    .map((segment) => ({
+      ...segment,
+      tokens: Math.round(segment.tokens * scale),
+    }))
+    .filter((segment) => segment.tokens > 0);
+  return result;
+}
+
+/** Estimated tokens of the tool schemas sent alongside the system prompt. */
+export function estimateToolTokens(tools: readonly { exposure?: string }[]) {
+  const sent = tools.filter(
+    (tool) =>
+      !tool.exposure || ["direct", "model-only"].includes(tool.exposure),
+  );
+  // Same character heuristic as Pi's estimateTokens.
+  return sent.length ? Math.ceil(JSON.stringify(sent).length / 4) : 0;
+}
+
+/** Cache reads priced at the uncached input rate, minus what they cost. */
+export function getCacheSavings(
+  entries: readonly SessionEntry[],
+  lookup: ModelLookup,
+): number | undefined {
+  let saved = 0;
+  let priced = false;
+  for (const entry of entries) {
+    if (entry.type !== "message" || entry.message.role !== "assistant")
+      continue;
+    const read = entry.message.usage?.cacheRead;
+    const model = lookup(entry.message.provider, entry.message.model);
+    if (!nonNegative(read) || !read || !model) continue;
+    const { input, cacheRead } = model.cost;
+    if (!nonNegative(input) || !nonNegative(cacheRead) || input <= cacheRead)
+      continue;
+    saved += (read * (input - cacheRead)) / 1_000_000;
+    priced = true;
+  }
+  return priced ? saved : undefined;
+}
+
+/** The tool schema size recorded by the latest run on this branch. */
+export function readToolTokens(branch: readonly SessionEntry[]) {
+  for (let index = branch.length - 1; index >= 0; index--) {
+    const entry = branch[index];
+    if (entry.type !== "custom" || entry.customType !== "worklens.run-start")
+      continue;
+    const value = record(entry.data)?.toolTokens;
+    if (nonNegative(value)) return value;
+  }
+  return undefined;
 }

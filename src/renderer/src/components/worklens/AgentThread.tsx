@@ -33,6 +33,7 @@ import { ArtifactFiles } from "./ArtifactFiles";
 import { activityIcon } from "@/lib/activity-icon";
 import { systemText } from "@/lib/system-text";
 import { useAppTranslation } from "@/i18n";
+import { formatDuration } from "@/lib/duration";
 import {
   useEffect,
   useMemo,
@@ -377,7 +378,7 @@ function WorkLensLiveStatus() {
 function WorkLensToolGroup({
   children,
 }: PropsWithChildren<{ group: ThreadGroupPart }>) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const content = useAuiState((s) => s.message.content);
   const tools = content.filter((part) => part.type === "tool-call");
   const artifacts = tools.flatMap((part) => {
@@ -420,10 +421,14 @@ function WorkLensToolGroup({
   const label =
     (running
       ? seconds !== undefined
-        ? t("agent.workingForSeconds", { seconds })
+        ? t("agent.workingFor", {
+            duration: formatDuration(seconds * 1000, language),
+          })
         : t("common.workingPlaceholder")
       : seconds !== undefined
-        ? t("agent.workedForSeconds", { seconds })
+        ? t("agent.workedFor", {
+            duration: formatDuration(seconds * 1000, language),
+          })
         : t("agent.thoughts")) +
     (failed ? t("agent.failedCountSuffix", { failed }) : "");
   return (
