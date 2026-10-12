@@ -7,6 +7,7 @@ import type {
   GitHubSettingsInput,
 } from "../../../shared/contracts";
 import { GitHubHttp } from "./http";
+import { SecretSet } from "../../secrets";
 
 export const connectionSchema = z
   .object({
@@ -71,7 +72,7 @@ export class GitHubConnections {
   private revision = randomUUID();
   private controller = new AbortController();
   private queue = new SerialQueue();
-  private secrets = new Set<string>();
+  private secrets = new SecretSet();
   constructor(
     private path: string,
     private encryption: Encryption,
@@ -87,13 +88,7 @@ export class GitHubConnections {
         this.secrets.add(value);
   }
   redact(text: string) {
-    for (const secret of [...this.secrets].sort((a, b) => b.length - a.length))
-      text = text
-        .split(secret)
-        .join("[redacted]")
-        .split(JSON.stringify(secret).slice(1, -1))
-        .join("[redacted]");
-    return text;
+    return this.secrets.redact(text);
   }
   info(): GitHubConnection {
     return { ...this.value };

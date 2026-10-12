@@ -25,6 +25,7 @@ import {
 } from "@earendil-works/pi-mcp/oauth";
 import { SerialQueue, redactStrings, type Encryption } from "./storage";
 import type { AuthStep, McpSnapshot } from "../shared/contracts";
+import { SecretSet } from "./secrets";
 
 const SAVED = "<saved>";
 const stringMap = z.record(z.string().min(1).max(200), z.string().max(20000));
@@ -208,7 +209,7 @@ export class McpService {
   private config: Config = { mcpServers: {} };
   private configDocument: EncryptedDocument<Config>;
   readonly credentials: McpCredentials;
-  private secrets = new Set<string>();
+  private secrets = new SecretSet();
   private logins = new Map<
     string,
     { controller: AbortController; url: string }
@@ -289,13 +290,7 @@ export class McpService {
     }
   }
   redact(text: string) {
-    const forms = [...this.secrets].flatMap((secret) => [
-      secret,
-      JSON.stringify(secret).slice(1, -1),
-    ]);
-    for (const secret of forms.sort((a, b) => b.length - a.length))
-      text = text.split(secret).join("[redacted]");
-    return text;
+    return this.secrets.redact(text);
   }
   configurationKey() {
     return String(this.revision);
