@@ -30,7 +30,9 @@ test("local paths stay compact and expose their full value on keyboard focus", a
   await page.keyboard.press("Tab");
   await page.mouse.move(0, 0);
   await path.focus();
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveText(full);
+  await expect(
+    page.locator('[data-slot="tooltip-content"][data-open]'),
+  ).toHaveText(full);
   await row.getByRole("button", { name: "Open Runtime directory" }).focus();
   await expect(
     page

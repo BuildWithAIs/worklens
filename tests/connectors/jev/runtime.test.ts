@@ -34,10 +34,7 @@ async function runtimeSetup() {
     (text) => text,
     f.registry,
     undefined,
-    new LocalArtifacts(
-      join(f.root, "artifacts"),
-      paths.sessions,
-    ),
+    new LocalArtifacts(join(f.root, "artifacts"), paths.sessions),
     f.consent,
   );
   await agent.initialize();

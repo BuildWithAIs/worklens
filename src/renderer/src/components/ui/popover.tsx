@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
-import { cn } from "cn"
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+import { cn } from "cn";
 
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />
+  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
 
 function PopoverTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
-  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
+  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
 }
 
 function PopoverContent({
@@ -20,7 +20,11 @@ function PopoverContent({
   Pick<PopoverPrimitive.Positioner.Props, "sideOffset" | "align">) {
   return (
     <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Positioner className="z-50" sideOffset={sideOffset} align={align}>
+      <PopoverPrimitive.Positioner
+        className="z-50"
+        sideOffset={sideOffset}
+        align={align}
+      >
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
@@ -31,7 +35,7 @@ function PopoverContent({
         />
       </PopoverPrimitive.Positioner>
     </PopoverPrimitive.Portal>
-  )
+  );
 }
 
-export { Popover, PopoverTrigger, PopoverContent }
+export { Popover, PopoverTrigger, PopoverContent };

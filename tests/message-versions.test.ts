@@ -317,7 +317,10 @@ test("review: failed rollback persistence releases the run and keeps the origina
     _persist(entry: { type: string; customType?: string }): void;
   };
   const persist = manager._persist;
-  vi.spyOn(manager, "_persist").mockImplementation(function (this: typeof manager, entry) {
+  vi.spyOn(manager, "_persist").mockImplementation(function (
+    this: typeof manager,
+    entry,
+  ) {
     if (
       entry.type === "custom" &&
       entry.customType === "worklens.branch-selection"

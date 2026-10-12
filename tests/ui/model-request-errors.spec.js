@@ -160,7 +160,9 @@ test("copy on a textless failure includes the complete visually clamped error", 
   await expect(response.locator(".aui-message-error-message")).toHaveClass(
     /line-clamp-2/,
   );
-  await response.getByRole("button", { name: "Copy text", exact: true }).click();
+  await response
+    .getByRole("button", { name: "Copy text", exact: true })
+    .click();
   await expect(
     response.getByRole("button", { name: "Copied", exact: true }),
   ).toBeVisible();
@@ -179,7 +181,9 @@ test("copying a partial reply or user message still copies its original text", a
     }),
   );
   const response = page.locator('[data-slot="aui_assistant-message-root"]');
-  await response.getByRole("button", { name: "Copy text", exact: true }).click();
+  await response
+    .getByRole("button", { name: "Copy text", exact: true })
+    .click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
     "Partial answer",
   );

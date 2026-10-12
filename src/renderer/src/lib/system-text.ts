@@ -8,8 +8,16 @@ const messages = [
     "Jev is busy. Try again later.",
     "connectors.runtime.jevBusy",
   ],
-  ["MESSAGE_VERSION_CHANGED", "MESSAGE_VERSION_CHANGED", "thread.versionChanged"],
-  ["MESSAGE_VERSION_MISSING", "MESSAGE_VERSION_MISSING", "thread.versionMissing"],
+  [
+    "MESSAGE_VERSION_CHANGED",
+    "MESSAGE_VERSION_CHANGED",
+    "thread.versionChanged",
+  ],
+  [
+    "MESSAGE_VERSION_MISSING",
+    "MESSAGE_VERSION_MISSING",
+    "thread.versionMissing",
+  ],
   ["CHAT_IMAGE_MODEL", "CHAT_IMAGE_MODEL", "attachments.unsupportedModel"],
   ["CHAT_IMAGE_FORMAT", "CHAT_IMAGE_FORMAT", "attachments.format"],
   ["CHAT_IMAGE_INVALID", "CHAT_IMAGE_INVALID", "attachments.invalid"],

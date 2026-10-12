@@ -25,7 +25,18 @@
   mix-blend-mode: screen;
 }
 .background-effect[data-fallback] {
-  background: radial-gradient(ellipse at 0 85%, color-mix(in srgb, var(--background-pigment, #7182c2) calc(var(--background-strength, 1) * var(--background-alpha, 10.980392%)), transparent), transparent 70%);
+  background: radial-gradient(
+    ellipse at 0 85%,
+    color-mix(
+      in srgb,
+      var(--background-pigment, #7182c2)
+        calc(
+          var(--background-strength, 1) * var(--background-alpha, 10.980392%)
+        ),
+      transparent
+    ),
+    transparent 70%
+  );
 }
 .background-effect[data-fallback] canvas {
   visibility: hidden;
@@ -67,13 +78,34 @@
   background: linear-gradient(135deg, #6a3be0, #4fd8f2);
 }
 
-.background-tone [data-tone="sunset"] { background: linear-gradient(135deg, #a74c72, #dda275); }
-.background-tone[aria-checked="true"] { outline: 1px solid color-mix(in srgb, var(--text) 60%, var(--bg)); outline-offset: -4px; background: transparent; }
-.background-tone:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.background-effect[data-tone="electric"] { --background-pigment: #4aa58b; --background-alpha: 13.333333%; }
-.background-effect[data-tone="ice"] { --background-pigment: #4a90d9; --background-alpha: 13.333333%; }
-.background-effect[data-tone="neon"] { --background-pigment: #7a6ae6; --background-alpha: 13.333333%; }
-.background-effect[data-tone="sunset"] { --background-pigment: #c47b8a; --background-alpha: 13.333333%; }
+.background-tone [data-tone="sunset"] {
+  background: linear-gradient(135deg, #a74c72, #dda275);
+}
+.background-tone[aria-checked="true"] {
+  outline: 1px solid color-mix(in srgb, var(--text) 60%, var(--bg));
+  outline-offset: -4px;
+  background: transparent;
+}
+.background-tone:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.background-effect[data-tone="electric"] {
+  --background-pigment: #4aa58b;
+  --background-alpha: 13.333333%;
+}
+.background-effect[data-tone="ice"] {
+  --background-pigment: #4a90d9;
+  --background-alpha: 13.333333%;
+}
+.background-effect[data-tone="neon"] {
+  --background-pigment: #7a6ae6;
+  --background-alpha: 13.333333%;
+}
+.background-effect[data-tone="sunset"] {
+  --background-pigment: #c47b8a;
+  --background-alpha: 13.333333%;
+}
 
 /* The effect fills only the padding box, so a border column would show
    unpigmented glass as a gray line beside it. */
@@ -84,7 +116,7 @@
 
 /* Keep daylight pigment subordinate to the white surface, including fallback. */
 :root[data-theme="light"] .background-effect {
-  opacity: .72;
+  opacity: 0.72;
 }
 
 .background-intensity-controls {
@@ -99,7 +131,9 @@
   flex: 1;
   min-width: 80px;
 }
-.background-intensity-slider[data-disabled] { opacity: .5; }
+.background-intensity-slider[data-disabled] {
+  opacity: 0.5;
+}
 .background-intensity-control {
   display: flex;
   align-items: center;
@@ -140,14 +174,30 @@
   font-variant-numeric: tabular-nums;
 }
 
-.background-intensity-controls[data-tone="electric"] { --intensity-color: #167568; }
-.background-intensity-controls[data-tone="ice"] { --intensity-color: #1f5fbf; }
-.background-intensity-controls[data-tone="neon"] { --intensity-color: #6a3be0; }
-.background-intensity-controls[data-tone="sunset"] { --intensity-color: #a74c72; }
-:root[data-theme="dark"] .background-intensity-controls[data-tone="electric"] { --intensity-color: #81cda0; }
-:root[data-theme="dark"] .background-intensity-controls[data-tone="ice"] { --intensity-color: #62c6f2; }
-:root[data-theme="dark"] .background-intensity-controls[data-tone="neon"] { --intensity-color: #4fd8f2; }
-:root[data-theme="dark"] .background-intensity-controls[data-tone="sunset"] { --intensity-color: #dda275; }
+.background-intensity-controls[data-tone="electric"] {
+  --intensity-color: #167568;
+}
+.background-intensity-controls[data-tone="ice"] {
+  --intensity-color: #1f5fbf;
+}
+.background-intensity-controls[data-tone="neon"] {
+  --intensity-color: #6a3be0;
+}
+.background-intensity-controls[data-tone="sunset"] {
+  --intensity-color: #a74c72;
+}
+:root[data-theme="dark"] .background-intensity-controls[data-tone="electric"] {
+  --intensity-color: #81cda0;
+}
+:root[data-theme="dark"] .background-intensity-controls[data-tone="ice"] {
+  --intensity-color: #62c6f2;
+}
+:root[data-theme="dark"] .background-intensity-controls[data-tone="neon"] {
+  --intensity-color: #4fd8f2;
+}
+:root[data-theme="dark"] .background-intensity-controls[data-tone="sunset"] {
+  --intensity-color: #dda275;
+}
 
 /* Native glass takes on whatever sits behind the window, so the screen-blended
    pigment lifts unevenly. Under an effect, a steadier scrim keeps it even. */

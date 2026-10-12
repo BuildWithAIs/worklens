@@ -46,16 +46,13 @@ process.once("message", async ({ data, mimeType, options, pixelLimit }) => {
       let width = Math.max(1, Math.round(originalWidth * scale));
       let height = Math.max(1, Math.round(originalHeight * scale));
       for (let attempt = 0; attempt < 16 && !result; attempt++) {
-        const resized = source
-          .clone()
-          .autoOrient()
-          .resize({
-            width,
-            height,
-            fit: "inside",
-            withoutEnlargement: true,
-            fastShrinkOnLoad: false,
-          });
+        const resized = source.clone().autoOrient().resize({
+          width,
+          height,
+          fit: "inside",
+          withoutEnlargement: true,
+          fastShrinkOnLoad: false,
+        });
         const formats = metadata.hasAlpha
           ? ["png"]
           : mimeType === "image/jpeg"
