@@ -45,6 +45,7 @@ import {
   AssistantRuntimeProvider,
   MessageNotSentError,
   type AppendMessage,
+  type Attachment,
   type ThreadMessageLike,
   type ThreadMessage,
   type ToolCallMessagePartProps,
@@ -97,6 +98,8 @@ type Props = {
   modelMenu?: ModelMenuProps;
 };
 
+const noMessages: MessageView[] = [];
+const noConsent: NonNullable<ConversationView["jevConsent"]>["pending"] = [];
 const activePhases = new Set([
   "generating",
   "tool",
@@ -888,89 +891,122 @@ export function AgentThread({
     onDraftLoaded();
   }, [draft, draftImages, onDraftLoaded, runtime]);
 
-  return (
-    <MessageEditingContext.Provider
-      value={{
-        editingId,
-        recovered: recoveredEdit,
-        busy: isRunning || submitting,
-        canSend,
-        messages: view?.messages ?? [],
-        begin: (id) => {
-          onRecoveredEditLoaded();
-          setEditingId(id);
-        },
-        cancel: () => {
-          onRecoveredEditLoaded();
-          setEditingId(undefined);
-          if (editingId)
-            requestAnimationFrame(() =>
-              document
-                .querySelector<HTMLButtonElement>(
-                  `[data-message-id="${CSS.escape(editingId)}"] .aui-user-action-edit`,
-                )
-                ?.focus(),
-            );
-        },
-        save: async (id, text, attachments) => {
-          const original = view?.messages.find(
-            (message) => (message.entryId ?? message.id) === id,
+  // Each message reads these contexts, so their values change only with the
+  // data they carry; callbacks read the latest props through a ref. Otherwise
+  // any re-render above (opening settings, saving a setting) would re-render
+  // and re-parse every message.
+  const handlers = useRef({
+    onRecoveredEditLoaded,
+    onEdit,
+    onSelectVersion,
+    onError,
+    onConsentChange,
+  });
+  handlers.current = {
+    onRecoveredEditLoaded,
+    onEdit,
+    onSelectVersion,
+    onError,
+    onConsentChange,
+  };
+  const busy = isRunning || submitting;
+  const editing = useMemo(
+    () => ({
+      editingId,
+      recovered: recoveredEdit,
+      busy,
+      canSend,
+      messages: view?.messages ?? noMessages,
+      begin: (id: string) => {
+        handlers.current.onRecoveredEditLoaded();
+        setEditingId(id);
+      },
+      cancel: () => {
+        handlers.current.onRecoveredEditLoaded();
+        setEditingId(undefined);
+        if (editingId)
+          requestAnimationFrame(() =>
+            document
+              .querySelector<HTMLButtonElement>(
+                `[data-message-id="${CSS.escape(editingId)}"] .aui-user-action-edit`,
+              )
+              ?.focus(),
           );
-          if (!view || !original?.entryId)
-            throw new Error("MESSAGE_VERSION_MISSING");
-          await onEdit(
-            original.entryId,
-            text,
-            editedImages(attachments, view.id, original),
-          );
-        },
-        select: async (id, targetId) => {
-          try {
-            await onSelectVersion(id, targetId);
-          } catch (error) {
-            onError(String(error));
+      },
+      save: async (
+        id: string,
+        text: string,
+        attachments: readonly Attachment[],
+      ) => {
+        const original = view?.messages.find(
+          (message) => (message.entryId ?? message.id) === id,
+        );
+        if (!view || !original?.entryId)
+          throw new Error("MESSAGE_VERSION_MISSING");
+        await handlers.current.onEdit(
+          original.entryId,
+          text,
+          editedImages(attachments, view.id, original),
+        );
+      },
+      select: async (id: string, targetId: string) => {
+        try {
+          await handlers.current.onSelectVersion(id, targetId);
+        } catch (error) {
+          handlers.current.onError(String(error));
+        }
+      },
+    }),
+    [editingId, recoveredEdit, busy, canSend, view],
+  );
+  const images = useMemo(
+    () => ({
+      supported: supportsImages,
+      historical: !!view?.messages.some((message) => message.images?.length),
+      load: loadImage,
+      reportError: (message: string) => handlers.current.onError(message),
+    }),
+    [supportsImages, view?.messages, loadImage],
+  );
+  const outputPaths = useMemo(
+    () => messageOutputPaths(view?.messages ?? noMessages),
+    [view?.messages],
+  );
+  const thread = useMemo(
+    () =>
+      !suspended && (
+        <Thread
+          onHistoryReady={onHistoryReady}
+          loadingStartedAt={historyStartedAt}
+          components={threadComponents}
+          footer={
+            <JevSessionAccess
+              conversation={view}
+              onChange={(next) => handlers.current.onConsentChange?.(next)}
+            />
           }
-        },
-      }}
-    >
+          afterMessages={
+            <JevConsentCards
+              requests={view?.jevConsent?.pending ?? noConsent}
+              onChange={(next) => handlers.current.onConsentChange?.(next)}
+            />
+          }
+        />
+      ),
+    [suspended, onHistoryReady, historyStartedAt, view],
+  );
+
+  return (
+    <MessageEditingContext.Provider value={editing}>
       <AssistantRuntimeProvider runtime={runtime}>
-        <ChatImageContext.Provider
-          value={{
-            supported: supportsImages,
-            historical: !!view?.messages.some(
-              (message) => message.images?.length,
-            ),
-            load: loadImage,
-            reportError: onError,
-          }}
-        >
+        <ChatImageContext.Provider value={images}>
           <ModelMenuContext.Provider value={modelMenu}>
             <HtmlArtifactWorkspace
               conversationId={view?.id}
-              outputPaths={messageOutputPaths(view?.messages ?? [])}
-              running={!!view && activePhases.has(view.phase)}
+              outputPaths={outputPaths}
+              running={isRunning}
             >
-              <div className="agent-thread">
-                {!suspended && (
-                  <Thread
-                    onHistoryReady={onHistoryReady}
-                    loadingStartedAt={historyStartedAt}
-                    components={threadComponents}
-                    footer={
-                      <JevSessionAccess
-                        conversation={view}
-                        onChange={onConsentChange}
-                      />
-                    }
-                    afterMessages={
-                      <JevConsentCards
-                        requests={view?.jevConsent?.pending ?? []}
-                        onChange={onConsentChange}
-                      />
-                    }
-                  />
-                )}
-              </div>
+              <div className="agent-thread">{thread}</div>
             </HtmlArtifactWorkspace>
           </ModelMenuContext.Provider>
         </ChatImageContext.Provider>

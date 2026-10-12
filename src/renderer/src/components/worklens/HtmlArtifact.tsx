@@ -273,11 +273,13 @@ export function HtmlFileCard({
   return <ArtifactCard path={path} label={label} />;
 }
 
+const noOutputs: readonly string[] = [];
+
 export function HtmlArtifactWorkspace({
   children,
   conversationId,
   running = false,
-  outputPaths = [],
+  outputPaths = noOutputs,
 }: PropsWithChildren<{
   conversationId?: string;
   running?: boolean;
@@ -346,19 +348,19 @@ export function HtmlArtifactWorkspace({
   useEffect(() => {
     if (artifact?.manual) closeButton.current?.focus();
   }, [artifact]);
+  const open = useCallback((item: Artifact) => {
+    autoPending.current = false;
+    setArtifact(item);
+    setMode("preview");
+  }, []);
+  // Every message's markdown reads this context; a stable value keeps them
+  // from re-rendering whenever the thread around them does.
+  const workspace = useMemo(
+    () => ({ conversationId, outputPaths, register, open }),
+    [conversationId, outputPaths, register, open],
+  );
   return (
-    <Context.Provider
-      value={{
-        conversationId,
-        outputPaths,
-        register,
-        open: (item) => {
-          autoPending.current = false;
-          setArtifact(item);
-          setMode("preview");
-        },
-      }}
-    >
+    <Context.Provider value={workspace}>
       <div className="artifact-workspace" data-preview-open={!!artifact}>
         <div className="artifact-chat">{children}</div>
         {artifact && (
