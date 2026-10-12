@@ -44,8 +44,16 @@ const known = (tokens: number) => ({
 const sum = (segments: { tokens: number }[] = []) =>
   segments.reduce((total, segment) => total + segment.tokens, 0);
 
+const systemPrompt = (length = 8_000) =>
+  ({
+    role: "system",
+    content: "",
+    sections: { preamble: text(length) },
+  }) as never;
+
 test("segments follow prompt order and are scaled to the reported size", () => {
   const messages = [
+    systemPrompt(),
     user(1),
     assistant(2),
     toolResult(3),
@@ -55,8 +63,9 @@ test("segments follow prompt order and are scaled to the reported size", () => {
   const context = withContextSegments(known(30_000), messages, 5_000, 16_384);
   expect(context.segments?.map((segment) => segment.kind)).toEqual([
     "system",
-    "history",
-    "turn",
+    "tools",
+    "messages",
+    "toolResults",
   ]);
   // Rounding may move each segment by at most half a token.
   expect(Math.abs(sum(context.segments) - 30_000)).toBeLessThanOrEqual(2);
@@ -64,7 +73,7 @@ test("segments follow prompt order and are scaled to the reported size", () => {
   expect(context.tokens).toBe(30_000);
 });
 
-test("a turn keeps its ID when a newer turn makes it history", () => {
+test("each kind keeps one segment and its ID as the conversation grows", () => {
   const first = withContextSegments(
     known(10_000),
     [user(1), assistant(2)],
@@ -73,31 +82,56 @@ test("a turn keeps its ID when a newer turn makes it history", () => {
   );
   const second = withContextSegments(
     known(14_000),
-    [user(1), assistant(2), user(3), assistant(4)],
+    [user(1), assistant(2), toolResult(3), user(4), assistant(5)],
     3_000,
     16_384,
   );
-  const turn = first.segments!.find((segment) => segment.kind === "turn")!;
-  expect(second.segments!.find((segment) => segment.id === turn.id)?.kind).toBe(
-    "history",
-  );
-  expect(second.segments!.at(-1)?.kind).toBe("turn");
-  expect(second.segments!.at(-1)?.id).not.toBe(turn.id);
+  expect(first.segments?.map((segment) => segment.id)).toEqual([
+    "tools",
+    "messages",
+  ]);
+  expect(second.segments?.map((segment) => segment.id)).toEqual([
+    "tools",
+    "messages",
+    "toolResults",
+  ]);
 });
 
-test("after compaction the summary follows the system prompt", () => {
+test("command output the user ran counts as a tool result", () => {
+  const command = {
+    role: "bashExecution",
+    command: "ls",
+    output: text(4_000),
+    exitCode: 0,
+    cancelled: false,
+    truncated: false,
+    timestamp: 2,
+  } as never;
+  const context = withContextSegments(
+    { status: "unavailable", contextWindow: 200_000 },
+    [user(1), command],
+    500,
+    16_384,
+  );
+  expect(context.segments?.map((segment) => segment.kind)).toEqual([
+    "tools",
+    "messages",
+    "toolResults",
+  ]);
+});
+
+test("after compaction the summary follows the system prompt and tools", () => {
   const context = withContextSegments(
     known(20_000),
-    [summary(10), assistant(11), user(12), assistant(13)],
+    [systemPrompt(), summary(10), assistant(11), user(12), assistant(13)],
     4_000,
     16_384,
   );
   expect(context.segments?.map((segment) => segment.kind)).toEqual([
     "system",
+    "tools",
     "summary",
-    // Kept recent messages can start mid-turn.
-    "history",
-    "turn",
+    "messages",
   ]);
 });
 
@@ -111,8 +145,8 @@ test("an unknown size stays unknown while segments carry an estimate", () => {
   expect(context.status).toBe("unavailable");
   expect(context.tokens).toBeUndefined();
   expect(context.segments?.[0]).toEqual({
-    id: "system",
-    kind: "system",
+    id: "tools",
+    kind: "tools",
     tokens: 4_000,
   });
   expect(context.segments?.[1].kind).toBe("summary");
@@ -165,24 +199,44 @@ test("tool size counts only tools that are sent to the model", () => {
   ).toBe(0);
 });
 
-test("system messages join the system segment instead of starting a turn", () => {
-  const system = {
-    role: "system",
-    content: "",
-    sections: { preamble: text(8_000) },
-  } as never;
+test("system messages form the system segment, apart from tool definitions", () => {
   const context = withContextSegments(
     { status: "unavailable", contextWindow: 200_000 },
-    [system, user(1), assistant(2)],
+    [systemPrompt(), user(1), assistant(2)],
     500,
     16_384,
   );
   expect(context.segments?.map((segment) => segment.kind)).toEqual([
     "system",
-    "turn",
+    "tools",
+    "messages",
   ]);
-  // About 2,000 tokens of system prompt plus 500 of tools.
-  expect(context.segments?.[0].tokens).toBeGreaterThan(2_400);
+  // About 2,000 tokens of system prompt; the tools are counted separately.
+  expect(context.segments?.[0].tokens).toBeGreaterThan(1_900);
+  expect(context.segments?.[1].tokens).toBe(500);
+});
+
+test("tool declarations in system messages count once, as tools", () => {
+  const declaring = {
+    role: "system",
+    content: "",
+    sections: { preamble: text(8_000) },
+    toolsAdded: [{ name: "read", description: text(4_000) }],
+  } as never;
+  const segments = (toolTokens?: number) =>
+    withContextSegments(
+      { status: "unavailable", contextWindow: 200_000 },
+      [declaring, user(1)],
+      toolTokens,
+      16_384,
+    ).segments!;
+  // The recorded size of the tools sent replaces the declarations.
+  const recorded = segments(300);
+  expect(recorded[0]).toMatchObject({ kind: "system", tokens: 2_000 });
+  expect(recorded[1]).toMatchObject({ kind: "tools", tokens: 300 });
+  // Without it, the declarations themselves are the tool size.
+  expect(segments()[1].kind).toBe("tools");
+  expect(segments()[1].tokens).toBeGreaterThan(1_000);
 });
 
 test("cache savings price reads at the uncached input rate", () => {
@@ -220,30 +274,4 @@ test("the latest recorded run provides the tool size", () => {
   expect(readToolTokens([start(100), start(250)])).toBe(250);
   expect(readToolTokens([start(100), start()])).toBe(100);
   expect(readToolTokens([])).toBeUndefined();
-});
-
-test("a turn kept by compaction keeps its ID although its position moves", () => {
-  const kept = [user(3), assistant(4)];
-  const before = withContextSegments(
-    known(20_000),
-    [user(1), assistant(2), ...kept],
-    1_000,
-    16_384,
-  );
-  const after = withContextSegments(
-    { status: "unavailable", contextWindow: 200_000 },
-    [summary(5), ...kept],
-    1_000,
-    16_384,
-  );
-  expect(after.segments?.at(-1)?.id).toBe(before.segments?.at(-1)?.id);
-  // Identical messages in one context still get distinct IDs.
-  const twins = withContextSegments(
-    known(9_000),
-    [user(7), assistant(8), user(7), assistant(8)],
-    1_000,
-    16_384,
-  );
-  const ids = twins.segments!.map((segment) => segment.id);
-  expect(new Set(ids).size).toBe(ids.length);
 });

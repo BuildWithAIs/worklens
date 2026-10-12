@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -448,29 +447,19 @@ export function getHistoricalContext(
 
 type ContextMessage = Parameters<typeof estimateTokens>[0];
 
-/**
- * Identifies a message by its time and content, not its position, so a turn
- * kept by compaction keeps its segment (and animation) identity.
- */
-function messageKey(message: ContextMessage, seen: Map<string, number>) {
-  const stamp = (message as { timestamp?: unknown }).timestamp;
-  const digest = createHash("sha1")
-    .update(JSON.stringify(message))
-    .digest("hex")
-    .slice(0, 12);
-  const key = `${typeof stamp === "number" ? stamp : "-"}:${digest}`;
-  const count = (seen.get(key) ?? 0) + 1;
-  seen.set(key, count);
-  return count > 1 ? `${key}:${count}` : key;
-}
 const summaryRoles = new Set(["compactionSummary", "branchSummary"]);
+// Tool output and the output of commands the user ran.
+const resultRoles = new Set(["toolResult", "bashExecution"]);
 
 /**
- * Splits the context into system prompt and tools, summaries, earlier turns and
- * the latest turn. Message sizes are estimates; when the provider reported the
- * context size, all segments are scaled to it. The system part is the session's
- * system messages plus the recorded tool schemas; with neither known, it is
- * inferred as the reported remainder.
+ * Splits the context by what fills it: system prompt, tool definitions,
+ * summaries, messages and tool results, one segment each in prompt order.
+ * Message sizes are estimates; when the provider reported the context size,
+ * all segments are scaled to it. The system prompt is the session's system
+ * messages without their tool declarations; tools are the recorded size of
+ * those sent, else the declarations. With neither known (chats from before
+ * Pi kept the prompt in the transcript), the reported remainder is shown as
+ * the system prompt.
  */
 export function withContextSegments(
   context: ContextUsage,
@@ -482,56 +471,51 @@ export function withContextSegments(
   const result: ContextUsage = { ...context };
   if (nonNegative(window) && window > reserveTokens)
     result.compactAt = window - reserveTokens;
-  const parts: { id: string; kind: "summary" | "turn"; tokens: number }[] = [];
-  let turn: (typeof parts)[number] | undefined;
+  const sizes = { summary: 0, messages: 0, toolResults: 0 };
   let systemMessages: number | undefined;
-  const seen = new Map<string, number>();
-  messages.forEach((message) => {
+  let declaredTools = 0;
+  for (const message of messages) {
+    // Pi keeps the full system prompt, and the tools it declares, as context
+    // messages; the declarations are counted as tools, not prompt.
     if ((message.role as string) === "system") {
-      // Pi keeps the full system prompt as a context message.
-      systemMessages = (systemMessages ?? 0) + estimateTokens(message);
-      return;
+      const { toolsAdded, ...prompt } = message as typeof message & {
+        toolsAdded?: unknown[];
+      };
+      systemMessages = (systemMessages ?? 0) + estimateTokens(prompt);
+      if (toolsAdded)
+        declaredTools += Math.ceil(JSON.stringify(toolsAdded).length / 4);
+      continue;
     }
     const tokens = estimateTokens(message);
-    const key = messageKey(message, seen);
-    if (summaryRoles.has(message.role)) {
-      parts.push({ id: `summary:${key}`, kind: "summary", tokens });
-      turn = undefined;
-    } else if (message.role === "user" || !turn) {
-      turn = { id: `turn:${key}`, kind: "turn", tokens };
-      parts.push(turn);
-    } else turn.tokens += tokens;
-  });
-  const messageTokens = parts.reduce((sum, part) => sum + part.tokens, 0);
+    if (summaryRoles.has(message.role)) sizes.summary += tokens;
+    else if (resultRoles.has(message.role)) sizes.toolResults += tokens;
+    else sizes.messages += tokens;
+  }
+  const messageTokens = sizes.summary + sizes.messages + sizes.toolResults;
   const known = nonNegative(context.tokens);
-  const recorded =
-    systemMessages !== undefined || nonNegative(toolTokens)
-      ? (systemMessages ?? 0) + (toolTokens ?? 0)
-      : undefined;
-  const system = nonNegative(recorded)
-    ? recorded
+  const recorded = systemMessages !== undefined || nonNegative(toolTokens);
+  const system = recorded
+    ? (systemMessages ?? 0)
     : known
       ? Math.max(0, context.tokens! - messageTokens)
       : undefined;
-  if (system === undefined || system + messageTokens <= 0) return result;
-  const scale = known ? context.tokens! / (system + messageTokens) : 1;
-  const lastTurn = parts.findLast((part) => part.kind === "turn");
-  result.segments = [
-    { id: "system", kind: "system" as const, tokens: system },
-    ...parts.map((part) => ({
-      id: part.id,
-      kind:
-        part.kind === "summary"
-          ? ("summary" as const)
-          : part === lastTurn
-            ? ("turn" as const)
-            : ("history" as const),
-      tokens: part.tokens,
-    })),
-  ]
-    .map((segment) => ({
-      ...segment,
-      tokens: Math.round(segment.tokens * scale),
+  const tools = recorded ? (toolTokens ?? declaredTools) : 0;
+  if (system === undefined || system + tools + messageTokens <= 0)
+    return result;
+  const scale = known ? context.tokens! / (system + tools + messageTokens) : 1;
+  result.segments = (
+    [
+      ["system", system],
+      ["tools", tools],
+      ["summary", sizes.summary],
+      ["messages", sizes.messages],
+      ["toolResults", sizes.toolResults],
+    ] as const
+  )
+    .map(([kind, tokens]) => ({
+      id: kind,
+      kind,
+      tokens: Math.round(tokens * scale),
     }))
     .filter((segment) => segment.tokens > 0);
   return result;

@@ -168,9 +168,6 @@ export function MessageEditor() {
                 </div>
               </ComposerPrimitive.AttachmentDropzone>
             </ComposerPrimitive.Root>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("thread.editConsequences")}
-            </p>
           </div>
         </div>
       </ChatImageContext.Provider>

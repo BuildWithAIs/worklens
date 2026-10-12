@@ -23,19 +23,32 @@
   background: var(--soft);
   color: var(--text);
 }
+/* The open popover already marks the state; a filled trigger beside it
+   only adds weight, so the chevron flips instead. */
+.usage-trigger[aria-expanded="true"] {
+  background: transparent;
+  color: var(--text);
+}
+.usage-trigger > svg:last-child {
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.usage-trigger[aria-expanded="true"] > svg:last-child {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .usage-trigger > svg:last-child {
+    transition: none;
+  }
+}
 .usage-trigger:focus-visible,
 .usage-tab-list button:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
-.usage-header,
-.usage-popover,
 .tavily-credit-usage {
   --usage-blue: #6485c4;
 }
-:root[data-theme="dark"] .usage-header,
-:root[data-theme="dark"] .usage-popover,
 :root[data-theme="dark"] .tavily-credit-usage {
   --usage-blue: #89a9e0;
 }
@@ -45,12 +58,18 @@
 .usage-popover {
   /* Space between a bar block and the section after it, in both tabs. */
   --usage-section-gap: 12px;
-  --usage-slate: #9984bd;
-  --usage-cache: #a8bddf;
-  --usage-write: #d7cbe9;
+  /* Same restrained palette as the context bar: input is the messages
+     violet, cache reads and writes lighter and deeper violet, output gray. */
+  --usage-input: #8b5cf6;
+  --usage-output: #71717a;
+  --usage-cache: #c4b5fd;
+  --usage-write: #45289f;
   /* Height follows the taller tab; the cap leaves room for longer text and
      only a very short window makes the content scroll. */
   --usage-max-height: min(var(--available-height), 420px);
+  --usage-surface: var(--elevated);
+  --usage-edge: color-mix(in srgb, var(--border) 70%, transparent);
+  --usage-elevation: 0 8px 30px -8px #00000026;
   display: flex;
   flex-direction: column;
   width: 340px;
@@ -61,19 +80,24 @@
   max-height: var(--usage-max-height);
   padding: 16px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border: 1px solid var(--usage-edge);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: color-mix(in srgb, var(--usage-surface) 94%, transparent);
   backdrop-filter: blur(20px);
   color: var(--text);
-  box-shadow: 0 8px 30px -8px #00000026;
+  box-shadow: var(--usage-elevation);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 :root[data-theme="dark"] .usage-popover {
-  --usage-slate: #b39dd3;
-  --usage-cache: #536f9f;
-  --usage-write: #75628e;
+  /* The lifted dark fill (--elevated) separates the popover, so the edge
+     only needs a faint highlight. */
+  --usage-edge: #ffffff0f;
+  --usage-elevation: 0 12px 32px -8px #00000099;
+  --usage-input: #a78bfa;
+  --usage-output: #8b8b94;
+  --usage-cache: #6d5ba8;
+  --usage-write: #d8ccfb;
 }
 /* The tabs library keeps the previous panel mounted for one exit frame;
    hide it at once so old content never overlaps or lingers. */
@@ -90,21 +114,32 @@
   /* Popover padding and border. */
   max-height: calc(var(--usage-max-height) - 34px);
 }
-/* The tabs head the popover as one full-width segmented control; its own
-   track separates it from the content, so no divider is needed. */
+/* The tabs span the content width, so their edges line up with the bars
+   and rows below; a slim, flat track keeps them light. Its own track
+   separates it from the content, so no divider is needed. */
 .usage-heading {
   display: flex;
   flex-shrink: 0;
 }
 .usage-heading .usage-tab-list {
   flex: 1;
+  box-shadow: none;
+}
+/* On the lifted dark surface a darker selection reads as a hole, so the
+   selection is lighter than its track instead. */
+:root[data-theme="dark"] .usage-heading .usage-tab-list {
+  background: #ffffff0a;
+}
+:root[data-theme="dark"] .usage-heading .usage-tab-indicator {
+  background: #ffffff1a;
+  box-shadow: none;
 }
 .usage-tab-list button {
   flex: 1;
   border: 0;
   background: transparent;
   border-radius: 7px;
-  height: 24px;
+  height: 22px;
   padding: 0 8px;
   font-size: 11px;
   font-weight: 500;
@@ -239,10 +274,10 @@
   color: var(--text);
 }
 .usage-popover [data-kind="input"] {
-  background: var(--usage-blue);
+  background: var(--usage-input);
 }
 .usage-popover [data-kind="output"] {
-  background: var(--usage-slate);
+  background: var(--usage-output);
 }
 .usage-popover [data-kind="cacheRead"] {
   background: var(--usage-cache);
@@ -297,25 +332,29 @@
 }
 @media (prefers-reduced-transparency: reduce) {
   .usage-popover {
-    background: var(--surface);
+    background: var(--usage-surface);
     backdrop-filter: none;
   }
 }
 
-/* Context and token composition share a muted palette and the same blue.
-   History stays neutral so the latest turn stands out. */
+/* Restrained: fixed overhead is neutral gray and the conversation is one
+   violet family, messages strongest. Neighboring segments were checked to
+   stay distinct for color-blind and full-color readers in both themes. */
 .usage-header,
 .usage-popover {
-  --context-system: #b47e56;
-  --context-summary: #5c947f;
-  --context-history: #a1a1aa;
-  --context-turn: var(--usage-blue);
+  --context-system: #71717a;
+  --context-tools: #b4b4bb;
+  --context-summary: #45289f;
+  --context-messages: #8b5cf6;
+  --context-tool-results: #c4b5fd;
 }
 :root[data-theme="dark"] .usage-header,
 :root[data-theme="dark"] .usage-popover {
-  --context-system: #cca17e;
-  --context-summary: #82b29b;
-  --context-history: #858995;
+  --context-system: #8b8b94;
+  --context-tools: #5f5f69;
+  --context-summary: #d8ccfb;
+  --context-messages: #a78bfa;
+  --context-tool-results: #6d5ba8;
 }
 .usage-context-bar {
   position: relative;
@@ -344,7 +383,6 @@
   width: var(--width);
   min-width: 0;
   border-radius: 2px;
-  background: var(--context-history);
   transition:
     width 500ms cubic-bezier(0.2, 0.8, 0.2, 1),
     background-color 400ms ease,
@@ -355,30 +393,20 @@
 .usage-context-bar[data-size="mini"] .usage-context-track > [data-leading] {
   min-width: 3px;
 }
-/* New segments grow from zero, like a turn being appended. */
+/* New segments grow from zero. */
 @starting-style {
   .usage-context-track > span {
     width: 0;
   }
 }
-.usage-context-track > [data-kind="system"] {
-  background: var(--context-system);
-}
-.usage-context-track > [data-kind="summary"] {
-  background: var(--context-summary);
-}
-.usage-context-track > [data-kind="turn"] {
-  background: var(--context-turn);
-}
 .usage-context-bar[data-estimated] .usage-context-track > span {
   opacity: 0.75;
 }
-/* While Pi summarizes, history turns into summary one block at a time and a
-   highlight sweeps across the bar. */
-/* Pi keeps the most recent turn, so only history becomes summary. */
+/* While Pi summarizes, the conversation turns into summary one block at a
+   time and a highlight sweeps across the bar. */
 .usage-context-bar[data-compacting]
   .usage-context-track
-  > [data-kind="history"] {
+  > :is([data-kind="messages"], [data-kind="toolResults"]) {
   background: var(--context-summary);
   transition-delay: calc(var(--index) * 60ms);
 }
@@ -470,17 +498,25 @@
   border-radius: 1px;
   flex-shrink: 0;
 }
+.usage-header [data-kind="system"],
 .usage-popover [data-kind="system"] {
   background: var(--context-system);
 }
+.usage-header [data-kind="tools"],
+.usage-popover [data-kind="tools"] {
+  background: var(--context-tools);
+}
+.usage-header [data-kind="summary"],
 .usage-popover [data-kind="summary"] {
   background: var(--context-summary);
 }
-.usage-popover [data-kind="history"] {
-  background: var(--context-history);
+.usage-header [data-kind="messages"],
+.usage-popover [data-kind="messages"] {
+  background: var(--context-messages);
 }
-.usage-popover [data-kind="turn"] {
-  background: var(--context-turn);
+.usage-header [data-kind="toolResults"],
+.usage-popover [data-kind="toolResults"] {
+  background: var(--context-tool-results);
 }
 /* Hovering a segment or legend entry highlights that category. */
 .usage-context-track > [data-dim] {

@@ -66,7 +66,7 @@ const en = {
     saveBeforeTesting: "Save your changes before testing this connection.",
     deleteTitle: "Delete {{name}}?",
     deleteDescription:
-      "The agent will stop using this connection on each chat’s next message. Saved service sign-in remains stored.",
+      "The agent stops using this connection on each chat’s next message. Saved service sign-in is kept.",
     removed: "MCP connection deleted",
     removing: "Deleting…",
     description:
@@ -182,7 +182,7 @@ const en = {
     settings: "Settings",
     anEarlierTaskWasInterrupted: "An earlier task was interrupted",
     recoveryDescription:
-      "History and completed tool results are preserved. Review any changes before continuing; interrupted tasks do not restart automatically.",
+      "History and completed tool results are kept. Review changes before continuing. Tasks won’t restart automatically.",
     loadDraftForReview: "Load draft for review",
     dismissRecoveryRecord: "Dismiss recovery record",
     deleteConversationQuestion: "Delete conversation?",
@@ -218,8 +218,6 @@ const en = {
   },
   thread: {
     saveAndRegenerate: "Save and regenerate",
-    editConsequences:
-      "Regenerates the replies after this message. Earlier versions remain available; completed actions are not undone.",
     previousVersion: "Previous version",
     nextVersion: "Next version",
     versionPosition: "Version {{current}} of {{total}}",
@@ -485,7 +483,7 @@ const en = {
     retry: "Try again",
     viewDetails: "About {{skill}}",
     appliesNextTurn:
-      "Changes take effect on your next message. Skills already loaded may still affect this conversation.",
+      "Changes apply on your next message. Loaded skills may still affect this conversation.",
     shadowed: "Inactive: the {{source}} version takes precedence.",
     builtin: "Built-in",
     builtinDescription: "Ships with WorkLens.",
@@ -603,33 +601,33 @@ const en = {
     codeMode: "Code Mode",
     aboutCodeMode: "About Code Mode",
     codeModeDescription:
-      "Let the agent use code to combine built-in and MCP tool calls and process results. MCP is optional. Changes apply on each chat’s next message.",
+      "Use code to combine built-in and MCP tool calls and process results. MCP is optional. Changes apply on each chat’s next message.",
     codeModeFailed: "Couldn’t save Code Mode",
     network: "Network",
     proxy: "Proxy",
     proxySystem: "Follow system",
     proxyCustom: "Custom",
     proxyOff: "Off",
-    proxyUsing: "Using {{proxy}}",
     proxyChecking: "Checking system proxy…",
     proxyNoSystem: "No system proxy detected. Requests connect directly.",
     proxyUnsupported:
       "The system proxy uses SOCKS, which isn’t supported yet. Requests connect directly.",
-    proxyDirect: "Requests connect directly.",
     proxyEdit: "Edit",
     proxyEditLabel: "Edit custom proxy",
     proxyDialogTitle: "Custom proxy",
     proxyDialogDescription:
       "WorkLens requests, agent commands and local MCP servers use this proxy.",
     proxyAddress: "Proxy address",
+    proxyAddressLabel: "Address",
     proxyAddressRequired: "Enter a proxy address.",
     proxyAddressInvalid:
       "Enter an HTTP or HTTPS proxy address, such as http://127.0.0.1:7890.",
     proxyFromSystem: "Filled in from your system proxy.",
     proxyFromShell: "Filled in from your shell environment.",
     proxyBypass: "Bypass proxy for",
+    proxyBypassLabel: "Bypass",
     proxyBypassHint:
-      "Separate domains or CIDR ranges with commas. Connector domains also match by resolved IP. Local addresses always connect directly.",
+      "Separate domains or CIDR ranges with commas (,). Connector domains also match by resolved IP. Local addresses always connect directly.",
     proxyTest: "Test connection",
     proxyTesting: "Testing…",
     proxyConnected: "Proxy connection successful",
@@ -779,16 +777,18 @@ const en = {
     cacheSavedLabel: "Saved by cache",
     estimatedUntilReply: "estimated until the next reply",
     segments: {
-      system: "System prompt and tools",
-      summary: "Summary",
-      history: "Earlier turns",
-      turn: "Latest turn",
+      system: "System prompt",
+      tools: "Tool definitions",
+      summary: "Conversation summary",
+      messages: "Messages",
+      toolResults: "Tool results",
     },
     segmentsShort: {
       system: "System",
+      tools: "Tools",
       summary: "Summary",
-      history: "Earlier",
-      turn: "Latest",
+      messages: "Messages",
+      toolResults: "Tool results",
     },
   },
   clipboard: {
@@ -988,7 +988,7 @@ const en = {
     retry: "Retry {{current}} of {{total}} in {{seconds}} seconds",
     conversationOpenFailed: "Couldn’t open conversation {{id}}: ",
     interruptedTasks:
-      "{{count}} tasks were interrupted when the app last closed. Recovery records are saved. Check any tool changes before continuing.",
+      "{{count}} tasks were interrupted when the app closed. Recovery records are saved. Review tool changes before continuing.",
   },
 } as const;
 

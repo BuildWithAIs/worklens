@@ -55,11 +55,11 @@ export interface GlobalUsage {
   /** Monotonic within this main-process lifetime; never a billing ledger ID. */
   revision: number;
 }
-/** What occupies the context window, in prompt order. */
+/** What occupies the context window, one segment per kind in prompt order. */
 export interface ContextSegment {
-  /** Stable across updates, so a turn keeps its identity as it ages. */
+  /** Stable across updates, so a segment animates as it grows or shrinks. */
   id: string;
-  kind: "system" | "summary" | "history" | "turn";
+  kind: "system" | "tools" | "summary" | "messages" | "toolResults";
   tokens: number;
 }
 export interface ContextUsage {

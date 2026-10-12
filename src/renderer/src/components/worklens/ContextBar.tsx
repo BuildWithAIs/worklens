@@ -81,26 +81,6 @@ export function useAnimatedNumber(value: number | undefined, duration = 500) {
   return shown;
 }
 
-/** Narrow history turns merge into the block before them (keeping its ID). */
-function legible(segments: ContextSegment[], window: number, minimum: number) {
-  const result: ContextSegment[] = [];
-  for (const segment of segments) {
-    const previous = result.at(-1);
-    const narrow = (segment.tokens / window) * 100 < minimum;
-    if (
-      segment.kind === "history" &&
-      previous?.kind === "history" &&
-      (narrow || (previous.tokens / window) * 100 < minimum)
-    )
-      result[result.length - 1] = {
-        ...previous,
-        tokens: previous.tokens + segment.tokens,
-      };
-    else result.push(segment);
-  }
-  return result;
-}
-
 export function contextTotals(context?: ContextUsage) {
   const window = context?.contextWindow;
   const segments = context?.segments ?? [];
@@ -215,21 +195,13 @@ export function ContextBar({
   const { t } = useAppTranslation();
   const window = context?.contextWindow;
   const known = nonNegative(window) && window > 0;
-  const segments = usePresence(
-    known
-      ? legible(context?.segments ?? [], window, size === "full" ? 1.2 : 3)
-      : [],
-  );
+  const segments = usePresence(known ? (context?.segments ?? []) : []);
   const { tokens, percent, estimated } = contextTotals(context);
-  // Read one total per category, like the legend, not every turn.
-  const byKind = new Map<string, number>();
-  for (const segment of context?.segments ?? [])
-    byKind.set(segment.kind, (byKind.get(segment.kind) ?? 0) + segment.tokens);
   const label = known
-    ? [...byKind]
+    ? (context?.segments ?? [])
         .map(
-          ([kind, total]) =>
-            `${t(`usage.segments.${kind as ContextSegment["kind"]}`)} ${formatTokens(total)}`,
+          (segment) =>
+            `${t(`usage.segments.${segment.kind}`)} ${formatTokens(segment.tokens)}`,
         )
         .join(", ") || `${formatTokens(tokens)} / ${formatTokens(window)}`
     : t("usage.unavailable");
