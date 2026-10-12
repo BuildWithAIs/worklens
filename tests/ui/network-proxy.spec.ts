@@ -81,7 +81,12 @@ test("custom proxy is prefilled, validated, tested and applied only after saving
   await expect(dialog.locator("#network-proxy-url-hint")).toHaveCount(0);
 
   await address.fill("127.0.0.1:1087");
-  await dialog.getByLabel("Bypass proxy for").fill("internal.example");
+  await dialog
+    .getByLabel("Bypass proxy for")
+    .fill("internal.example, 160.0.0.0/8");
+  await expect(dialog.locator("#network-proxy-bypass-hint")).toContainText(
+    "CIDR ranges",
+  );
   await dialog.getByRole("button", { name: "Test connection" }).click();
   const toast = page.locator('[data-slot="toast"]').filter({
     hasText: "Proxy connection successful",
@@ -100,7 +105,7 @@ test("custom proxy is prefilled, validated, tested and applied only after saving
     {
       mode: "custom",
       url: "http://127.0.0.1:1087",
-      bypass: "internal.example",
+      bypass: "internal.example, 160.0.0.0/8",
     },
   ]);
   await expect(select).toHaveValue("custom");
@@ -167,4 +172,25 @@ test("custom proxy falls back to the login shell and reports unsupported system 
   await expect(dialog.locator("#network-proxy-url-hint")).toHaveText(
     "已从 shell 环境变量中填入。",
   );
+  await expect(dialog.locator("#network-proxy-bypass-hint")).toContainText(
+    "域名解析后的 IP",
+  );
+});
+
+test("a bypassed connection test reports direct access without claiming the proxy was tested", async ({
+  page,
+}) => {
+  const row = await openGeneral(page, { system: "http://127.0.0.1:7890" });
+  await row.getByRole("combobox", { name: "Proxy" }).selectOption("custom");
+  const dialog = page.getByRole("dialog", { name: "Custom proxy" });
+  await dialog.getByLabel("Bypass proxy for").fill("*");
+  await dialog.getByRole("button", { name: "Test connection" }).click();
+  const notification = page
+    .locator('[data-slot="toast"]')
+    .filter({ hasText: "Connection successful" });
+  await expect(notification).toContainText(
+    "Connected directly to the network test address.",
+  );
+  await expect(notification).not.toContainText("Connected through");
+  expect(await settingsCalls(page)).toEqual([]);
 });

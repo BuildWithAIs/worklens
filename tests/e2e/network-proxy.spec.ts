@@ -90,6 +90,41 @@ test("Electron routes main-process requests, sessions and child environments thr
     ).toBe("ok:worklens.test");
     expect(tunnels).toEqual(["worklens.test:80"]);
 
+    await page.evaluate(
+      (url) =>
+        window.worklens.invoke("settings", {
+          proxy: { mode: "custom", url, bypass: "160.0.0.0/8,127.0.0.0/8" },
+        }),
+      proxyUrl,
+    );
+    expect(
+      await application.evaluate(async ({ session }) =>
+        session.defaultSession.resolveProxy("https://160.12.34.56"),
+      ),
+    ).toBe("DIRECT");
+    // Invented DNS answers isolate the test from VPNs and real internal sites.
+    // The OS lookup is replaced only inside this isolated Electron process.
+    await application.evaluate(() => {
+      const dns = process.getBuiltinModule("node:dns").promises;
+      const original = dns.lookup;
+      dns.lookup = ((hostname: string, options: any) =>
+        hostname === "connector.example.test"
+          ? Promise.resolve([
+              { address: "192.0.2.1", family: 4 },
+              { address: "127.0.0.1", family: 4 },
+            ])
+          : original(hostname, options)) as typeof dns.lookup;
+      process.getBuiltinModule("node:module").syncBuiltinESMExports();
+    });
+    expect(
+      await application.evaluate(
+        async (_electron, port) =>
+          (await fetch(`http://connector.example.test:${port}/`)).text(),
+        targetPort,
+      ),
+    ).toBe(`ok:connector.example.test:${targetPort}`);
+    expect(tunnels).toEqual(["worklens.test:80"]);
+
     // The saved proxy is applied at startup, before services make requests.
     await application.close();
     ({ app: application, page } = await launch());

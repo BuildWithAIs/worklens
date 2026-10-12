@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { lookup } from "node:dns/promises";
+import type { LookupAddress } from "node:dns";
+import { isIP } from "node:net";
 import {
   Agent,
   Dispatcher,
@@ -9,6 +12,7 @@ import {
 } from "undici";
 import type { ProxyConfig } from "electron";
 import type { ProxyDetection, ProxySettings } from "../shared/contracts";
+import { NetworkBypass } from "./network-bypass";
 import {
   PROXY_PROBE_URL,
   bypassesProxy,
@@ -27,21 +31,102 @@ const ENV_KEYS = [
 ] as const;
 // System proxies can change at any time (for example when Clash is toggled).
 const SYSTEM_REFRESH_MS = 30_000;
+const DNS_TIMEOUT_MS = 2000;
+const MAX_ROUTES = 256;
+const MAX_DNS_LOOKUPS = 32;
 const DEFAULT_SETTINGS: ProxySettings = { mode: "system" };
 
-/** A proxy origin, or undefined for a direct connection. */
-type Route = string | undefined;
+/** Resolved bypass addresses are pinned so mixed DNS answers cannot leak direct. */
+type ResolvedDirect = { addresses: LookupAddress[]; agent?: Agent };
+type Route = string | undefined | ResolvedDirect;
+
+/** Register cancellation before asynchronous routing, then hand it to Undici. */
+class PendingDispatch {
+  private downstream?: Dispatcher.DispatchController;
+  private downstreamAbort?: (error: Error) => void;
+  private reason: Error | null = null;
+  private paused = false;
+  readonly controller: Dispatcher.DispatchController;
+  readonly handler: Dispatcher.DispatchHandler;
+
+  constructor(private readonly original: Dispatcher.DispatchHandler) {
+    const pending = this;
+    this.controller = {
+      get aborted() {
+        return !!pending.reason || !!pending.downstream?.aborted;
+      },
+      get reason() {
+        return pending.reason ?? pending.downstream?.reason ?? null;
+      },
+      get paused() {
+        return pending.downstream?.paused ?? pending.paused;
+      },
+      abort(error) {
+        if (pending.downstream) pending.downstream.abort(error);
+        else if (pending.downstreamAbort) pending.downstreamAbort(error);
+        else pending.fail(error ?? new Error("Request aborted"));
+      },
+      pause() {
+        pending.paused = true;
+        pending.downstream?.pause();
+      },
+      resume() {
+        pending.paused = false;
+        pending.downstream?.resume();
+      },
+    };
+    // Bind delegated methods to their original receiver (handlers may have
+    // private fields). Both Undici's legacy and current handler APIs are used.
+    this.handler = new Proxy(original, {
+      get(target, key) {
+        if (key === "onRequestStart" && target.onRequestStart)
+          return (controller: Dispatcher.DispatchController) => {
+            pending.downstream = controller;
+            if (pending.reason) controller.abort(pending.reason);
+            else if (pending.paused) controller.pause();
+          };
+        if (key === "onConnect" && !target.onRequestStart)
+          return (abort: (error: Error) => void) => {
+            pending.downstreamAbort = abort;
+            if (pending.reason) abort(pending.reason);
+          };
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    if (original.onRequestStart) original.onRequestStart(this.controller, null);
+    else
+      original.onConnect?.((error) =>
+        this.controller.abort(error ?? new Error("Request aborted")),
+      );
+  }
+
+  fail(error: Error) {
+    if (this.reason) return;
+    this.reason = error;
+    if (this.original.onResponseError)
+      this.original.onResponseError(this.controller, error);
+    else this.original.onError?.(error);
+  }
+}
 
 export interface ProxyHost {
   /** Chromium's PAC-style proxy result for a URL, using system settings. */
   resolveSystem(url: string): Promise<string>;
   setSessionProxy(config: ProxyConfig): Promise<void>;
   readShellProxy?(env: NodeJS.ProcessEnv): Promise<string | undefined>;
+  resolveAddresses?(hostname: string): Promise<LookupAddress[]>;
 }
 
 /** Routes each origin directly or through a proxy, following live settings. */
-class ProxyRouter extends Dispatcher {
+export class ProxyRouter extends Dispatcher {
   private readonly agents = new Map<string, ProxyAgent>();
+  private readonly retiring = new Set<Agent>();
+  private readonly waiting = new Set<PendingDispatch>();
+  private generation = 0;
+  private stopped = false;
+  private bypass = new NetworkBypass();
+  private dnsLookups = 0;
   private readonly cache = new Map<
     string,
     { route: Route | Promise<Route>; expires: number }
@@ -50,9 +135,14 @@ class ProxyRouter extends Dispatcher {
   constructor(
     private readonly direct: Dispatcher,
     private readonly settings: () => ProxySettings,
-    private readonly resolveSystem: (url: string) => Promise<Route>,
+    private readonly resolveSystem: (
+      url: string,
+    ) => Promise<string | undefined>,
+    private readonly resolveAddresses = (hostname: string) =>
+      lookup(hostname, { all: true }),
   ) {
     super();
+    this.reset();
   }
 
   route(origin: string): Route | Promise<Route> {
@@ -60,50 +150,190 @@ class ProxyRouter extends Dispatcher {
     const { hostname } = new URL(origin);
     if (settings.mode === "off" || bypassesProxy(hostname, proxyBypassList()))
       return undefined;
-    if (settings.mode === "custom")
-      return settings.url &&
-        !bypassesProxy(hostname, proxyBypassList(settings.bypass))
-        ? normalizeProxyUrl(settings.url)
-        : undefined;
+    if (settings.mode === "custom") {
+      if (this.bypass.matches(hostname)) return undefined;
+      const proxy = settings.url && normalizeProxyUrl(settings.url);
+      if (
+        !proxy ||
+        !this.bypass.hasSubnets ||
+        isIP(hostname.replace(/^\[|\]$/g, ""))
+      )
+        return proxy;
+      return this.cached(origin, () => this.resolveBypass(hostname, proxy));
+    }
+    return this.cached(origin, () => this.resolveSystem(origin));
+  }
+
+  private cached(origin: string, resolve: () => Promise<Route>) {
     const cached = this.cache.get(origin);
     if (cached && cached.expires > Date.now()) return cached.route;
-    const route = this.resolveSystem(origin);
-    this.cache.set(origin, { route, expires: Date.now() + SYSTEM_REFRESH_MS });
-    void route.then((value) =>
-      this.cache.set(origin, {
-        route: value,
-        expires: Date.now() + SYSTEM_REFRESH_MS,
-      }),
-    );
+    if (cached) this.evict(origin);
+    while (this.cache.size >= MAX_ROUTES)
+      this.evict(this.cache.keys().next().value!);
+    const entry: { route: Route | Promise<Route>; expires: number } = {
+      route: undefined,
+      expires: Date.now() + SYSTEM_REFRESH_MS,
+    };
+    const route = resolve().then((value) => {
+      // A settings change or eviction must not be undone by an old DNS result.
+      if (this.cache.get(origin) === entry) {
+        this.cache.set(origin, {
+          route: value,
+          expires: Date.now() + SYSTEM_REFRESH_MS,
+        });
+      }
+      return value;
+    });
+    entry.route = route;
+    this.cache.set(origin, entry);
     return route;
   }
 
+  private async resolveBypass(hostname: string, proxy: string): Promise<Route> {
+    // dns.lookup uses the OS thread pool and cannot be cancelled. Bound even
+    // timed-out lookups until the OS completes them.
+    if (this.dnsLookups >= MAX_DNS_LOOKUPS) return proxy;
+    this.dnsLookups++;
+    const bypass = this.bypass;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const lookup = Promise.resolve()
+        .then(() => this.resolveAddresses(hostname))
+        .finally(() => this.dnsLookups--);
+      const addresses = await Promise.race([
+        lookup,
+        new Promise<LookupAddress[]>((resolve) => {
+          timer = setTimeout(() => resolve([]), DNS_TIMEOUT_MS);
+        }),
+      ]);
+      const matching = addresses.filter(({ address }) =>
+        bypass.matchesSubnet(address),
+      );
+      return matching.length ? { addresses: matching } : proxy;
+    } catch {
+      // A proxy may resolve hosts unavailable to the local DNS resolver.
+      return proxy;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private evict(origin: string) {
+    const route = this.cache.get(origin)?.route;
+    this.cache.delete(origin);
+    if (
+      route &&
+      typeof route === "object" &&
+      !(route instanceof Promise) &&
+      route.agent
+    ) {
+      this.retire(route.agent);
+    }
+  }
+
+  private retire(agent: Agent) {
+    if (this.retiring.has(agent)) return;
+    this.retiring.add(agent);
+    void agent
+      .close()
+      .catch(() => {})
+      .finally(() => this.retiring.delete(agent));
+  }
+
   reset() {
-    this.cache.clear();
+    this.generation++;
+    this.bypass = new NetworkBypass(this.settings().bypass);
+    for (const origin of this.cache.keys()) this.evict(origin);
   }
 
   dispatch(
     options: Dispatcher.DispatchOptions,
     handler: Dispatcher.DispatchHandler,
   ) {
+    if (this.stopped) {
+      this.fail(handler, new Error("Proxy router is closed"));
+      return false;
+    }
+    let generation = this.generation;
     const route = this.route(String(options.origin));
     if (!(route instanceof Promise))
-      return this.target(route).dispatch(options, handler);
-    // System proxy resolution is asynchronous; dispatch once it is known.
-    void route.then((value) => {
+      return this.dispatchTo(route, options, handler);
+    const pending = new PendingDispatch(handler);
+    this.waiting.add(pending);
+    // DNS and system proxy resolution are asynchronous; follow current settings
+    // without registering a second cancellation handler after a settings change.
+    void (async () => {
       try {
-        this.target(value).dispatch(options, handler);
+        let value = await route;
+        while (
+          !pending.controller.aborted &&
+          !this.stopped &&
+          generation !== this.generation
+        ) {
+          generation = this.generation;
+          value = await this.route(String(options.origin));
+        }
+        if (pending.controller.aborted) return;
+        if (this.stopped) pending.fail(new Error("Proxy router is closed"));
+        else this.dispatchTo(value, options, pending.handler);
       } catch (error) {
-        if (handler.onResponseError)
-          handler.onResponseError(null as never, error as Error);
-        else handler.onError?.(error as Error);
+        pending.fail(error as Error);
+      } finally {
+        this.waiting.delete(pending);
       }
-    });
+    })();
     return true;
+  }
+
+  private dispatchTo(
+    route: Route,
+    options: Dispatcher.DispatchOptions,
+    handler: Dispatcher.DispatchHandler,
+  ) {
+    const target = this.target(route);
+    try {
+      return target.dispatch(options, handler);
+    } finally {
+      // An in-flight resolution can outlive a cache eviction. Drain its agent
+      // after this dispatch rather than leave an uncached connection pool alive.
+      if (
+        typeof route === "object" &&
+        this.cache.get(String(options.origin))?.route !== route
+      )
+        this.retire(route.agent!);
+    }
+  }
+
+  private fail(handler: Dispatcher.DispatchHandler, error: Error) {
+    new PendingDispatch(handler).fail(error);
   }
 
   private target(route: Route): Dispatcher {
     if (!route) return this.direct;
+    if (typeof route === "object") {
+      route.agent ??= new Agent({
+        connect: {
+          lookup: (_hostname, options, callback) => {
+            const addresses = route.addresses.filter(
+              ({ family }) => !options.family || family === options.family,
+            );
+            if (!addresses.length) {
+              callback(
+                Object.assign(new Error("No matching bypass address"), {
+                  code: "ENOTFOUND",
+                }),
+                "",
+                0,
+              );
+              return;
+            }
+            if (options.all) callback(null, addresses);
+            else callback(null, addresses[0].address, addresses[0].family);
+          },
+        },
+      });
+      return route.agent;
+    }
     let agent = this.agents.get(route);
     if (!agent) {
       agent = new ProxyAgent({ uri: route });
@@ -112,16 +342,30 @@ class ProxyRouter extends Dispatcher {
     return agent;
   }
 
+  private stop() {
+    this.stopped = true;
+    for (const pending of this.waiting)
+      pending.fail(new Error("Proxy router is closed"));
+    this.waiting.clear();
+    this.reset();
+  }
+
   override async close() {
+    this.stop();
     const agents = [...this.agents.values()];
     this.agents.clear();
-    await Promise.all(agents.map((agent) => agent.close()));
+    await Promise.all(
+      [...agents, ...this.retiring].map((agent) => agent.close()),
+    );
   }
 
   override async destroy() {
+    this.stop();
     const agents = [...this.agents.values()];
     this.agents.clear();
-    await Promise.all(agents.map((agent) => agent.destroy()));
+    await Promise.all(
+      [...agents, ...this.retiring].map((agent) => agent.destroy()),
+    );
   }
 }
 
@@ -143,6 +387,7 @@ export class NetworkProxy {
       this.previous,
       () => this.settings,
       (url) => this.system(url),
+      host.resolveAddresses,
     );
     setGlobalDispatcher(this.router);
   }
@@ -181,8 +426,11 @@ export class NetworkProxy {
       direct,
       () => settings,
       (url) => this.system(url),
+      this.host.resolveAddresses,
     );
-    const proxy = await router.route(new URL(PROXY_PROBE_URL).origin);
+    router.reset();
+    const route = await router.route(new URL(PROXY_PROBE_URL).origin);
+    const proxy = typeof route === "string" ? route : undefined;
     try {
       await undiciFetch(PROXY_PROBE_URL, {
         method: "HEAD",

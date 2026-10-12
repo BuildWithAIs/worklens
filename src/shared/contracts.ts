@@ -119,7 +119,7 @@ export interface ProxySettings {
   mode: "system" | "custom" | "off";
   /** Custom HTTP or HTTPS proxy origin, e.g. http://127.0.0.1:7890. */
   url?: string;
-  /** Comma-separated hosts that bypass the custom proxy. */
+  /** Comma-separated hosts and CIDRs; main-process requests also match resolved IPs. */
   bypass?: string;
 }
 export interface ProxyDetection {

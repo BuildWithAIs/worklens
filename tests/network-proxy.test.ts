@@ -1,7 +1,14 @@
-import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { createServer, type Server } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import tls from "node:tls";
 import { connect, type AddressInfo } from "node:net";
 import type { ProxyConfig } from "electron";
+import type { LookupAddress } from "node:dns";
 import { NetworkProxy, readShellProxy } from "../src/main/network-proxy";
 import {
   bypassesProxy,
@@ -11,6 +18,12 @@ import {
 } from "../src/shared/network-proxy";
 
 const tunnels: string[] = [];
+let openssl = true;
+try {
+  execFileSync("openssl", ["version"], { stdio: "ignore" });
+} catch {
+  openssl = false;
+}
 let target: Server;
 let proxyServer: Server;
 let proxyUrl: string;
@@ -156,6 +169,190 @@ test("a custom proxy routes main-process fetch, sessions and child-process envir
   expect(await local.text()).toBe(`ok:127.0.0.1:${port(target)}`);
   await expect(fetch("http://internal.test/")).rejects.toThrow();
   expect(tunnels).toEqual(["worklens.test:80"]);
+});
+
+test("CIDR-resolved domains connect directly using matching addresses and original Host", async () => {
+  const resolveAddresses = vi.fn(async () => [
+    { address: "192.0.2.1", family: 4 },
+    { address: "127.0.0.1", family: 4 },
+  ]);
+  service = new NetworkProxy({
+    resolveSystem: async () => "DIRECT",
+    setSessionProxy: async () => {},
+    resolveAddresses,
+  });
+  await service.apply({ mode: "custom", url: proxyUrl, bypass: "127.0.0.0/8" });
+  const url = `http://connector.example.test:${port(target)}/`;
+  expect(await (await fetch(url)).text()).toBe(
+    `ok:connector.example.test:${port(target)}`,
+  );
+  expect(tunnels).toEqual([]);
+  expect(resolveAddresses).toHaveBeenCalledTimes(1);
+
+  // Removing the bypass immediately routes the same origin through the proxy.
+  await service.apply({ mode: "custom", url: proxyUrl });
+  expect(await (await fetch(url)).text()).toBe(
+    `ok:connector.example.test:${port(target)}`,
+  );
+  expect(tunnels).toEqual([`connector.example.test:${port(target)}`]);
+});
+
+test("DNS failures still reach domains available only through the proxy", async () => {
+  service = new NetworkProxy({
+    resolveSystem: async () => "DIRECT",
+    setSessionProxy: async () => {},
+    resolveAddresses: async () => {
+      throw new Error("Synthetic DNS failure");
+    },
+  });
+  await service.apply({ mode: "custom", url: proxyUrl, bypass: "160.0.0.0/8" });
+  expect(await (await fetch("http://connector.example.test/")).text()).toBe(
+    "ok:connector.example.test",
+  );
+  expect(tunnels).toEqual(["connector.example.test:80"]);
+});
+
+test.skipIf(!openssl)(
+  "CIDR direct HTTPS preserves SNI and verifies the original domain",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "worklens-proxy-tls-"));
+    const original = tls.getCACertificates("default");
+    let secure: Server | undefined;
+    try {
+      execFileSync(
+        "openssl",
+        [
+          "req",
+          "-x509",
+          "-newkey",
+          "ec",
+          "-pkeyopt",
+          "ec_paramgen_curve:prime256v1",
+          "-nodes",
+          "-keyout",
+          join(dir, "key.pem"),
+          "-out",
+          join(dir, "cert.pem"),
+          "-days",
+          "1",
+          "-subj",
+          "/CN=connector.example.test",
+          "-addext",
+          "subjectAltName=DNS:connector.example.test",
+        ],
+        { stdio: "ignore" },
+      );
+      const cert = await readFile(join(dir, "cert.pem"), "utf8");
+      tls.setDefaultCACertificates([...original, cert]);
+      const servernames: string[] = [];
+      const context = tls.createSecureContext({
+        key: await readFile(join(dir, "key.pem")),
+        cert,
+      });
+      secure = createHttpsServer(
+        {
+          key: await readFile(join(dir, "key.pem")),
+          cert,
+          SNICallback: (hostname, callback) => {
+            servernames.push(hostname);
+            callback(null, context);
+          },
+        },
+        (request, response) => response.end(`ok:${request.headers.host}`),
+      );
+      await new Promise<void>((done) => secure!.listen(0, "127.0.0.1", done));
+      service = new NetworkProxy({
+        resolveSystem: async () => "DIRECT",
+        setSessionProxy: async () => {},
+        resolveAddresses: async () => [{ address: "127.0.0.1", family: 4 }],
+      });
+      await service.apply({
+        mode: "custom",
+        url: proxyUrl,
+        bypass: "127.0.0.0/8",
+      });
+      expect(
+        await (
+          await fetch(`https://connector.example.test:${port(secure)}/`)
+        ).text(),
+      ).toBe(`ok:connector.example.test:${port(secure)}`);
+      await expect(
+        fetch(`https://wrong.example.test:${port(secure)}/`),
+      ).rejects.toMatchObject({
+        cause: { code: "ERR_TLS_CERT_ALTNAME_INVALID" },
+      });
+      expect(servernames).toEqual([
+        "connector.example.test",
+        "wrong.example.test",
+      ]);
+      expect(tunnels).toEqual([]);
+    } finally {
+      await service?.dispose();
+      service = undefined;
+      tls.setDefaultCACertificates(original);
+      await new Promise<void>((done) =>
+        secure ? secure.close(() => done()) : done(),
+      );
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+test("aborted requests do not open a tunnel after pending DNS completes", async () => {
+  let complete!: (addresses: LookupAddress[]) => void;
+  let started!: () => void;
+  const ready = new Promise<void>((done) => {
+    started = done;
+  });
+  service = new NetworkProxy({
+    resolveSystem: async () => "DIRECT",
+    setSessionProxy: async () => {},
+    resolveAddresses: () =>
+      new Promise((done) => {
+        complete = done;
+        started();
+      }),
+  });
+  await service.apply({ mode: "custom", url: proxyUrl, bypass: "160.0.0.0/8" });
+  const abort = new AbortController();
+  const request = fetch("http://connector.example.test/", {
+    signal: abort.signal,
+  });
+  const rejected = expect(request).rejects.toMatchObject({
+    name: "AbortError",
+  });
+  await ready;
+  abort.abort();
+  complete([]);
+  await rejected;
+  await new Promise((done) => setTimeout(done, 50));
+  expect(tunnels).toEqual([]);
+});
+
+test("pending requests follow changed settings after DNS completes", async () => {
+  let complete!: (addresses: LookupAddress[]) => void;
+  let started!: () => void;
+  const ready = new Promise<void>((done) => {
+    started = done;
+  });
+  service = new NetworkProxy({
+    resolveSystem: async () => "DIRECT",
+    setSessionProxy: async () => {},
+    resolveAddresses: () =>
+      new Promise((done) => {
+        complete = done;
+        started();
+      }),
+  });
+  await service.apply({ mode: "custom", url: proxyUrl, bypass: "127.0.0.0/8" });
+  const request = fetch(`http://connector.example.test:${port(target)}/`);
+  await ready;
+  await service.apply({ mode: "custom", url: proxyUrl });
+  complete([{ address: "127.0.0.1", family: 4 }]);
+  expect(await (await request).text()).toBe(
+    `ok:connector.example.test:${port(target)}`,
+  );
+  expect(tunnels).toEqual([`connector.example.test:${port(target)}`]);
 });
 
 test("system mode follows the operating system per request; off restores the launch environment", async () => {

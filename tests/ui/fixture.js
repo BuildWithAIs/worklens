@@ -329,7 +329,7 @@ export async function mockWorklens(page, options = {}) {
             throw Error(
               `Could not reach the network through proxy ${input.url}`,
             );
-          return { proxy: input.url };
+          return input.bypass === "*" ? {} : { proxy: input.url };
         }
         if (name === "settings") {
           if (input.backgroundIntensity && window.failNextBackgroundSave) {
