@@ -255,10 +255,14 @@ function CustomProxyDialog({
       toast.add({
         type: "success",
         timeout: 3200,
-        title: t("settings.proxyConnected"),
-        description: t("settings.proxyThrough", {
-          proxy: result.proxy ?? normalized,
-        }),
+        title: t(
+          result.proxy
+            ? "settings.proxyConnected"
+            : "settings.connectionSuccessful",
+        ),
+        description: result.proxy
+          ? t("settings.proxyThrough", { proxy: result.proxy })
+          : t("settings.proxyConnectedDirect"),
       });
     } catch (failure) {
       toast.add(
