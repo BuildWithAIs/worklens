@@ -57,12 +57,10 @@ async function fixture(page, options = {}) {
           percent: 34,
           compactAt: 183616,
           segments: [
-            { id: "system", kind: "system", tokens: 14000 },
-            { id: "turn:1", kind: "history", tokens: 12000 },
-            { id: "turn:2", kind: "history", tokens: 9000 },
-            { id: "turn:3", kind: "history", tokens: 15000 },
-            { id: "turn:4", kind: "history", tokens: 8000 },
-            { id: "turn:5", kind: "turn", tokens: 10000 },
+            { id: "system", kind: "system", tokens: 9000 },
+            { id: "tools", kind: "tools", tokens: 5000 },
+            { id: "messages", kind: "messages", tokens: 20000 },
+            { id: "toolResults", kind: "toolResults", tokens: 34000 },
           ],
         },
         cacheSavingsUsd: 0.025,
@@ -158,6 +156,8 @@ test("usage header, popover, keyboard and desktop layout", async ({
     await trigger.click();
     await expect(page.locator(".usage-popover")).toBeVisible();
     await page.mouse.move(0, 0);
+    // The open popover marks the state, so the trigger keeps no fill.
+    await expect(trigger).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(page.locator(".usage-popover")).toBeVisible();
     await expect(
       page.getByRole("progressbar", { name: "Context usage" }),
@@ -371,7 +371,7 @@ test.describe("context composition animation", () => {
       { change, sequence },
     );
 
-  test("a new turn grows in while the previous one becomes history", async ({
+  test("segments grow as the conversation adds to them", async ({
     page,
   }, info) => {
     await fixture(page);
@@ -382,10 +382,10 @@ test.describe("context composition animation", () => {
     const bar = page.getByRole("progressbar", { name: "Context usage" });
     await expect(bar).toHaveAttribute(
       "aria-valuetext",
-      /System prompt and tools 14k, Earlier turns 44k/,
+      /System prompt 9k, Tool definitions 5k, Messages 20k, Tool results 34k/,
     );
     await expect(page.locator(".usage-context .usage-legend")).toHaveText(
-      "System14kEarlier44kLatest10k",
+      "System9kTools5kMessages20kTool results34k",
     );
     await expect(bar).toHaveAttribute(
       "aria-valuetext",
@@ -398,36 +398,28 @@ test.describe("context composition animation", () => {
           tokens: 80000,
           percent: 40,
           segments: [
-            { id: "system", kind: "system", tokens: 14000 },
-            { id: "turn:1", kind: "history", tokens: 12000 },
-            { id: "turn:2", kind: "history", tokens: 9000 },
-            { id: "turn:3", kind: "history", tokens: 15000 },
-            { id: "turn:4", kind: "history", tokens: 8000 },
-            { id: "turn:5", kind: "history", tokens: 10000 },
-            { id: "turn:6", kind: "turn", tokens: 12000 },
+            { id: "system", kind: "system", tokens: 9000 },
+            { id: "tools", kind: "tools", tokens: 5000 },
+            { id: "messages", kind: "messages", tokens: 24000 },
+            { id: "toolResults", kind: "toolResults", tokens: 42000 },
           ],
         },
       },
       2,
     );
-    // The same element changes kind, so its color can transition.
-    await expect(segment(page, "turn:5")).toHaveAttribute(
-      "data-kind",
-      "history",
-    );
-    const grown = segment(page, "turn:6");
-    await expect(grown).toHaveAttribute("data-kind", "turn");
+    // The same element widens, so its growth can transition.
+    const grown = segment(page, "toolResults");
     const early = await width(grown);
     await page.waitForTimeout(700);
     const final = await width(grown);
     expect(early).toBeLessThan(final);
-    // 12k of a 200k window on a ~300px track.
-    expect(final).toBeGreaterThan(14);
+    // 42k of a 200k window on a ~300px track.
+    expect(final).toBeGreaterThan(60);
     await expect(trigger).toContainText("40%");
     await page.screenshot({ path: info.outputPath("context-grown.png") });
   });
 
-  test("compaction sweeps history into a summary and collapses the bar", async ({
+  test("compaction sweeps the conversation into a summary and collapses the bar", async ({
     page,
   }, info) => {
     await fixture(page);
@@ -440,21 +432,21 @@ test.describe("context composition animation", () => {
     await expect(bar).toHaveAttribute("data-compacting", "true");
     await expect(trigger).toContainText("Compacting…");
     await page.waitForTimeout(900);
-    // History blocks turn summary-green one after another.
+    // Conversation blocks turn summary-violet one after another.
     const summaryColor = await page
       .locator(".usage-popover")
       .evaluate((element) =>
         getComputedStyle(element).getPropertyValue("--context-summary").trim(),
       );
-    expect(summaryColor).toBe("#5c947f");
-    await expect(segment(page, "turn:3")).toHaveCSS(
+    expect(summaryColor).toBe("#45289f");
+    await expect(segment(page, "toolResults")).toHaveCSS(
       "background-color",
-      "rgb(92, 148, 127)",
+      "rgb(69, 40, 159)",
     );
-    // The latest turn is kept by compaction, so it keeps its own color.
-    await expect(segment(page, "turn:5")).toHaveCSS(
+    // The system prompt is not summarized, so it keeps its own color.
+    await expect(segment(page, "system")).toHaveCSS(
       "background-color",
-      "rgb(100, 133, 196)",
+      "rgb(113, 113, 122)",
     );
     await page.screenshot({ path: info.outputPath("context-compacting.png") });
 
@@ -468,20 +460,21 @@ test.describe("context composition animation", () => {
           tokens: undefined,
           percent: undefined,
           segments: [
-            { id: "system", kind: "system", tokens: 14000 },
-            { id: "summary:9", kind: "summary", tokens: 3000 },
+            { id: "system", kind: "system", tokens: 9000 },
+            { id: "tools", kind: "tools", tokens: 5000 },
+            { id: "summary", kind: "summary", tokens: 3000 },
           ],
         },
       },
       3,
     );
     await expect(bar).not.toHaveAttribute("data-compacting", "true");
-    await expect(segment(page, "turn:3")).toHaveAttribute(
+    await expect(segment(page, "toolResults")).toHaveAttribute(
       "data-exiting",
       "true",
     );
-    await expect(segment(page, "turn:3")).toHaveCount(0);
-    await expect(segment(page, "summary:9")).toHaveAttribute(
+    await expect(segment(page, "toolResults")).toHaveCount(0);
+    await expect(segment(page, "summary")).toHaveAttribute(
       "data-kind",
       "summary",
     );
@@ -504,8 +497,8 @@ test.describe("context composition animation", () => {
           percent: 85,
           segments: [
             { id: "system", kind: "system", tokens: 14000 },
-            { id: "turn:1", kind: "history", tokens: 140000 },
-            { id: "turn:2", kind: "turn", tokens: 16000 },
+            { id: "messages", kind: "messages", tokens: 16000 },
+            { id: "toolResults", kind: "toolResults", tokens: 140000 },
           ],
         },
       },
@@ -549,13 +542,13 @@ test("reduced motion shows the final state without exit delays", async ({
     const view = window.usageView;
     view.usage.context.segments = [
       { id: "system", kind: "system", tokens: 14000 },
-      { id: "summary:9", kind: "summary", tokens: 3000 },
+      { id: "summary", kind: "summary", tokens: 3000 },
     ];
     window.usageEmit(2, 3860000, 2);
   });
   await expect(page.locator(".usage-popover [data-exiting]")).toHaveCount(0);
   await expect(
-    page.locator('.usage-popover [data-segment="turn:3"]'),
+    page.locator('.usage-popover [data-segment="toolResults"]'),
   ).toHaveCount(0);
 });
 
@@ -610,11 +603,10 @@ test("context and usage share one bar style and highlight on hover", async ({
   await expect(overview.locator('[data-segment="system"]')).not.toHaveAttribute(
     "data-dim",
   );
-  await expect(overview.locator('[data-segment="turn:5"]')).toHaveAttribute(
-    "data-dim",
-    "true",
-  );
-  await expect(overview.locator('[data-legend="history"]')).toHaveAttribute(
+  await expect(
+    overview.locator('[data-segment="toolResults"]'),
+  ).toHaveAttribute("data-dim", "true");
+  await expect(overview.locator('[data-legend="toolResults"]')).toHaveAttribute(
     "data-dim",
     "true",
   );
@@ -770,7 +762,7 @@ for (const zh of [false, true]) {
             view.usage.run.state = "cancelled";
             view.usage.run.status = "partial";
             view.usage.conversation.reasoning = 3500;
-            view.usage.context.segments.push({
+            view.usage.context.segments.splice(2, 0, {
               id: "summary",
               kind: "summary",
               tokens: 2000,
@@ -824,7 +816,7 @@ for (const dark of [false, true]) {
           Object.assign(window.usageView.usage.context, {
             tokens: percent * 2000,
             segments: [
-              { id: "empty", kind: "history", tokens: 0 },
+              { id: "empty", kind: "messages", tokens: 0 },
               { id: "system", kind: "system", tokens: percent * 2000 },
             ],
           });
@@ -880,6 +872,8 @@ test("the usage button opens the popover on the first click", async ({
     await fixture(page);
     await page.locator(".usage-trigger").click();
     await expect(page.locator(".usage-popover")).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Usage", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "Usage", exact: true }),
+    ).toBeVisible();
   }
 });

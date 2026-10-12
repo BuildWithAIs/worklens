@@ -107,14 +107,8 @@ export function UsagePopover({
     contextKnown && nonNegative(shownPercent)
       ? `${approximate}${shownPercent.toFixed(1).replace(/\.0$/, "")}%`
       : "—";
-  const kinds = (["system", "summary", "history", "turn"] as const).flatMap(
-    (kind) => {
-      const tokens = (context?.segments ?? [])
-        .filter((segment) => segment.kind === kind)
-        .reduce((sum, segment) => sum + segment.tokens, 0);
-      return tokens > 0 ? [{ kind, tokens }] : [];
-    },
-  );
+  // One segment per kind, already in prompt order and without empty kinds.
+  const kinds = context?.segments ?? [];
   const cacheInput =
     nonNegative(conversation?.input) &&
     nonNegative(conversation?.cacheRead) &&
