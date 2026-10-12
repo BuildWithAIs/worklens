@@ -277,16 +277,37 @@ test("short messages load without waiting one frame per turn and restore typing 
   page,
 }, info) => {
   await setup(page, 300, true);
-  const startedAt = await page.evaluate(() => performance.now());
+  // Time the load inside the page. Measuring around Playwright calls adds
+  // round trips and assertion polling (about 0.9s) that are not load time.
+  await page.evaluate(() => {
+    document.addEventListener(
+      "click",
+      () => {
+        const start = performance.now();
+        const frame = () => {
+          if (
+            document
+              .querySelector('[data-slot="chat-title"]')
+              ?.getAttribute("aria-label") === "History 1" &&
+            document
+              .querySelector(".aui-thread-root")
+              ?.getAttribute("aria-busy") === "false"
+          )
+            (window as any).historyLoadMs = performance.now() - start;
+          else requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      },
+      { capture: true, once: true },
+    );
+  });
   await page.getByRole("button", { name: "History 1", exact: true }).click();
-  await expect(page.locator(".aui-thread-root")).toHaveAttribute(
-    "aria-busy",
-    "false",
-  );
-  const elapsedMs = await page.evaluate(
-    (start) => performance.now() - start,
-    startedAt,
-  );
+  // A slow load reports its duration below instead of timing out here.
+  const elapsedMs = (await (
+    await page.waitForFunction(() => (window as any).historyLoadMs, null, {
+      timeout: 15000,
+    })
+  ).jsonValue()) as number;
   expect(elapsedMs).toBeLessThan(2000);
   await expect(
     page.locator('[data-slot="aui_assistant-message-root"]'),
