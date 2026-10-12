@@ -865,21 +865,21 @@ test("switching tabs hides the old panel and help control immediately", async ({
     page.getByRole("button", { name: "About total usage" }),
   ).toBeVisible();
   await page.getByRole("tab", { name: "Context", exact: true }).click();
-  // Inspect the first committed inactive state, before a 150ms fade could end.
-  const hidden = await page.locator(".usage-total button").evaluate((el) => {
-    const panel = el.closest('[role="tabpanel"]');
-    const style = getComputedStyle(el);
-    return {
-      inert: panel.inert,
-      visibility: style.visibility,
-      transition: style.transitionDuration,
-    };
-  });
-  expect(hidden).toEqual({
-    inert: true,
-    visibility: "hidden",
-    transition: "0s",
-  });
-  await page.keyboard.press("Tab");
-  await expect(page.locator(".usage-total button")).not.toBeFocused();
+  // The previous panel may stay mounted for one exit frame, but it is never
+  // shown, so the help control cannot linger, overlap or take focus.
+  expect(await page.locator(".usage-total button").isVisible()).toBe(false);
+  await expect(page.locator(".usage-total button")).toHaveCount(0);
+  await expect(page.getByRole("tabpanel")).toHaveCount(1);
+});
+
+test("the usage button opens the popover on the first click", async ({
+  page,
+}) => {
+  // Mounting the inactive panel once made a first click close it again.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await fixture(page);
+    await page.locator(".usage-trigger").click();
+    await expect(page.locator(".usage-popover")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Usage", exact: true })).toBeVisible();
+  }
 });

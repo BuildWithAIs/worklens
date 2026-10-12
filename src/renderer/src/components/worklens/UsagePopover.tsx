@@ -47,15 +47,6 @@ export function UsagePopover({
   const { t, language } = useAppTranslation();
   // Hovering a segment or legend entry highlights that category.
   const [highlighted, setHighlighted] = useState<string>();
-  // Both panels stay mounted in one grid cell so the tabs share a height.
-  // The inactive one keeps its space (and inert) instead of Tailwind's
-  // display: none for [hidden].
-  const inactivePanel = ({
-    hidden,
-    ...props
-  }: React.HTMLAttributes<HTMLDivElement>) => (
-    <div {...props} data-inactive={hidden || undefined} />
-  );
   const run = usage?.run;
   const conversation = usage?.conversation;
   const context = usage?.context;
@@ -215,12 +206,7 @@ export function UsagePopover({
               </Tabs.List>
             </div>
             {/* Context: what fills the window now and when it compacts. */}
-            <Tabs.Panel
-              value="context"
-              className="usage-tab-panel"
-              keepMounted
-              render={inactivePanel}
-            >
+            <Tabs.Panel value="context" className="usage-tab-panel">
               <div className="usage-context" data-known={contextKnown}>
                 {/* The tab names the subject, so the share of the window leads. */}
                 <div className="usage-context-labels">
@@ -287,12 +273,7 @@ export function UsagePopover({
             </Tabs.Panel>
             {/* Spend: what was used, what it cost and where it went; each row
                 names its own scope. */}
-            <Tabs.Panel
-              value="usage"
-              className="usage-tab-panel"
-              keepMounted
-              render={inactivePanel}
-            >
+            <Tabs.Panel value="usage" className="usage-tab-panel">
               <div className="usage-breakdown">
                 {/* Mirrors the context tab: headline value, its composition,
                     then details. Each line names its own scope. */}

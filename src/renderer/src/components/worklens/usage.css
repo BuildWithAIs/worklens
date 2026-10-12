@@ -75,19 +75,20 @@
   --usage-cache: #536f9f;
   --usage-write: #75628e;
 }
-/* Both panels share one grid cell, so the popover is as tall as the taller
-   tab and switching tabs never changes its height. */
+/* The tabs library keeps the previous panel mounted for one exit frame;
+   hide it at once so old content never overlaps or lingers. */
+.usage-tab-panel[data-ending-style] {
+  display: none;
+}
+/* Only the active panel renders. It fills the popover's minimum height, so
+   both tabs open at the same size and their footers line up at the bottom. */
 .usage-tabs {
-  display: grid;
+  display: flex;
   flex: 1;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  flex-direction: column;
   min-height: 0;
   /* Popover padding and border. */
   max-height: calc(var(--usage-max-height) - 34px);
-}
-.usage-tab-panel {
-  grid-area: 2 / 1;
 }
 /* The tabs head the popover as one full-width segmented control; its own
    track separates it from the content, so no divider is needed. */
@@ -130,16 +131,6 @@
   min-height: 0;
   overflow: auto;
   padding-top: 16px;
-}
-/* The inactive panel keeps its space but is not shown or reachable.
-   Controls inside must not fade out over a transition, or they linger. */
-.usage-tab-panel[data-inactive],
-.usage-tab-panel[inert] {
-  visibility: hidden;
-}
-.usage-tab-panel[data-inactive] *,
-.usage-tab-panel[inert] * {
-  transition: none;
 }
 .usage-popover p {
   margin: 0;
