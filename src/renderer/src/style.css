@@ -69,9 +69,9 @@
     0 20px 64px -24px #20283814, inset 0 1px 0 #ffffff;
 }
 :root[data-theme="dark"] {
-  --bg: #181818;
+  --bg: #1c1c1e;
   --sidebar: #111113;
-  --surface: #18181b;
+  --surface: #1c1c1f;
   --text: #fafafa;
   --muted: #d4d4d8;
   --accent: #fafafa;
