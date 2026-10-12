@@ -106,11 +106,12 @@
 }
 /* On the lifted fill the edge is a faint highlight and a deeper shadow
    carries the depth; hover fills and borders step up to stay visible on it. Zero
-   specificity still beats layered utilities but yields to component CSS. */
+   specificity still beats layered utilities but yields to component CSS.
+   The full-window settings page is a dialog too, but not a floating one. */
 :where(:root[data-theme="dark"])
   :where(
     [data-slot="popover-content"],
-    [data-slot="dialog-content"],
+    [data-slot="dialog-content"]:not(.settings-shell-dialog),
     [data-slot="dropdown-menu-content"],
     [data-slot="dropdown-menu-sub-content"],
     [data-slot="context-menu-content"],
@@ -123,7 +124,7 @@
 :where(:root[data-theme="dark"])
   :where(
     [data-slot="popover-content"],
-    [data-slot="dialog-content"],
+    [data-slot="dialog-content"]:not(.settings-shell-dialog),
     [data-slot="dropdown-menu-content"],
     [data-slot="dropdown-menu-sub-content"],
     [data-slot="context-menu-content"],
