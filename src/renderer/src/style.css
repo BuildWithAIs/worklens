@@ -9,7 +9,7 @@
   --color-foreground: var(--text);
   --color-card: var(--surface);
   --color-card-foreground: var(--text);
-  --color-popover: var(--surface);
+  --color-popover: var(--elevated);
   --color-popover-foreground: var(--text);
   --color-primary: var(--accent);
   --color-primary-foreground: var(--accent-text);
@@ -58,6 +58,8 @@
   --user-message-bg: #eee6ff;
   --user-message-text: #352455;
   --shadow: #18181b14;
+  /* Floating surfaces: popovers, menus, dialogs and toasts. */
+  --elevated: #ffffff;
   --glass-edge: #ffffffb3;
   --panel-edge: #2028380a;
   --panel-shadow: -8px 0 28px -16px #26354a24;
@@ -98,6 +100,39 @@
   --native-sidebar-tint: #20202099;
   --composer-shadow: 0 -3px 10px -5px #00000066, 0 2px 5px #00000014, 0 8px 28px -10px #00000066,
     0 20px 64px -24px #00000080, inset 0 1px 0 #ffffff06;
+  /* A shadow barely shows on a dark page, so floating surfaces are lifted
+     by a lighter fill instead of an outline. */
+  --elevated: #222226;
+}
+/* On the lifted fill the edge is a faint highlight and a deeper shadow
+   carries the depth; hover fills and borders step up to stay visible on it. Zero
+   specificity still beats layered utilities but yields to component CSS. */
+:where(:root[data-theme="dark"])
+  :where(
+    [data-slot="popover-content"],
+    [data-slot="dialog-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
+    [data-slot="context-menu-content"],
+    [data-slot="toast"]
+  ) {
+  border-color: transparent;
+  --tw-ring-color: #ffffff0f;
+  --tw-shadow: 0 16px 40px -12px #000000a6, 0 4px 12px -4px #00000066;
+}
+:where(:root[data-theme="dark"])
+  :where(
+    [data-slot="popover-content"],
+    [data-slot="dialog-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
+    [data-slot="context-menu-content"],
+    [data-slot="toast"],
+    .usage-popover
+  ) {
+  --soft: #2e2e33;
+  --hover: #2e2e33;
+  --border: #36363c;
 }
 * {
   box-sizing: border-box;
