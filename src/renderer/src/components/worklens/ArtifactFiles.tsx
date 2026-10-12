@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import { useAppTranslation } from "@/i18n";
 export function ArtifactFiles({ result }: { result: unknown }) {
   const { t } = useAppTranslation();
@@ -27,7 +28,12 @@ export function ArtifactFiles({ result }: { result: unknown }) {
     setBusy(true);
     setError("");
     try {
-      await window.worklens.invoke("artifact", { id, action });
+      const result = await window.worklens.invoke("artifact", { id, action });
+      if (result?.revealed)
+        toast.add({
+          type: "warning",
+          title: t("localFiles.executableRevealed"),
+        });
     } catch (e) {
       setError(String(e));
     } finally {

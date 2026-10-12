@@ -1,5 +1,3 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   app,
   BrowserWindow,
@@ -23,10 +21,10 @@ import {
 } from "./storage";
 import { AgentService } from "./agent-service";
 import { ProviderService } from "./providers";
-import { discoverModels, selectModels } from "./model-selection";
 import { schemas, externalUrl } from "./validation";
-import { toolNames } from "./resources";
-import type { Requests } from "../shared/contracts";
+import { binaryRequests, requestHandlers } from "./ipc";
+import type { ChatEvent, Requests } from "../shared/contracts";
+import { ChatUpdates } from "./chat-updates";
 import { createConnectors } from "./connectors";
 import { isConnectorRequest } from "./connectors/ipc";
 import { LocalArtifacts } from "./local-artifacts";
@@ -56,11 +54,12 @@ const paths = {
   skills: join(root, "skills"),
 };
 let window: BrowserWindow | undefined;
+// Exported for Electron acceptance tests, which register local model fixtures.
 export let agents: AgentService | undefined;
 let providers: ProviderService | undefined;
 let mcp: McpService | undefined;
-let proxy: NetworkProxy | undefined;
 let quitting = false;
+const chatUpdates = new ChatUpdates();
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", () => {
@@ -89,13 +88,13 @@ else {
       // operating system's settings, whatever WorkLens is configured to use.
       const proxyProbe = session.fromPartition("worklens-proxy-probe");
       await proxyProbe.setProxy({ mode: "system" });
-      proxy = new NetworkProxy({
+      const proxy = new NetworkProxy({
         resolveSystem: (url) => proxyProbe.resolveProxy(url),
         setSessionProxy: (config) => session.defaultSession.setProxy(config),
         readShellProxy,
       });
       await proxy.apply(state.value.proxy);
-      mcp = new McpService(
+      const mcpService = new McpService(
         join(paths.userData, "pi"),
         safeStorage,
         (event) => {
@@ -104,7 +103,8 @@ else {
         },
         (url) => shell.openExternal(externalUrl(url)),
       );
-      mcp.initialize();
+      mcp = mcpService;
+      mcpService.initialize();
       const bundledSkills = app.isPackaged
         ? join(process.resourcesPath, "skills")
         : join(app.getAppPath(), "resources/skills");
@@ -132,7 +132,7 @@ else {
       );
       await connectors.registry.initialize();
       const redact = (text: string) =>
-        credentials.redact(connectors.registry.redact(mcp!.redact(text)));
+        credentials.redact(connectors.registry.redact(mcpService.redact(text)));
       const runtime = await ModelRuntime.create({
         credentials,
         modelsPath: null,
@@ -144,25 +144,50 @@ else {
         if (window && !window.isDestroyed())
           window.webContents.send(channel, event);
       };
-      agents = new AgentService(
+      const sendChat = (event: ChatEvent) => {
+        if (window && !window.isDestroyed())
+          window.webContents.send("worklens:chat", chatUpdates.encode(event));
+      };
+      const agentService = new AgentService(
         runtime,
         paths,
-        (event) => broadcast("worklens:chat", event),
+        sendChat,
         redact,
         connectors.registry,
         skills,
         artifacts,
         connectors.jevConsent,
-        mcp,
+        mcpService,
         () => state.value.codemodeEnabled !== false,
       );
-      await agents.initialize();
-      providers = new ProviderService(
+      agents = agentService;
+      await agentService.initialize();
+      if (state.recoveredFrom)
+        agentService.diagnostics.push(
+          `应用设置文件无法读取，已改用默认设置。原文件已保留在 ${state.recoveredFrom}。`,
+        );
+      const providerService = new ProviderService(
         runtime,
         credentials,
         (event) => broadcast("worklens:auth", event),
         installationId(join(paths.userData, "installation-id")),
       );
+      providers = providerService;
+      const handlers = requestHandlers({
+        paths,
+        version: app.getVersion(),
+        window: () => window,
+        redact,
+        state,
+        proxy,
+        mcp: mcpService,
+        agents: agentService,
+        providers: providerService,
+        skills,
+        artifacts,
+        connectors,
+        runtime,
+      });
       ipcMain.handle(
         "worklens:request",
         async (event, method: keyof Requests, raw: unknown) => {
@@ -174,253 +199,17 @@ else {
             )
               throw new Error("不受信任的调用来源");
             if (!Object.hasOwn(schemas, method)) throw new Error("未知请求");
-            const input = schemas[method].parse(raw) as any;
-            let value: unknown;
-            if (isConnectorRequest(method)) {
-              value = await connectors.requests(method, input);
-            } else
-              switch (method) {
-                case "mcpSave":
-                  value = mcp!.save(input.config);
-                  break;
-                case "mcpTest":
-                  value = await mcp!.test(input.name, paths.runtime, runtime);
-                  break;
-                case "mcpLogin":
-                  await mcp!.login(input.name, input.loginId);
-                  break;
-                case "mcpLogout":
-                  value = await mcp!.logout(input.name);
-                  break;
-                case "jevConsentReply":
-                  value = await agents!.replyJevConsent(
-                    input.conversationId,
-                    input.requestId,
-                    input.allow,
-                    input.autoAllow,
-                  );
-                  break;
-                case "jevConsentReset":
-                  value = await agents!.resetJevConsent(
-                    input.conversationId,
-                    input.blocked,
-                  );
-                  break;
-                case "artifact": {
-                  const artifact = await artifacts.get(input.id);
-                  if (input.action === "show")
-                    shell.showItemInFolder(artifact.path);
-                  else if (input.action === "open") {
-                    const error = await shell.openPath(artifact.path);
-                    if (error) throw new Error(error);
-                  } else {
-                    const chosen = await dialog.showSaveDialog(window!, {
-                      defaultPath: artifact.path,
-                      properties: [
-                        "showOverwriteConfirmation",
-                        "createDirectory",
-                      ],
-                    });
-                    if (!chosen.canceled && chosen.filePath)
-                      await artifacts.copy(artifact.id, chosen.filePath);
-                  }
-                  break;
-                }
-                case "bootstrap": {
-                  const catalog = await providers!.list();
-                  await state.update((current) =>
-                    discoverModels(current, catalog),
-                  );
-                  value = {
-                    settings: state.value,
-                    mcp: mcp!.snapshot(),
-                    ...connectors.bootstrap(),
-                    providers: catalog,
-                    conversations: await agents!.list(),
-                    globalUsage: agents!.getGlobalUsage(),
-                    paths,
-                    version: app.getVersion(),
-                    tools: [
-                      ...toolNames,
-                      ...connectors.registry.names(),
-                      "tool_search",
-                      ...(state.value.codemodeEnabled !== false
-                        ? ["codemode"]
-                        : []),
-                    ],
-                    diagnostics: agents!.diagnostics,
-                    recoveries: agents!.recoveries,
-                  };
-                  break;
-                }
-                case "modelSelection":
-                  value = await state.update((current) =>
-                    selectModels(current, input),
-                  );
-                  break;
-                case "settings":
-                  value = await state.update(input);
-                  nativeTheme.themeSource = state.value.theme;
-                  if (input.proxy) await proxy!.apply(state.value.proxy);
-                  break;
-                case "proxyDetect":
-                  value = await proxy!.detect(input.shell);
-                  break;
-                case "proxyTest":
-                  value = await proxy!.test(input);
-                  break;
-                case "providers":
-                  value = await providers!.list();
-                  break;
-                case "login":
-                  await providers!.login(
-                    input.provider,
-                    input.type,
-                    input.loginId,
-                  );
-                  break;
-                case "authReply":
-                  providers!.reply(input.loginId, input.promptId, input.value);
-                  break;
-                case "authCancel":
-                  providers!.cancel(input.loginId);
-                  mcp!.cancel(input.loginId);
-                  break;
-                case "logout":
-                  await providers!.logout(input.provider);
-                  break;
-                case "azure":
-                  await providers!.azure(input);
-                  break;
-                case "test":
-                  value = await providers!.test(input);
-                  break;
-                case "clearConnection":
-                  providers!.clearConnection(input.provider);
-                  break;
-                case "conversationFile": {
-                  const file = await agents!.conversationFile(
-                    input.id,
-                    input.path,
-                    input.action === "preview",
-                  );
-                  if (!file.issue) {
-                    if (input.action === "reveal")
-                      shell.showItemInFolder(file.path);
-                    if (input.action === "open") {
-                      const error = await shell.openPath(file.path);
-                      if (error) throw new Error(error);
-                    }
-                    if (input.action === "chrome") {
-                      if (process.platform !== "darwin" || file.kind !== "html")
-                        throw new Error("Chrome opening is unavailable");
-                      await promisify(execFile)("/usr/bin/open", [
-                        "-a",
-                        "Google Chrome",
-                        file.path,
-                      ]);
-                    }
-                  }
-                  value = file;
-                  break;
-                }
-                case "htmlFileAction": {
-                  const file = await agents!.htmlActionFile(input.id, {
-                    path: input.path,
-                    code: input.code,
-                  });
-                  if (input.action === "reveal") shell.showItemInFolder(file);
-                  else {
-                    if (process.platform !== "darwin")
-                      throw new Error(
-                        "Chrome opening is currently supported on macOS only",
-                      );
-                    await promisify(execFile)("/usr/bin/open", [
-                      "-a",
-                      "Google Chrome",
-                      file,
-                    ]);
-                  }
-                  break;
-                }
-                case "previewHtml":
-                  value = await agents!.previewHtml(input.id, input.path);
-                  break;
-                case "open":
-                  value = await agents!.open(input.id);
-                  await state.update({ lastConversation: input.id });
-                  break;
-                case "rename":
-                  await agents!.rename(input.id, input.title);
-                  break;
-                case "delete":
-                  await agents!.delete(input.id);
-                  break;
-                case "send":
-                  value = await agents!.send(input);
-                  break;
-                case "editMessage":
-                  value = await agents!.editMessage(input);
-                  break;
-                case "selectMessageVersion":
-                  value = await agents!.selectMessageVersion(input);
-                  break;
-                case "recoverMessageEdit":
-                  value = await agents!.recoverMessageEdit(input);
-                  break;
-                case "chatImage":
-                  value = await agents!.chatImage(input);
-                  break;
-                case "prepareChatImage":
-                  value = await agents!.prepareChatImage(input);
-                  break;
-                case "recoveryImages":
-                  value = (await agents!.recoveryImages(input.runId)).map(
-                    (image) => ({ ...image, name: redact(image.name) }),
-                  );
-                  break;
-                case "cancel":
-                  await agents!.cancel(input.conversationId, input.runId);
-                  break;
-                case "model":
-                  value = await agents!.setModel(input.id, input.selection);
-                  break;
-                case "external":
-                  await shell.openExternal(externalUrl(input.url));
-                  break;
-                case "showPath":
-                  await shell.openPath(
-                    paths[input.which as keyof typeof paths],
-                  );
-                  break;
-                case "dismissRecovery":
-                  await agents!.dismissRecovery(input.runId);
-                  break;
-                case "refreshModels":
-                  value = await providers!.refreshModels(input.provider);
-                  break;
-                case "skillsList":
-                  value = await skills.refresh(false);
-                  break;
-                case "skillsRefresh":
-                  value = await skills.refresh();
-                  break;
-                case "skillsToggle":
-                  value = await skills.setEnabled(input.id, input.enabled);
-                  break;
-                case "skillsReveal":
-                  shell.showItemInFolder(skills.pathOf(input.id));
-                  break;
-              }
+            const input = schemas[method].parse(raw) as never;
+            const value = isConnectorRequest(method)
+              ? await connectors.requests(method, input)
+              : await (
+                  handlers[method] as (input: unknown) => Promise<unknown>
+                )(input);
             return {
               ok: true,
-              // Image bytes are opaque binary payloads. Text redaction would corrupt them.
-              value:
-                method === "chatImage" ||
-                method === "recoveryImages" ||
-                method === "prepareChatImage"
-                  ? value
-                  : redactStrings(value, redact),
+              value: binaryRequests.has(method)
+                ? value
+                : redactStrings(value, redact),
             };
           } catch (error) {
             return {
@@ -468,6 +257,8 @@ else {
         // Keep web UI geometry aligned with the unscaled native window controls.
         const contents = window.webContents;
         contents.on("dom-ready", () => contents.setZoomFactor(1));
+        // A reloaded renderer has no messages to apply incremental updates to.
+        contents.on("did-start-loading", () => chatUpdates.reset());
         contents.on("zoom-changed", () => contents.setZoomFactor(1));
         contents.on("before-input-event", (event, input) => {
           const modifier =
@@ -558,9 +349,15 @@ else {
       });
     })
     .catch((error) => {
+      // The renderer is not available yet, so follow the system language.
+      const chinese = app.getLocale().startsWith("zh");
       dialog.showErrorBox(
-        "WorkLens 无法启动",
-        error instanceof Error ? error.message : "初始化失败",
+        chinese ? "WorkLens 无法启动" : "WorkLens couldn’t start",
+        error instanceof Error
+          ? error.message
+          : chinese
+            ? "初始化失败"
+            : "Initialization failed.",
       );
       app.quit();
     });

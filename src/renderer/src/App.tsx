@@ -23,7 +23,9 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import {
+  lazy,
   startTransition,
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -40,10 +42,7 @@ import {
   PinOff,
   LoaderCircle,
 } from "lucide-react";
-import {
-  SettingsPage,
-  type SettingsSection,
-} from "@/components/worklens/SettingsPage";
+import type { SettingsSection } from "@/components/worklens/SettingsPage";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { systemText } from "@/lib/system-text";
@@ -64,6 +63,12 @@ import type {
 
 const api = window.worklens;
 const isMac = /Mac/i.test(navigator.platform);
+const retainedViews = 8;
+// Settings load separately from the chat; idle time preloads them.
+const loadSettingsPage = () => import("@/components/worklens/SettingsPage");
+const SettingsPage = lazy(() =>
+  loadSettingsPage().then((module) => ({ default: module.SettingsPage })),
+);
 const active = (phase?: Phase) =>
   !!phase &&
   ["generating", "tool", "compacting", "retrying", "stopping"].includes(phase);
@@ -96,7 +101,13 @@ export function App() {
   }, [sidebarCollapsed]);
   const [data, setData] = useState<Bootstrap>();
   const [views, setViews] = useState<Record<string, ConversationView>>({});
+  // Incremental chat events are applied to the latest views synchronously.
+  const viewsRef = useRef<Record<string, ConversationView>>({});
   const [current, setCurrent] = useState<string>();
+  const currentRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
   const [readyConversation, setReadyConversation] = useState<string>();
   const [historyStartedAt, setHistoryStartedAt] = useState<number>();
   const [historyLoad, setHistoryLoad] = useState<{
@@ -232,7 +243,15 @@ export function App() {
         (view.revision ?? 0)
     )
       return;
-    setViews((previous) => ({ ...previous, [view.id]: view }));
+    // Keep recent, running and current conversations; others reload on open.
+    const next = { ...viewsRef.current };
+    delete next[view.id];
+    next[view.id] = view;
+    const ids = Object.keys(next);
+    for (const id of ids.slice(0, -retainedViews))
+      if (id !== currentRef.current && !active(next[id].phase)) delete next[id];
+    viewsRef.current = next;
+    setViews(next);
     setData((previous) =>
       previous
         ? {
@@ -258,6 +277,30 @@ export function App() {
         }
       })
       .catch((error) => setError(String(error)));
+    // Missed the base of an incremental event: read the full view once. Its
+    // revision is the sequence the following incremental events build on.
+    const resyncing = new Set<string>();
+    const resync = (id: string, key: string) => {
+      if (resyncing.has(key)) return;
+      resyncing.add(key);
+      void api
+        .invoke("view", { id })
+        .then((view) => {
+          if (!alive) return;
+          // A newer complete event (such as run_end) makes this view stale.
+          if (
+            view.runId &&
+            `${id}/${view.runId}` === key &&
+            (view.revision ?? 0) > (sequences.current.get(key) ?? 0)
+          )
+            sequences.current.set(key, view.revision!);
+          acceptView(view);
+        })
+        .catch(() => {
+          /* The run's final event carries the complete view. */
+        })
+        .finally(() => resyncing.delete(key));
+    };
     const unsubscribe = api.onChat((event) => {
       // Global revisions belong to the whole app, independently of run sequences.
       globalUsage.current = newerGlobalUsage(
@@ -274,8 +317,27 @@ export function App() {
       latestRuns.current.set(event.conversationId, event.runId);
       const key = `${event.conversationId}/${event.runId}`;
       if ((sequences.current.get(key) ?? 0) >= event.sequence) return;
+      let view = event.view;
+      if (event.messagesFrom !== undefined) {
+        const previous = viewsRef.current[event.conversationId];
+        if (
+          sequences.current.get(key) !== event.baseSequence ||
+          !previous ||
+          previous.messages.length < event.messagesFrom
+        ) {
+          resync(event.conversationId, key);
+          return;
+        }
+        view = {
+          ...view,
+          messages: [
+            ...previous.messages.slice(0, event.messagesFrom),
+            ...view.messages,
+          ],
+        };
+      }
       sequences.current.set(key, event.sequence);
-      acceptView(event.view);
+      acceptView(view);
       if (
         event.type === "run_end" &&
         event.view.phase === "completed" &&
@@ -292,6 +354,10 @@ export function App() {
       unsubscribe();
     };
   }, [refresh, acceptView]);
+  useEffect(() => {
+    const idle = requestIdleCallback(() => void loadSettingsPage());
+    return () => cancelIdleCallback(idle);
+  }, []);
   useEffect(() => {
     const preference = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () =>
@@ -372,11 +438,10 @@ export function App() {
             }
           : previous,
       );
-      setViews((previous) => {
-        const next = { ...previous };
-        delete next[id];
-        return next;
-      });
+      const remaining = { ...viewsRef.current };
+      delete remaining[id];
+      viewsRef.current = remaining;
+      setViews(remaining);
       setUnread((previous) => {
         const next = new Set(previous);
         next.delete(id);
@@ -895,20 +960,24 @@ export function App() {
         >
           <DialogTitle className="sr-only">{t("app.settings")}</DialogTitle>
           {page === "settings" && (
-            <SettingsPage
-              data={data}
-              conversation={currentView}
-              onConsentChange={acceptView}
-              initialSection={settingsSection}
-              save={settings}
-              onMcpChange={(mcp) =>
-                setData((current) => (current ? { ...current, mcp } : current))
-              }
-              refresh={refresh}
-              onBack={() => setPage("chat")}
-              onError={notifyError}
-              onSuccess={notifySuccess}
-            />
+            <Suspense fallback={null}>
+              <SettingsPage
+                data={data}
+                conversation={currentView}
+                onConsentChange={acceptView}
+                initialSection={settingsSection}
+                save={settings}
+                onMcpChange={(mcp) =>
+                  setData((current) =>
+                    current ? { ...current, mcp } : current,
+                  )
+                }
+                refresh={refresh}
+                onBack={() => setPage("chat")}
+                onError={notifyError}
+                onSuccess={notifySuccess}
+              />
+            </Suspense>
           )}
         </DialogContent>
       </Dialog>

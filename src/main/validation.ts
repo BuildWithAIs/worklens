@@ -188,6 +188,7 @@ export const schemas = {
   test: selection,
   clearConnection: z.object({ provider: z.string().min(1).max(200) }).strict(),
   open: z.object({ id }).strict(),
+  view: z.object({ id }).strict(),
   rename: z.object({ id, title: z.string().trim().min(1).max(120) }).strict(),
   delete: z.object({ id }).strict(),
   send: z
