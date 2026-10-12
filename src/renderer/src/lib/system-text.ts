@@ -127,6 +127,46 @@ const messages = [
   ],
   ["已连接：", "Connected: ", "connectors.runtime.connectedPrefix"],
   [
+    "请输入 GitHub 站点根地址，不包含仓库路径、凭据、查询参数或片段",
+    "Enter the GitHub site root address without a repository path, credentials, query parameters or a fragment.",
+    "connectors.runtime.githubSiteRoot",
+  ],
+  [
+    "Tavily 未返回有效的账号信息",
+    "Tavily did not return valid account details.",
+    "connectors.runtime.tavilyAccountMissing",
+  ],
+  [
+    "未找到该技能，请刷新列表",
+    "Skill not found. Refresh the list.",
+    "skills.notFound",
+  ],
+  [
+    "同名技能已由其他来源提供，请修改生效版本的开关",
+    "Another source provides a skill with this name. Change the switch on the version in use.",
+    "skills.shadowedToggle",
+  ],
+  [
+    "用量更新暂时失败，将在本轮结束时重新核对。",
+    "Couldn’t update usage. It will be checked again when this response ends.",
+    "system.usageUpdateDelayed",
+  ],
+  [
+    "会话分支恢复未能写入磁盘，已保留原记录和编辑草稿。",
+    "Couldn’t save the restored conversation branch. The original messages and edit draft were kept.",
+    "system.branchRestoreUnsaved",
+  ],
+  [
+    "本轮用量归档未完成，已保留恢复记录。",
+    "Couldn’t finish recording usage for this response. The recovery record was kept.",
+    "system.usageArchiveIncomplete",
+  ],
+  [
+    "会话状态更新未完成，已保留恢复记录。",
+    "Couldn’t finish updating the conversation. The recovery record was kept.",
+    "system.stateUpdateIncomplete",
+  ],
+  [
     "运行期间不能切换模型",
     "Can’t switch models while responding.",
     "system.cantSwitchModels",
@@ -337,12 +377,30 @@ export function systemText(text: string, language: AppLanguage) {
         t("connectors.runtime.credentialsUnreadable", { service }),
     )
     .replace(
-      /请先在设置 → 连接中保存并验证 (Jira|Confluence|GitHub|Tavily) 连接/g,
+      /请先在设置 → 连接中保存并验证 (Jira|Confluence|GitHub|Tavily|Jev) 连接/g,
       (_, service) => t("connectors.runtime.connectFirst", { service }),
     )
     .replace(
       /(Jira|Confluence|GitHub|Tavily) 连接已变更，请重新读取目标/g,
       (_, service) => t("connectors.runtime.changed", { service }),
+    )
+    .replace(/(Jira|Confluence|GitHub|Tavily|Jev) 连接已变更/g, (_, service) =>
+      t("connectors.runtime.changedOnly", { service }),
+    )
+    .replace(/(Jira|Confluence|GitHub|Tavily|Jev) 连接已断开/g, (_, service) =>
+      t("connectors.runtime.disconnected", { service }),
+    )
+    .replace(
+      /(Jira|Confluence|GitHub|Tavily|Jev) 连接待验证或已失效/g,
+      (_, service) => t("connectors.runtime.unverified", { service }),
+    )
+    .replace(
+      /请填写 (Jev|Tavily) API key；更换地址后需要重新填写/g,
+      (_, service) => t("connectors.runtime.apiKeyRequired", { service }),
+    )
+    .replace(
+      /请输入不含凭据、查询参数或片段的 (Jev|Tavily) API 地址/g,
+      (_, service) => t("connectors.runtime.apiAddressInvalid", { service }),
     )
     .replace(
       /请输入不含凭据、查询参数或片段的 (Jira|Confluence) 站点地址/g,
@@ -362,6 +420,10 @@ export function systemText(text: string, language: AppLanguage) {
           total: Number(total),
           seconds: Number(seconds),
         }),
+    )
+    .replace(
+      /应用设置文件无法读取，已改用默认设置。原文件已保留在 (.+?)。$/g,
+      (_, path) => t("system.settingsRecovered", { path }),
     )
     .replace(/会话 (.+?) 无法打开：/g, (_, id) =>
       t("system.conversationOpenFailed", { id }),

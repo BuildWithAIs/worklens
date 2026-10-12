@@ -319,6 +319,15 @@ const zhCN = {
       enterCloudId: "无法自动获取 Cloud ID，请手动填写。",
     },
     runtime: {
+      disconnected: "{{service}} 连接已断开。",
+      unverified: "{{service}} 连接待验证或已失效。",
+      changedOnly: "{{service}} 连接已变更。",
+      apiKeyRequired: "请填写 {{service}} API key；更换地址后需要重新填写。",
+      apiAddressInvalid:
+        "请填写不包含凭据、查询参数或片段的 {{service}} API 地址。",
+      githubSiteRoot:
+        "请填写 GitHub 站点根地址，不包含仓库路径、凭据、查询参数或片段。",
+      tavilyAccountMissing: "Tavily 未返回有效的账号信息。",
       jevBusy: "Jev 暂时繁忙，请稍后重试。",
       cloudHttps: "Cloud 需要 HTTPS 地址",
       githubHttps: "GitHub Cloud 需要标准 HTTPS 站点地址",
@@ -440,6 +449,8 @@ const zhCN = {
     },
   },
   skills: {
+    notFound: "未找到该技能，请刷新列表。",
+    shadowedToggle: "同名技能已由其他来源提供，请修改生效版本的开关。",
     chooseSkill: "技能",
     noEnabledSkillsMatch: "没有匹配的已启用技能，可前往设置管理。",
     messagePlaceholder: "输入你想做的事，或输入 / 选择技能",
@@ -490,6 +501,8 @@ const zhCN = {
     unassociated: "此文件尚未与当前任务关联。",
     tooLarge: "文件过大，无法预览。仍可打开文件或在文件夹中定位。",
     unavailable: "无法访问或预览文件，可重试或使用文件菜单。",
+    executableRevealed:
+      "此文件可以运行程序，因此已在文件夹中显示，而不是直接打开。",
   },
   htmlArtifact: {
     webPreview: "网页预览",
@@ -933,6 +946,12 @@ const zhCN = {
     conversationOpenFailed: "会话 {{id}} 无法打开：",
     interruptedTasks:
       "上次退出时有 {{count}} 个运行未完成。已保留中断记录；工具可能产生了副作用，请核对后继续。",
+    usageUpdateDelayed: "用量更新暂时失败，将在本轮结束时重新核对。",
+    branchRestoreUnsaved: "会话分支恢复未能写入磁盘，已保留原记录和编辑草稿。",
+    usageArchiveIncomplete: "本轮用量归档未完成，已保留恢复记录。",
+    stateUpdateIncomplete: "会话状态更新未完成，已保留恢复记录。",
+    settingsRecovered:
+      "应用设置文件无法读取，已改用默认设置。原文件已保留在 {{path}}。",
   },
 } as const;
 
