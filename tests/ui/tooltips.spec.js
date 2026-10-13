@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens, mockExistingConversation } from "./fixture.js";
 
-test("sidebar and usage info use shared hints while the usage entry stays quiet", async ({ page }) => {
+test("sidebar and usage info use shared hints while the usage entry stays quiet", async ({
+  page,
+}) => {
   await mockExistingConversation(page);
   await page.goto("/");
   const hint = page.locator('[data-slot="tooltip-content"]');
@@ -47,16 +49,24 @@ test("sidebar and usage info use shared hints while the usage entry stays quiet"
   await page.keyboard.press("Escape");
 });
 
-test("header details return for history and disappear on new chat", async ({ page }) => {
+test("header details return for history and disappear on new chat", async ({
+  page,
+}) => {
   await mockExistingConversation(page);
   await page.goto("/");
-  await expect(page.locator('[data-slot="chat-title"]')).toHaveText("Existing conversation");
+  await expect(page.locator('[data-slot="chat-title"]')).toHaveText(
+    "Existing conversation",
+  );
   await expect(page.locator(".usage-trigger")).toBeVisible();
   await page.getByRole("button", { name: /New chat/ }).click();
   await expect(page.locator('[data-slot="chat-title"]')).toHaveCount(0);
   await expect(page.locator(".usage-trigger")).toHaveCount(0);
-  await page.getByRole("button", { name: "Existing conversation", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Existing conversation", exact: true })
+    .click();
   await expect(page.locator(".usage-trigger")).toBeVisible();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "About", exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "About", exact: true }),
+  ).toHaveCount(0);
 });

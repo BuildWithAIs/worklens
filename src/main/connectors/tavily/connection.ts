@@ -9,6 +9,7 @@ import type {
 } from "../../../shared/contracts";
 import { ServiceError, TavilyHttp, type Json } from "./http";
 import { accountUsage } from "./usage";
+import { SecretSet } from "../../secrets";
 
 // The form's generic credential field is `token`; Tavily calls it an API key.
 // The address is editable so a proxy or self-hosted gateway can stand in.
@@ -60,7 +61,7 @@ export class TavilyConnections {
   private revision = randomUUID();
   private controller = new AbortController();
   private queue = new SerialQueue();
-  private secrets = new Set<string>();
+  private secrets = new SecretSet();
   private usageRequests = new Map<string, UsageRequest>();
   constructor(
     private path: string,
@@ -77,13 +78,7 @@ export class TavilyConnections {
         this.secrets.add(value);
   }
   redact(text: string) {
-    for (const secret of [...this.secrets].sort((a, b) => b.length - a.length))
-      text = text
-        .split(secret)
-        .join("[redacted]")
-        .split(JSON.stringify(secret).slice(1, -1))
-        .join("[redacted]");
-    return text;
+    return this.secrets.redact(text);
   }
   info(): TavilyConnection {
     return { ...this.value };

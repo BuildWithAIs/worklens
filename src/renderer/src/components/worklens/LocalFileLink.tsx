@@ -109,6 +109,11 @@ export function LocalFileLink({
         });
         if (current === generation.current && value.issue)
           showError(value.issue);
+        else if (current === generation.current && value.revealed)
+          toast.add({
+            type: "warning",
+            title: t("localFiles.executableRevealed"),
+          });
       } else if (value.kind === "image" && value.content) {
         // Decode before displaying so corrupt images produce useful feedback.
         const probe = new window.Image();

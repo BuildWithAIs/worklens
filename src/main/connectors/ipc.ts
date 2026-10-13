@@ -38,7 +38,7 @@ export const connectorSchemas = {
   confluenceTest: confluenceSiteSchema,
   confluenceRemove: z.object({ site: z.string().min(1).max(100) }).strict(),
 };
-type ConnectorRequest = keyof typeof connectorSchemas;
+export type ConnectorRequest = keyof typeof connectorSchemas;
 export function isConnectorRequest(
   method: keyof Requests,
 ): method is ConnectorRequest {

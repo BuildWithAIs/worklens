@@ -1,7 +1,15 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  unlink,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { trackToolTask, waitForTool } from "./tool-wait";
+import { SecretSet } from "./secrets";
 import type {
   Credential,
   CredentialStore,
@@ -16,11 +24,27 @@ import type { Settings } from "../shared/contracts";
 export async function atomicJson(path: string, value: unknown) {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify(value, null, 2), { mode: 0o600 });
-  await rename(temporary, path);
+  try {
+    const handle = await open(temporary, "w", 0o600);
+    try {
+      await handle.writeFile(JSON.stringify(value, null, 2));
+      // Flush before replacing: after a power loss the old or new file
+      // survives, never an empty one.
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, path);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
 }
 export class SerialQueue {
   private pending = new Map<string, Promise<unknown>>();
+  busy(key: string) {
+    return this.pending.has(key);
+  }
   run<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const previous = this.pending.get(key) ?? Promise.resolve();
     const task = trackToolTask(async () => {
@@ -60,7 +84,7 @@ export function redactStrings<T>(
 }
 export class SecureCredentials implements CredentialStore {
   private queue = new SerialQueue();
-  private knownSecrets = new Set<string>();
+  private knownSecrets = new SecretSet();
   private failures = new Map<string, string>();
   diagnosticFor(id: string): string | undefined {
     return this.failures.get(id);
@@ -101,14 +125,9 @@ export class SecureCredentials implements CredentialStore {
     }
   }
   redact(value: string) {
-    const forms = [...this.knownSecrets].flatMap((secret) => [
-      secret,
-      JSON.stringify(secret).slice(1, -1),
-    ]);
-    for (const secret of forms.sort((a, b) => b.length - a.length))
-      value = value.split(secret).join("[redacted]");
     return (
-      value
+      this.knownSecrets
+        .redact(value)
         .replace(/(Authorization\s*:\s*Bearer\s+)[^\s"']+/gi, "$1[redacted]")
         // "bearer token" is also a normal authentication method description.
         .replace(/(Bearer\s+)(?!token\b)[^\s"']+/gi, "$1[redacted]")
@@ -148,7 +167,6 @@ export class SecureCredentials implements CredentialStore {
     }
   }
   async list(options?: AuthOperationOptions): Promise<CredentialInfo[]> {
-    const { readdir } = await import("node:fs/promises");
     await mkdir(this.directory, { recursive: true });
     const result: CredentialInfo[] = [];
     for (const file of await readdir(this.directory)) {
@@ -201,7 +219,6 @@ export class SecureCredentials implements CredentialStore {
   delete(id: string, options?: AuthOperationOptions) {
     return this.queue.run(id, async () => {
       options?.signal?.throwIfAborted();
-      const { unlink } = await import("node:fs/promises");
       await unlink(this.path(id)).catch((error) => {
         if (error.code !== "ENOENT") throw error;
       });
@@ -212,15 +229,33 @@ export class SecureCredentials implements CredentialStore {
 export class StateStore {
   value: Settings = { version: 1, theme: "system", riskAccepted: false };
   private queue = new SerialQueue();
+  /** Where an unreadable settings file was moved during load. */
+  recoveredFrom?: string;
   constructor(private path: string) {}
   async load() {
+    let text: string;
     try {
-      const stored = JSON.parse(await readFile(this.path, "utf8"));
-      if (stored.version !== 1) throw new Error("应用设置版本不受支持");
-      this.value = { ...this.value, ...stored };
+      text = await readFile(this.path, "utf8");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
     }
+    let stored: unknown;
+    try {
+      stored = JSON.parse(text);
+    } catch {
+      stored = undefined;
+    }
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) {
+      // Keep the damaged file for inspection and start with default settings.
+      this.recoveredFrom = `${this.path}.damaged-${Date.now()}`;
+      await rename(this.path, this.recoveredFrom);
+      return;
+    }
+    // Settings from a newer version are never overwritten.
+    if ((stored as Settings).version !== 1)
+      throw new Error("应用设置版本不受支持");
+    this.value = { ...this.value, ...(stored as Settings) };
   }
   update(
     patch:
@@ -271,7 +306,6 @@ export class ModelCache implements ModelsStore {
   delete(id: string, options?: ModelsStoreOperationOptions) {
     return this.queue.run(id, async () => {
       options?.signal?.throwIfAborted();
-      const { unlink } = await import("node:fs/promises");
       await unlink(this.path(id)).catch((error) => {
         if (error.code !== "ENOENT") throw error;
       });

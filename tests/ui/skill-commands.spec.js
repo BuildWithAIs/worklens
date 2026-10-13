@@ -117,9 +117,7 @@ test("skill command chooser refreshes settings on reopening and ignores late res
   await page.keyboard.press("Escape");
   await input.fill("ordinary message");
   await page.evaluate(() => window.releaseCommandSkills());
-  await expect(
-    page.getByRole("listbox", { name: "Skills" }),
-  ).not.toBeVisible();
+  await expect(page.getByRole("listbox", { name: "Skills" })).not.toBeVisible();
   await input.fill("/");
   await expect(page.getByText("Loading skills…")).toBeVisible();
   await page.evaluate(() => window.releaseCommandSkills());

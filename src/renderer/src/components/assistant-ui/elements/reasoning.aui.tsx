@@ -56,7 +56,9 @@ function ReasoningRoot({
   );
 }
 
-const ReasoningImpl: ReasoningMessagePartComponent = () => <MarkdownText compact />;
+const ReasoningImpl: ReasoningMessagePartComponent = () => (
+  <MarkdownText compact />
+);
 
 const ReasoningGroupImpl: ReasoningGroupComponent = ({
   children,

@@ -40,9 +40,7 @@ test("new candidates come first, search covers the catalog, and checking a row k
     hasText: "DeepSeek",
   });
   const disclosure = group.locator('[data-slot="accordion-trigger"]');
-  await expect(group.locator(".settings-group-count")).toHaveText(
-    "1 / 2",
-  );
+  await expect(group.locator(".settings-group-count")).toHaveText("1 / 2");
   await group.locator(".settings-group-count").click();
   await expect(disclosure).toHaveAttribute("aria-expanded", "false");
   await disclosure.focus();
@@ -105,9 +103,7 @@ test("new candidates come first, search covers the catalog, and checking a row k
   );
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(disclosure).toHaveAttribute("aria-expanded", "false");
-  await expect(group.locator(".settings-group-count")).toHaveText(
-    "1 / 2",
-  );
+  await expect(group.locator(".settings-group-count")).toHaveText("1 / 2");
   await disclosure.focus();
   await page.keyboard.press("Space");
   await expect(disclosure).toHaveAttribute("aria-expanded", "true");
@@ -284,12 +280,9 @@ test("draft edits cancel without writing; save clears a large catalog and keeps 
   await expect(
     page
       .locator(".settings-list")
-      .getByText(
-        "No models added. Select models to use in chats.",
-        {
-          exact: true,
-        },
-      ),
+      .getByText("No models added. Select models to use in chats.", {
+        exact: true,
+      }),
   ).toBeVisible();
   await expect(page.getByText("GPT-5", { exact: true })).toBeVisible();
   await page.reload();

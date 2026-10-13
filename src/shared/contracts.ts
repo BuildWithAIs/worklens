@@ -236,6 +236,12 @@ export interface ChatEvent {
   type: string;
   view: ConversationView;
   globalUsage?: GlobalUsage;
+  /**
+   * Set when `view.messages` holds only the messages from this index on. The
+   * earlier messages are unchanged since the event numbered `baseSequence`.
+   */
+  messagesFrom?: number;
+  baseSequence?: number;
 }
 export interface AuthStep {
   loginId: string;
@@ -285,6 +291,8 @@ export interface ConversationFile {
   /** Successful write/edit, observed shell output, or an explicit tool artifact. */
   produced?: boolean;
   issue?: "missing" | "unassociated" | "tooLarge" | "unavailable";
+  /** Set when an open request revealed an executable file instead. */
+  revealed?: boolean;
   content?: string;
 }
 
@@ -348,7 +356,8 @@ export interface Requests {
   confluenceRemove: { input: { site: string }; output: void };
   artifact: {
     input: { id: string; action: "show" | "open" | "saveAs" };
-    output: void;
+    /** Executable files are shown in their folder instead of opened. */
+    output: { revealed?: boolean } | void;
   };
   bootstrap: { input: undefined; output: Bootstrap };
   settings: { input: Partial<Settings>; output: Settings };
@@ -381,6 +390,8 @@ export interface Requests {
   test: { input: Selection; output: string };
   clearConnection: { input: { provider: string }; output: void };
   open: { input: { id: string }; output: ConversationView };
+  /** Reads a conversation without making it the last opened one. */
+  view: { input: { id: string }; output: ConversationView };
   rename: { input: { id: string; title: string }; output: void };
   delete: { input: { id: string }; output: void };
   send: {

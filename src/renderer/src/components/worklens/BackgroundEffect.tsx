@@ -107,9 +107,10 @@ export function BackgroundEffect({
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
     const uniforms = Object.fromEntries(
-      ["resolution", "time", "tone", "shape", "dark", "strength"].map(
-        (key) => [key, gl.getUniformLocation(program, key)],
-      ),
+      ["resolution", "time", "tone", "shape", "dark", "strength"].map((key) => [
+        key,
+        gl.getUniformLocation(program, key),
+      ]),
     );
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0,

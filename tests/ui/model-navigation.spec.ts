@@ -86,10 +86,9 @@ test("first launch stays in chat and both connection shortcuts open Providers", 
   });
   await search.fill("no-such-model");
   await expect(
-    page.getByText(
-      "No matching models or providers. Try another search.",
-      { exact: true },
-    ),
+    page.getByText("No matching models or providers. Try another search.", {
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Go to Providers", exact: true }),
@@ -148,10 +147,9 @@ for (const modelState of ["unavailable", "hidden", "available"] as const) {
       .getByRole("textbox", { name: "Search models", exact: true })
       .fill("no-such-model");
     await expect(
-      page.getByText(
-        "No matching models or providers. Try another search.",
-        { exact: true },
-      ),
+      page.getByText("No matching models or providers. Try another search.", {
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Go to Providers", exact: true }),

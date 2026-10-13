@@ -336,6 +336,17 @@ const en = {
       enterCloudId: "Cloud ID discovery failed. Enter it manually.",
     },
     runtime: {
+      disconnected: "{{service}} is disconnected.",
+      unverified:
+        "The {{service}} connection is unverified or no longer valid.",
+      changedOnly: "The {{service}} connection changed.",
+      apiKeyRequired:
+        "Enter a {{service}} API key. A new key is required after changing the address.",
+      apiAddressInvalid:
+        "Enter a {{service}} API address without credentials, query parameters or a fragment.",
+      githubSiteRoot:
+        "Enter the GitHub site root address without a repository path, credentials, query parameters or a fragment.",
+      tavilyAccountMissing: "Tavily did not return valid account details.",
       jevBusy: "Jev is busy. Try again later.",
       cloudHttps: "Cloud requires an HTTPS address.",
       githubHttps: "GitHub Cloud requires a standard HTTPS site address.",
@@ -473,6 +484,9 @@ const en = {
     },
   },
   skills: {
+    notFound: "Skill not found. Refresh the list.",
+    shadowedToggle:
+      "Another source provides a skill with this name. Change the switch on the version in use.",
     chooseSkill: "Skills",
     noEnabledSkillsMatch:
       "No matching enabled skills. Manage skills in Settings.",
@@ -530,6 +544,8 @@ const en = {
       "This file is too large to preview. You can still open it or show it in its folder.",
     unavailable:
       "Couldn’t access or preview the file. You can retry or use the file menu.",
+    executableRevealed:
+      "This file can run programs, so it was shown in its folder instead of opened.",
   },
   htmlArtifact: {
     webPreview: "Web preview",
@@ -993,6 +1009,16 @@ const en = {
     conversationOpenFailed: "Couldn’t open conversation {{id}}: ",
     interruptedTasks:
       "{{count}} tasks were interrupted when the app closed. Recovery records are saved. Review tool changes before continuing.",
+    usageUpdateDelayed:
+      "Couldn’t update usage. It will be checked again when this response ends.",
+    branchRestoreUnsaved:
+      "Couldn’t save the restored conversation branch. The original messages and edit draft were kept.",
+    usageArchiveIncomplete:
+      "Couldn’t finish recording usage for this response. The recovery record was kept.",
+    stateUpdateIncomplete:
+      "Couldn’t finish updating the conversation. The recovery record was kept.",
+    settingsRecovered:
+      "Couldn’t read the app settings, so default settings are in use. The previous file was kept at {{path}}.",
   },
 } as const;
 

@@ -1,6 +1,7 @@
 # Connection brand icons
 
 Jira and Confluence SVGs are from Simple Icons (CC0-1.0):
+
 - https://github.com/simple-icons/simple-icons/blob/develop/icons/jira.svg
 - https://github.com/simple-icons/simple-icons/blob/develop/icons/confluence.svg
 - License: https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md

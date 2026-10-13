@@ -12,6 +12,7 @@ import {
   SessionManager,
   type AgentSession,
   type AgentSessionEvent,
+  type SessionInfo,
 } from "@earendil-works/pi-coding-agent";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
@@ -23,7 +24,14 @@ import {
   sessionWorkspace,
 } from "./session-files";
 import { dirname, join, resolve } from "node:path";
-import { mkdir, unlink, realpath, readFile, readdir } from "node:fs/promises";
+import {
+  mkdir,
+  unlink,
+  realpath,
+  readFile,
+  readdir,
+  stat,
+} from "node:fs/promises";
 import { appendFileSync, existsSync } from "node:fs";
 import {
   UsageService,
@@ -47,6 +55,7 @@ import type { SkillsService } from "./skills";
 import type { JevConsent } from "./connectors/jev/consent";
 import type { McpService } from "./mcp-service";
 import { withRunTiming, projectMessages, textContent } from "./projection";
+import { shareUnchanged } from "./structural-sharing";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import { validateChatImages, validateImageContent } from "./chat-images";
 import {
@@ -77,6 +86,13 @@ interface ActiveRun {
   done?: Promise<void>;
   sequence: number;
 }
+interface SessionFile {
+  info: SessionInfo;
+  mtimeMs: number;
+  size: number;
+  /** null: the session has no model; undefined: not read yet. */
+  selection?: Selection | null;
+}
 interface Runtime {
   manager: SessionManager;
   session?: AgentSession;
@@ -90,11 +106,22 @@ interface Runtime {
   timer?: NodeJS.Timeout;
   usage?: UsageSnapshot;
   accountingDamaged?: boolean;
+  history?: {
+    key: string;
+    timings: Map<string, { startedAt: string; elapsed?: number }>;
+    messages: MessageView[];
+  };
+  merged?: WeakMap<
+    MessageView,
+    { update: Partial<MessageView>; message: MessageView }
+  >;
 }
 export class AgentService {
   private sessions = new Map<string, Runtime>();
   private operations = new SerialQueue();
   private requests = new Map<string, Promise<ConversationView>>();
+  // Idle conversations kept with their Pi sessions; others reload from disk.
+  private retainedSessions = 12;
   private stopping = false;
   private usage = new UsageService();
   private lookupModel = (provider: string, model: string) =>
@@ -300,8 +327,14 @@ export class AgentService {
       revision: runtime.active?.sequence,
     };
   }
-  private view(id: string, runtime: Runtime): ConversationView {
+  // Projected, redacted history for the selected branch. During a run it is
+  // cached until the branch grows, and unchanged messages keep their identity,
+  // so streaming updates neither re-redact history nor resend it over IPC.
+  private history(id: string, runtime: Runtime) {
     const branch = runtime.manager.getBranch();
+    const key = `${runtime.manager.getLeafId()}/${branch.length}/${runtime.manager.getEntries().length}`;
+    const cached = runtime.history;
+    if (runtime.active && cached?.key === key) return cached;
     const cwd = sessionWorkspace(this.paths.sessions, id);
     const messages = projectMessages(withRunTiming(branch), cwd);
     const versions = messageVersions(runtime.manager);
@@ -310,14 +343,6 @@ export class AgentService {
       const group = versions.groups.get(versions.roots.get(message.entryId)!);
       if (group && group.length > 1) message.versions = group;
     }
-    // During streaming the public agent state may not yet include the current assistant partial.
-    if (runtime.session?.agent.state.streamingMessage)
-      messages.push(
-        ...projectMessages(
-          [runtime.session.agent.state.streamingMessage],
-          cwd,
-        ).map((m) => ({ ...m, id: m.role === "tool" ? m.id : "stream" })),
-      );
     const timings = new Map<string, { startedAt: string; elapsed?: number }>();
     for (const entry of branch) {
       if (
@@ -350,22 +375,62 @@ export class AgentService {
         });
       }
     }
-    for (const message of messages) {
+    for (const message of messages)
       if (message.toolId && timings.has(message.toolId))
         Object.assign(message, timings.get(message.toolId));
-      if (message.toolId && runtime.toolUpdates.has(message.toolId))
-        Object.assign(message, runtime.toolUpdates.get(message.toolId));
-    }
-    return redactStrings(
-      {
-        ...this.summary(id, runtime),
-        branchId: runtime.manager.getLeafId() ?? undefined,
-        messages,
-        usage: runtime.usage,
-        jevConsent: this.jevConsent?.view(id),
-      },
-      this.redact,
-    );
+    const history = {
+      key,
+      timings,
+      messages: shareUnchanged(
+        runtime.active ? (cached?.messages ?? []) : [],
+        this.redactView(messages),
+      ),
+    };
+    // Outside a run, views are rebuilt so newly saved secrets always apply.
+    runtime.history = runtime.active ? history : undefined;
+    return history;
+  }
+  private view(id: string, runtime: Runtime): ConversationView {
+    const { messages: history, timings } = this.history(id, runtime);
+    const merged = (runtime.merged ??= new WeakMap());
+    const messages = history.map((message) => {
+      const update = message.toolId
+        ? runtime.toolUpdates.get(message.toolId)
+        : undefined;
+      if (!update) return message;
+      const memo = merged.get(message);
+      if (memo?.update === update) return memo.message;
+      const next = this.redactView({ ...message, ...update });
+      merged.set(message, { update, message: next });
+      return next;
+    });
+    // During streaming the public agent state may not yet include the current assistant partial.
+    if (runtime.session?.agent.state.streamingMessage)
+      messages.push(
+        ...projectMessages(
+          [runtime.session.agent.state.streamingMessage],
+          sessionWorkspace(this.paths.sessions, id),
+        ).map((m) =>
+          this.redactView({
+            ...m,
+            id: m.role === "tool" ? m.id : "stream",
+            ...(m.toolId ? timings.get(m.toolId) : undefined),
+            ...(m.toolId ? runtime.toolUpdates.get(m.toolId) : undefined),
+          }),
+        ),
+      );
+    return {
+      ...redactStrings(
+        {
+          ...this.summary(id, runtime),
+          branchId: runtime.manager.getLeafId() ?? undefined,
+          usage: runtime.usage,
+          jevConsent: this.jevConsent?.view(id),
+        },
+        this.redact,
+      ),
+      messages,
+    };
   }
   private publish(
     id: string,
@@ -414,8 +479,69 @@ export class AgentService {
     await this.jevConsent.reset(id, blocked);
     return this.view(id, runtime);
   }
-  async list(): Promise<Conversation[]> {
+  // Session files keyed by path. Pi parses every file to list sessions; the
+  // model selection needs another full read, so it is kept until the file changes.
+  private files = new Map<string, SessionFile>();
+  private listed?: SessionInfo[];
+  private async fileStats() {
+    const names = await readdir(this.paths.sessions).catch(() => []);
+    const result = new Map<string, { mtimeMs: number; size: number }>();
+    await Promise.all(
+      names
+        .filter((name) => name.endsWith(".jsonl"))
+        .map(async (name) => {
+          const path = join(this.paths.sessions, name);
+          const info = await stat(path).catch(() => undefined);
+          if (info)
+            result.set(path, { mtimeMs: info.mtimeMs, size: info.size });
+        }),
+    );
+    return result;
+  }
+  private async listInfos() {
+    // Stat before parsing: a write in between leaves an older stamp, which
+    // only causes a later re-read.
+    const stats = await this.fileStats();
+    if (
+      this.listed &&
+      stats.size === this.files.size &&
+      [...stats].every(([path, stamp]) => {
+        const file = this.files.get(path);
+        return file?.mtimeMs === stamp.mtimeMs && file.size === stamp.size;
+      })
+    )
+      return this.listed;
     const found = await SessionManager.listAll(this.paths.sessions);
+    const files = new Map<string, SessionFile>();
+    for (const info of found) {
+      const stamp = stats.get(info.path);
+      if (!stamp) continue;
+      const previous = this.files.get(info.path);
+      files.set(info.path, {
+        info,
+        ...stamp,
+        selection:
+          previous?.mtimeMs === stamp.mtimeMs && previous.size === stamp.size
+            ? previous.selection
+            : undefined,
+      });
+    }
+    this.files = files;
+    // Files Pi could not read are not in `files`; list again until they are.
+    this.listed = files.size === stats.size ? found : undefined;
+    return found;
+  }
+  private async sessionInfo(id: string) {
+    for (const [path, file] of this.files) {
+      if (file.info.id !== id) continue;
+      const current = await stat(path).catch(() => undefined);
+      if (current?.mtimeMs === file.mtimeMs && current.size === file.size)
+        return file.info;
+    }
+    return (await this.listInfos()).find((item) => item.id === id);
+  }
+  async list(): Promise<Conversation[]> {
+    const found = await this.listInfos();
     const result = new Map<string, Conversation>();
     for (const info of found) {
       const cached = this.sessions.get(info.id);
@@ -424,25 +550,33 @@ export class AgentService {
         continue;
       }
       try {
-        const manager = SessionManager.open(info.path, this.paths.sessions);
-        const context = manager.buildSessionContext();
-        result.set(info.id, {
-          id: info.id,
-          title: info.name || info.firstMessage?.slice(0, 48) || "未命名会话",
-          updatedAt: info.modified.toISOString(),
-          phase: "idle",
-          selection: context.model
+        const file = this.files.get(info.path);
+        if (file && file.selection === undefined) {
+          const context = SessionManager.open(
+            info.path,
+            this.paths.sessions,
+          ).buildSessionContext();
+          file.selection = context.model
             ? {
                 provider: context.model.provider,
                 model: context.model.modelId,
                 thinking: context.thinkingLevel as Selection["thinking"],
               }
-            : undefined,
+            : null;
+        }
+        result.set(info.id, {
+          id: info.id,
+          title: info.name || info.firstMessage?.slice(0, 48) || "未命名会话",
+          updatedAt: info.modified.toISOString(),
+          phase: "idle",
+          selection: file?.selection ?? undefined,
         });
       } catch (error) {
-        this.diagnostics.push(
-          this.redact(`会话 ${info.id} 无法打开：${String(error)}`),
+        const message = this.redact(
+          `会话 ${info.id} 无法打开：${String(error)}`,
         );
+        // The list is read on every settings refresh; report each file once.
+        if (!this.diagnostics.includes(message)) this.diagnostics.push(message);
       }
     }
     for (const [id, runtime] of this.sessions)
@@ -453,10 +587,13 @@ export class AgentService {
   }
   private async get(id: string): Promise<Runtime> {
     const cached = this.sessions.get(id);
-    if (cached) return cached;
-    const info = (await SessionManager.listAll(this.paths.sessions)).find(
-      (item) => item.id === id,
-    );
+    if (cached) {
+      // Most recently used last, so eviction removes the least recent.
+      this.sessions.delete(id);
+      this.sessions.set(id, cached);
+      return cached;
+    }
+    const info = await this.sessionInfo(id);
     if (!info) throw new Error("会话不存在或 Pi 无法识别该文件");
     const manager = SessionManager.open(info.path, this.paths.sessions);
     if (manager.getSessionId() !== id) throw new Error("会话标识不匹配");
@@ -469,7 +606,26 @@ export class AgentService {
     };
     this.refreshUsage(runtime);
     this.sessions.set(id, runtime);
+    await this.evictIdleSessions(id);
     return runtime;
+  }
+  private async evictIdleSessions(keep: string) {
+    const idle = [...this.sessions].filter(([id, runtime]) => {
+      const file = runtime.manager.getSessionFile();
+      return (
+        id !== keep &&
+        !runtime.active &&
+        !this.operations.busy(id) &&
+        // A new conversation is memory-only until Pi writes its file.
+        !!file &&
+        existsSync(file)
+      );
+    });
+    const excess = this.sessions.size - this.retainedSessions;
+    for (const [id, runtime] of idle.slice(0, Math.max(0, excess))) {
+      this.sessions.delete(id);
+      await this.disposeSession(runtime).catch(() => {});
+    }
   }
   open(id: string) {
     return this.operations.run(id, async () =>
@@ -1060,6 +1216,7 @@ export class AgentService {
           sequence: 0,
         };
         runtime.active = active;
+        runtime.history = undefined;
         runtime.phase = "generating";
         runtime.error = undefined;
         runtime.statusDetail = undefined;
@@ -1210,6 +1367,8 @@ export class AgentService {
               this.diagnostics.push("本轮用量归档未完成，已保留恢复记录。");
             }
             try {
+              // Rebuild the final view in full, including newly learned secrets.
+              runtime.history = undefined;
               const selectedBranch = runtime.manager.getBranch();
               const startPosition = selectedBranch.findIndex(
                 (entry) => entry.id === runStartEntryId,
@@ -1236,6 +1395,7 @@ export class AgentService {
               if (runtime.timer) clearTimeout(runtime.timer);
               runtime.timer = undefined;
               runtime.active = undefined;
+              runtime.history = undefined;
             }
             if (terminalPersisted) await unlink(pendingPath).catch(() => {});
             else
@@ -1258,8 +1418,15 @@ export class AgentService {
       },
     );
     this.requests.set(requestKey, task);
-    if (this.requests.size > 2000)
-      this.requests.delete(this.requests.keys().next().value!);
+    // Retries of an accepted request return the same result for a short time.
+    // Completed views are not kept: they can hold a whole conversation.
+    const forget = () => {
+      setTimeout(() => {
+        if (this.requests.get(requestKey) === task)
+          this.requests.delete(requestKey);
+      }, 60_000).unref();
+    };
+    task.then(forget, forget);
     return task;
   }
   async cancel(id: string, runId: string) {

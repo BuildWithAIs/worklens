@@ -36,7 +36,9 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await page.keyboard.press("Escape");
   };
   const completedRun = async (page: Page, tokens: string) => {
-    await expect(page.getByRole("button", { name: "Stop task", exact: true })).toHaveCount(0, { timeout: 30000 });
+    await expect(
+      page.getByRole("button", { name: "Stop task", exact: true }),
+    ).toHaveCount(0, { timeout: 30000 });
     await page.locator(".usage-trigger").click();
     await page.getByRole("tab", { name: "Usage", exact: true }).click();
     // A completed run is described by its row; only other states add a notice.
@@ -91,19 +93,21 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await page.reload();
     // A new chat has no usage control; totals become inspectable after sending.
     await expect(page.locator(".usage-trigger")).toHaveCount(0);
-    expect(await page.evaluate(async () =>
-      (await window.worklens.invoke("bootstrap", undefined)).globalUsage?.totalTokens,
-    )).toBe(0);
+    expect(
+      await page.evaluate(
+        async () =>
+          (await window.worklens.invoke("bootstrap", undefined)).globalUsage
+            ?.totalTokens,
+      ),
+    ).toBe(0);
     const target = join(root, "usage-output.txt");
-    await page
-      .getByRole("textbox", { name: "Message", exact: true })
-      .fill(
-        "TOOL " +
-          JSON.stringify({
-            name: "write",
-            args: { path: target, content: "usage verified" },
-          }),
-      );
+    await page.getByRole("textbox", { name: "Message", exact: true }).fill(
+      "TOOL " +
+        JSON.stringify({
+          name: "write",
+          args: { path: target, content: "usage verified" },
+        }),
+    );
     await page
       .getByRole("button", { name: "Send message", exact: true })
       .click();
@@ -125,10 +129,21 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       async () =>
         (await window.worklens.invoke("bootstrap", undefined)).conversations[0],
     );
-    await expect(page.getByRole("region", { name: "Pinned", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: `Conversation options: ${first.title}`, exact: true }).click();
+    await expect(
+      page.getByRole("region", { name: "Pinned", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", {
+        name: `Conversation options: ${first.title}`,
+        exact: true,
+      })
+      .click();
     await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Pinned", exact: true }).locator(".conversation-open")).toHaveCount(1);
+    await expect(
+      page
+        .getByRole("region", { name: "Pinned", exact: true })
+        .locator(".conversation-open"),
+    ).toHaveCount(1);
     await page
       .getByRole("textbox", { name: "Message", exact: true })
       .fill("Second run");
@@ -144,7 +159,9 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
     await page
       .getByRole("button", { name: "Send message", exact: true })
       .click();
-    await expect(page.locator(".conversation-item.selected .history-loading-ring")).toBeVisible();
+    await expect(
+      page.locator(".conversation-item.selected .history-loading-ring"),
+    ).toBeVisible();
     const slow = await page.evaluate(
       async () =>
         (
@@ -164,7 +181,9 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       .filter({ hasText: "SLOW background" })
       .click();
     await page.getByRole("button", { name: "Stop task", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Stop task", exact: true })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Stop task", exact: true }),
+    ).toHaveCount(0);
     await page.locator(".usage-trigger").click();
     await page.getByRole("tab", { name: "Usage", exact: true }).click();
     await expect(page.locator(".usage-run-state")).toContainText("Cancelled");
@@ -195,13 +214,33 @@ test("Usage: real Pi → IPC → header, concurrent runs, cancellation, restart 
       .locator(".conversation-open")
       .and(restored.getByRole("button", { name: first.title, exact: true }))
       .click();
-    const pinned = restored.getByRole("region", { name: "Pinned", exact: true });
-    await expect(pinned.locator(".conversation-open")).toHaveAttribute("aria-label", first.title);
+    const pinned = restored.getByRole("region", {
+      name: "Pinned",
+      exact: true,
+    });
+    await expect(pinned.locator(".conversation-open")).toHaveAttribute(
+      "aria-label",
+      first.title,
+    );
     await expect(pinned.locator(".history-title-text")).toHaveText(first.title);
-    await expect(pinned.locator(".history-title-clip")).toHaveAttribute("data-overflow", "true");
-    await pinned.getByRole("button", { name: `Conversation options: ${first.title}`, exact: true }).click();
-    await expect(restored.getByRole("menuitem", { name: "Unpin", exact: true }).locator("svg")).toBeVisible();
-    await restored.getByRole("menuitem", { name: "Unpin", exact: true }).click();
+    await expect(pinned.locator(".history-title-clip")).toHaveAttribute(
+      "data-overflow",
+      "true",
+    );
+    await pinned
+      .getByRole("button", {
+        name: `Conversation options: ${first.title}`,
+        exact: true,
+      })
+      .click();
+    await expect(
+      restored
+        .getByRole("menuitem", { name: "Unpin", exact: true })
+        .locator("svg"),
+    ).toBeVisible();
+    await restored
+      .getByRole("menuitem", { name: "Unpin", exact: true })
+      .click();
     await expect(pinned).toHaveCount(0);
     await total(restored, "560+");
     await completedRun(restored, "140");

@@ -486,12 +486,23 @@ export class NetworkProxy {
   }
 
   private writeEnvironment(proxy: string | undefined, bypass: string[] = []) {
-    for (const key of ENV_KEYS) {
+    // Windows variable names are case-insensitive: HTTPS_PROXY and https_proxy
+    // are one variable. Write it once, so restoring the lowercase name cannot
+    // delete the launch value, and read the launch value under any casing.
+    const windows = process.platform === "win32";
+    const keys = windows
+      ? ENV_KEYS.filter((key) => key === key.toUpperCase())
+      : ENV_KEYS;
+    for (const key of keys) {
       const value = proxy
         ? /no_proxy/i.test(key)
           ? bypass.join(",")
           : proxy
-        : this.original[key];
+        : windows
+          ? Object.entries(this.original).find(
+              ([name]) => name.toUpperCase() === key,
+            )?.[1]
+          : this.original[key];
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }

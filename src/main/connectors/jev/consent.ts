@@ -29,7 +29,8 @@ export class JevConsent {
   constructor(
     private readonly path: string,
     private readonly changed: (sessionId: string) => void = () => {},
-    private readonly currentRevision: () => string | undefined = () => undefined,
+    private readonly currentRevision: () => string | undefined = () =>
+      undefined,
   ) {}
   async load() {
     try {
@@ -52,7 +53,9 @@ export class JevConsent {
     const session = this.sessions.get(sessionId);
     return {
       blocked: session?.blocked ?? false,
-      autoAllowed: !!session?.autoAllowFor && session.autoAllowFor === this.currentRevision(),
+      autoAllowed:
+        !!session?.autoAllowFor &&
+        session.autoAllowFor === this.currentRevision(),
       approvedBatches: session?.grants.length ?? 0,
       pending: [...this.pending.values()]
         .filter(({ approval }) => approval.conversationId === sessionId)
@@ -93,7 +96,11 @@ export class JevConsent {
         ]),
       )
       .digest("hex");
-    if (session?.autoAllowFor === connectionRevision || session?.grants.includes(fingerprint)) return true;
+    if (
+      session?.autoAllowFor === connectionRevision ||
+      session?.grants.includes(fingerprint)
+    )
+      return true;
     const approval = { ...input, id: randomUUID() };
     return new Promise<boolean>((resolve) => {
       const abort = () => finish(false);
@@ -103,15 +110,27 @@ export class JevConsent {
         this.changed(input.conversationId);
         resolve(allowed);
       };
-      this.pending.set(approval.id, { approval, fingerprint, connectionRevision, signal, finish });
+      this.pending.set(approval.id, {
+        approval,
+        fingerprint,
+        connectionRevision,
+        signal,
+        finish,
+      });
       signal.addEventListener("abort", abort, { once: true });
       if (signal.aborted) abort();
       else this.changed(input.conversationId);
     });
   }
-  reply(sessionId: string, requestId: string, allow: boolean, autoAllow = false) {
+  reply(
+    sessionId: string,
+    requestId: string,
+    allow: boolean,
+    autoAllow = false,
+  ) {
     return this.queue.run("consent", async () => {
-      if (autoAllow && !allow) throw new Error("Automatic approval requires Allow.");
+      if (autoAllow && !allow)
+        throw new Error("Automatic approval requires Allow.");
       const pending = this.pending.get(requestId);
       if (
         !pending ||
@@ -133,7 +152,9 @@ export class JevConsent {
         allow
           ? {
               blocked: false,
-              ...(autoAllow ? { autoAllowFor: pending.connectionRevision } : {}),
+              ...(autoAllow
+                ? { autoAllowFor: pending.connectionRevision }
+                : {}),
               grants: [
                 ...new Set([...previous.grants, pending.fingerprint]),
               ].slice(-256),

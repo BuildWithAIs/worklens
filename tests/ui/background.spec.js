@@ -211,8 +211,12 @@ for (const appearance of ["light", "dark"]) {
           page.locator(".background-effect[data-fallback]"),
         ).toHaveCount(0);
         if (appearance === "light") {
-          await expect(page.locator(".settings-pane .background-effect")).toHaveCount(0);
-          await expect(page.locator(".settings-navigation .background-effect")).toHaveCSS("opacity", "0.72");
+          await expect(
+            page.locator(".settings-pane .background-effect"),
+          ).toHaveCount(0);
+          await expect(
+            page.locator(".settings-navigation .background-effect"),
+          ).toHaveCSS("opacity", "0.72");
           await page.emulateMedia({ reducedMotion: "reduce" });
           await page.mouse.move(600, 20);
           await page.locator(".settings-navigation").screenshot({

@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
-test("new chat composer stays in place while typing and clearing", async ({ page }, testInfo) => {
+test("new chat composer stays in place while typing and clearing", async ({
+  page,
+}, testInfo) => {
   await mockWorklens(page);
   await page.goto("/");
   await expect(page.locator('[data-slot="chat-title"]')).toHaveCount(0);
@@ -14,8 +16,12 @@ test("new chat composer stays in place while typing and clearing", async ({ page
     await expect(suggestions).toHaveCount(0);
     const before = await composer.boundingBox();
     expect(before.width).toBeLessThanOrEqual(680);
-    const viewport = await page.locator('[data-slot="aui_thread-viewport"]').boundingBox();
-    expect(Math.abs(before.x + before.width / 2 - viewport.x - viewport.width / 2)).toBeLessThanOrEqual(6);
+    const viewport = await page
+      .locator('[data-slot="aui_thread-viewport"]')
+      .boundingBox();
+    expect(
+      Math.abs(before.x + before.width / 2 - viewport.x - viewport.width / 2),
+    ).toBeLessThanOrEqual(6);
     await page.screenshot({ path: testInfo.outputPath(`home-${width}.png`) });
     await input.fill("地");
     await expect(suggestions).toHaveCount(0);
@@ -43,7 +49,15 @@ test("compact tool activity, history actions and fluid message width", async ({
       updatedAt: new Date().toISOString(),
       selection: { provider: "deepseek", model: "flash", thinking: "medium" },
       messages: [
-        { id: "u1", entryId: "u1", role: "user", text: Array.from({ length: 16 }, (_, i) => `Review project files, requirement ${i + 1}.`).join("\n") },
+        {
+          id: "u1",
+          entryId: "u1",
+          role: "user",
+          text: Array.from(
+            { length: 16 },
+            (_, i) => `Review project files, requirement ${i + 1}.`,
+          ).join("\n"),
+        },
         ...Array.from({ length: 5 }, (_, i) => [
           {
             id: `reason${i}`,
@@ -79,7 +93,9 @@ test("compact tool activity, history actions and fluid message width", async ({
       ],
     };
     if (localStorage.getItem("fixture-running")) {
-      view.messages.at(-1).runStartedAt = new Date(Date.now() - 45000).toISOString();
+      view.messages.at(-1).runStartedAt = new Date(
+        Date.now() - 45000,
+      ).toISOString();
       view.phase = "tool";
       view.messages.at(-1).status = "running";
       view.messages.at(-1).text = "";
@@ -89,15 +105,37 @@ test("compact tool activity, history actions and fluid message width", async ({
       view.phase = finish ? "completed" : "generating";
       view.messages.at(-1).status = "success";
       if (finish) {
-        view.messages.find(m => m.id === "t6").runElapsedMs = 47000;
-        view.messages.push({ id: "final-live", role: "assistant", text: "Final live answer." });
+        view.messages.find((m) => m.id === "t6").runElapsedMs = 47000;
+        view.messages.push({
+          id: "final-live",
+          role: "assistant",
+          text: "Final live answer.",
+        });
       } else {
         view.messages.push(
-          { id: "progress-live", role: "assistant", text: "Checking the latest source." },
-          { id: "tool-live", role: "tool", toolName: "bash", toolId: "live", args: JSON.stringify({ command: "rg --files src" }), text: "", status: "running" },
+          {
+            id: "progress-live",
+            role: "assistant",
+            text: "Checking the latest source.",
+          },
+          {
+            id: "tool-live",
+            role: "tool",
+            toolName: "bash",
+            toolId: "live",
+            args: JSON.stringify({ command: "rg --files src" }),
+            text: "",
+            status: "running",
+          },
         );
       }
-      window.emitFixture({ conversationId: view.id, runId: "test-run", sequence: finish ? 3 : 2, type: "message_update", view: structuredClone(view) });
+      window.emitFixture({
+        conversationId: view.id,
+        runId: "test-run",
+        sequence: finish ? 3 : 2,
+        type: "message_update",
+        view: structuredClone(view),
+      });
     };
     window.completeFixture = () => {
       view.phase = "completed";
@@ -112,7 +150,13 @@ test("compact tool activity, history actions and fluid message width", async ({
     };
     window.finishToolFixture = () => {
       view.messages.at(-1).status = "success";
-      window.emitFixture({ conversationId: view.id, runId: "test-run", sequence: 2.5, type: "message_update", view: structuredClone(view) });
+      window.emitFixture({
+        conversationId: view.id,
+        runId: "test-run",
+        sequence: 2.5,
+        type: "message_update",
+        view: structuredClone(view),
+      });
     };
     window.worklens.onChat = (listener) => {
       window.emitFixture = listener;
@@ -135,26 +179,48 @@ test("compact tool activity, history actions and fluid message width", async ({
     ["light", "rgb(238, 230, 255)", "rgb(53, 36, 85)"],
   ]) {
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption(theme);
-    await page.getByRole("button", { name: "Back to app", exact: true }).click();
-    for (const bubble of await page.locator(".aui-user-message-content").all()) {
+    await page
+      .getByRole("combobox", { name: "Appearance", exact: true })
+      .selectOption(theme);
+    await page
+      .getByRole("button", { name: "Back to app", exact: true })
+      .click();
+    for (const bubble of await page
+      .locator(".aui-user-message-content")
+      .all()) {
       await expect(bubble).toHaveCSS("background-color", background);
       await expect(bubble).toHaveCSS("color", foreground);
     }
   }
 
-  const expandMessage = longMessage.getByRole("button", { name: "Show more", exact: true });
+  const expandMessage = longMessage.getByRole("button", {
+    name: "Show more",
+    exact: true,
+  });
   await expect(expandMessage).toHaveAttribute("aria-expanded", "false");
   const collapsedHeight = (await longMessage.boundingBox()).height;
   await expandMessage.click();
-  const collapseMessage = longMessage.getByRole("button", { name: "Show less", exact: true });
+  const collapseMessage = longMessage.getByRole("button", {
+    name: "Show less",
+    exact: true,
+  });
   await expect(collapseMessage).toHaveAttribute("aria-expanded", "true");
-  await expect(collapseMessage).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(collapseMessage).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
   await expect(collapseMessage).toHaveCSS("font-size", "14px");
-  expect((await longMessage.boundingBox()).height).toBeGreaterThan(collapsedHeight);
+  expect((await longMessage.boundingBox()).height).toBeGreaterThan(
+    collapsedHeight,
+  );
   await collapseMessage.click();
   await expect(expandMessage).toBeVisible();
-  await expect(page.locator(".aui-user-message-content").last().getByRole("button", { name: "Show more", exact: true })).toHaveCount(0);
+  await expect(
+    page
+      .locator(".aui-user-message-content")
+      .last()
+      .getByRole("button", { name: "Show more", exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator(".chat-header")).not.toContainText("Workspace");
   await expect(page.locator(".chat-header")).not.toContainText("Completed");
   expect(
@@ -168,9 +234,13 @@ test("compact tool activity, history actions and fluid message width", async ({
   await expect(groups.nth(0)).toHaveText("Thoughts");
   await expect(groups.nth(1)).toHaveText("Thoughts · 1 failed");
   await expect(page.locator('[data-slot="tool-fallback-root"]')).toHaveCount(0);
-  await expect(page.getByText("Checking another source.", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("Checking another source.", { exact: true }),
+  ).toHaveCount(0);
   await groups.first().click();
-  await expect(page.getByText("Checking another source.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Checking another source.", { exact: true }),
+  ).toBeVisible();
   await expect(page.locator('[data-slot="tool-fallback-root"]')).toHaveCount(5);
   await expect(
     page.getByText("Thinking step 0", { exact: true }),
@@ -178,23 +248,44 @@ test("compact tool activity, history actions and fluid message width", async ({
   await expect(
     page.getByText("Thinking step 4", { exact: true }),
   ).toBeVisible();
-  const toolGeometry = await page.locator('[data-slot="tool-fallback-trigger"]').first().evaluate(row => {
-    const chevron = row.querySelector('[data-slot="tool-fallback-trigger-chevron"]').getBoundingClientRect();
-    const duration = (row.querySelector('[data-slot="tool-fallback-duration"]') ?? row.querySelector('[data-slot="tool-fallback-trigger-label"]')).getBoundingClientRect();
-    return { arrowGap: chevron.left - duration.right, height: row.getBoundingClientRect().height };
-  });
+  const toolGeometry = await page
+    .locator('[data-slot="tool-fallback-trigger"]')
+    .first()
+    .evaluate((row) => {
+      const chevron = row
+        .querySelector('[data-slot="tool-fallback-trigger-chevron"]')
+        .getBoundingClientRect();
+      const duration = (
+        row.querySelector('[data-slot="tool-fallback-duration"]') ??
+        row.querySelector('[data-slot="tool-fallback-trigger-label"]')
+      ).getBoundingClientRect();
+      return {
+        arrowGap: chevron.left - duration.right,
+        height: row.getBoundingClientRect().height,
+      };
+    });
   expect(toolGeometry.arrowGap).toBeCloseTo(8, 0);
   expect(toolGeometry.height).toBe(32);
   await page.locator('[data-slot="tool-fallback-trigger"]').first().click();
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const argsBlock = page.locator('[data-slot="tool-fallback-args"]').first();
   await argsBlock.getByRole("button", { name: "Copy", exact: true }).click();
-  await expect(argsBlock.getByRole("button", { name: "Copied", exact: true })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(JSON.stringify({ path: "file-0.md" }, null, 2));
-  const resultBlock = page.locator('[data-slot="tool-fallback-result"]').first();
+  await expect(
+    argsBlock.getByRole("button", { name: "Copied", exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    JSON.stringify({ path: "file-0.md" }, null, 2),
+  );
+  const resultBlock = page
+    .locator('[data-slot="tool-fallback-result"]')
+    .first();
   await resultBlock.getByRole("button", { name: "Copy", exact: true }).click();
-  await expect(resultBlock.getByRole("button", { name: "Copied", exact: true })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await resultBlock.locator("pre").innerText());
+  await expect(
+    resultBlock.getByRole("button", { name: "Copied", exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    await resultBlock.locator("pre").innerText(),
+  );
   await expect(
     page.locator('[data-slot="tool-fallback-result"]'),
   ).toContainText("Result 0");
@@ -246,27 +337,47 @@ test("compact tool activity, history actions and fluid message width", async ({
     page.getByRole("dialog", { name: "Rename conversation" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await history.getByRole("button", { name: "Conversation options: Review project files" }).click();
+  await history
+    .getByRole("button", { name: "Conversation options: Review project files" })
+    .click();
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   const deletion = page.getByRole("dialog", { name: "Delete conversation?" });
   await expect(deletion).toBeVisible();
-  await expect(deletion.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
-  await expect(deletion).toContainText("This will permanently delete this conversation and its files. Files saved elsewhere will be kept.");
+  await expect(
+    deletion.getByRole("button", { name: "Cancel", exact: true }),
+  ).toBeFocused();
+  await expect(deletion).toContainText(
+    "This will permanently delete this conversation and its files. Files saved elsewhere will be kept.",
+  );
   expect((await deletion.boundingBox()).width).toBeLessThanOrEqual(440);
-  await page.screenshot({ path: testInfo.outputPath("delete-confirmation.png"), animations: "disabled" });
+  await page.screenshot({
+    path: testInfo.outputPath("delete-confirmation.png"),
+    animations: "disabled",
+  });
   await page.keyboard.press("Escape");
   await expect(deletion).toBeHidden();
-  await expect(history.getByRole("button", { name: "Review project files", exact: true })).toBeVisible();
+  await expect(
+    history.getByRole("button", { name: "Review project files", exact: true }),
+  ).toBeVisible();
   await page.locator('[data-slot="aui_user-message-root"]').last().hover();
   const user = page.locator('[data-slot="aui_user-message-root"]').last();
   const actions = user.locator(".aui-user-action-bar-wrapper");
   await expect(actions).toHaveCSS("opacity", "1");
   await user.getByRole("button", { name: "Copy text", exact: true }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Check another file.");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    "Check another file.",
+  );
   await user.getByRole("button", { name: "Edit", exact: true }).click();
-  await expect(page.locator(".aui-edit-composer-input")).toHaveValue("Check another file.");
-  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("");
-  await page.locator(".aui-edit-composer-root").getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.locator(".aui-edit-composer-input")).toHaveValue(
+    "Check another file.",
+  );
+  await expect(
+    page.getByRole("textbox", { name: "Message", exact: true }),
+  ).toHaveValue("");
+  await page
+    .locator(".aui-edit-composer-root")
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
   await page.locator(".chat-header").click();
   await expect(actions).toHaveCSS("opacity", "0");
   await page
@@ -286,7 +397,9 @@ test("compact tool activity, history actions and fluid message width", async ({
     .locator('[data-slot="aui_assistant-message-root"]')
     .filter({ hasText: "Review complete" });
   await response.hover();
-  await response.getByRole("button", { name: "Copy text", exact: true }).click();
+  await response
+    .getByRole("button", { name: "Copy text", exact: true })
+    .click();
   await expect(
     response.getByRole("button", { name: "Copied", exact: true }),
   ).toBeVisible();
@@ -310,15 +423,34 @@ test("compact tool activity, history actions and fluid message width", async ({
   }));
   expect(sidebarMetrics.height).toBeGreaterThanOrEqual(40);
   expect(sidebarMetrics.weight).toBe("400");
-  const reply = page.locator('[data-slot="aui_assistant-message-root"]').filter({ hasText: "Review complete" });
+  const reply = page
+    .locator('[data-slot="aui_assistant-message-root"]')
+    .filter({ hasText: "Review complete" });
   await reply.hover();
-  await expect(reply.locator("time")).toHaveAttribute("datetime", "2026-09-12T03:31:00.000Z");
+  await expect(reply.locator("time")).toHaveAttribute(
+    "datetime",
+    "2026-09-12T03:31:00.000Z",
+  );
   await expect(reply.locator("time")).toHaveCSS("opacity", "1");
   await page.locator(".chat-header").click();
-  await expect.poll(() => reply.locator("time").evaluateAll(nodes => nodes.every(node => getComputedStyle(node).opacity === "0"))).toBe(true);
+  await expect
+    .poll(() =>
+      reply
+        .locator("time")
+        .evaluateAll((nodes) =>
+          nodes.every((node) => getComputedStyle(node).opacity === "0"),
+        ),
+    )
+    .toBe(true);
   await expect(reply.locator(".aui-md-h2")).toHaveCSS("font-size", "15px");
-  await expect(page.locator('[data-slot="chat-title"]')).toHaveCSS("font-size", "15px");
-  await expect(page.locator('[data-slot="chat-title"]')).toHaveCSS("font-weight", "500");
+  await expect(page.locator('[data-slot="chat-title"]')).toHaveCSS(
+    "font-size",
+    "15px",
+  );
+  await expect(page.locator('[data-slot="chat-title"]')).toHaveCSS(
+    "font-weight",
+    "500",
+  );
   const typography = await page.evaluate(() => {
     const size = (selector) =>
       getComputedStyle(document.querySelector(selector)).fontSize;
@@ -330,7 +462,9 @@ test("compact tool activity, history actions and fluid message width", async ({
     await page.setViewportSize({ width, height: 1000 });
     widths.push(
       await page.evaluate(() => ({
-        userBubble: document.querySelector(".aui-user-message-content").getBoundingClientRect().width,
+        userBubble: document
+          .querySelector(".aui-user-message-content")
+          .getBoundingClientRect().width,
         messages: document
           .querySelector('[data-slot="aui_message-group"]')
           .getBoundingClientRect().width,
@@ -345,7 +479,7 @@ test("compact tool activity, history actions and fluid message width", async ({
       animations: "disabled",
     });
   }
-  expect(widths.every(w => w.userBubble <= w.messages * 0.75)).toBe(true);
+  expect(widths.every((w) => w.userBubble <= w.messages * 0.75)).toBe(true);
   expect(widths[1].messages).toBeGreaterThan(widths[0].messages);
   expect(widths[1].messages).toBeLessThanOrEqual(800);
   expect(widths.every((w) => Math.abs(w.composer - w.messages) < 1)).toBe(true);
@@ -353,39 +487,63 @@ test("compact tool activity, history actions and fluid message width", async ({
   await page.evaluate(() => localStorage.setItem("fixture-running", "true"));
   await page.reload();
   await expect(groups.nth(1)).toHaveText(/Working for 4[5-9]s/);
-  await expect(page.locator('.worklens-activity-section').nth(1)).toHaveCSS("border-bottom-width", "0px");
+  await expect(page.locator(".worklens-activity-section").nth(1)).toHaveCSS(
+    "border-bottom-width",
+    "0px",
+  );
   await page.getByRole("button", { name: "New chat", exact: false }).click();
   await page.locator(".conversation-open").first().click();
   await expect(groups.nth(1)).toHaveText(/Working for 4[5-9]s/);
   await expect(page.locator(".chat-header .run-status")).toHaveCount(0);
-  await expect(page.locator('[data-slot="activity-progress"]').last()).toContainText("Reading");
+  await expect(
+    page.locator('[data-slot="activity-progress"]').last(),
+  ).toContainText("Reading");
   await expect(groups.nth(1)).toHaveText(/Working for [1-9]\d*s/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
   await page.evaluate(() => window.progressFixture());
   await expect(groups.nth(1)).toHaveText(/Working for \d+s/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator('[data-slot="activity-progress"]').last()).toContainText("Running bash · rg --files src");
+  await expect(
+    page.locator('[data-slot="activity-progress"]').last(),
+  ).toContainText("Running bash · rg --files src");
   const toolRow = page.locator('[data-slot="activity-progress"]').last();
   await expect(toolRow.locator(".lucide-square-terminal")).toHaveCount(1);
   await expect(toolRow.locator("span")).toHaveCSS("white-space", "nowrap");
-  await expect(page.getByText("Checking the latest source.", { exact: true })).toBeVisible();
-  await expect(page.locator('[data-slot="aui_assistant-message-indicator"]')).toHaveCount(0);
+  await expect(
+    page.getByText("Checking the latest source.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-slot="aui_assistant-message-indicator"]'),
+  ).toHaveCount(0);
   await page.evaluate(() => window.finishToolFixture());
   await expect(toolRow).toContainText("Ran command");
-  await expect(page.locator('[data-slot="activity-progress"]').last()).toContainText("Ran command");
+  await expect(
+    page.locator('[data-slot="activity-progress"]').last(),
+  ).toContainText("Ran command");
   await expect(groups.nth(1)).toHaveText(/Working for/);
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByText("Checking the latest source.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Checking the latest source.", { exact: true }),
+  ).toBeVisible();
   await page.evaluate(() => window.progressFixture(true));
   await expect(groups.nth(1)).toHaveText("Worked for 47s");
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "false");
   await groups.nth(1).click();
-  await expect(page.locator('.worklens-activity-section').nth(1)).toHaveCSS("border-bottom-width", "1px");
+  await expect(page.locator(".worklens-activity-section").nth(1)).toHaveCSS(
+    "border-bottom-width",
+    "1px",
+  );
   await expect(groups.nth(1)).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByText("Final live answer.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Final live answer.", { exact: true }),
+  ).toBeVisible();
   await groups.nth(1).click();
-  await expect(page.getByText("Checking the latest source.", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Final live answer.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Checking the latest source.", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Final live answer.", { exact: true }),
+  ).toBeVisible();
   await page.evaluate(() => {
     navigator.clipboard.writeText = async () => {
       throw Error("denied");
@@ -393,7 +551,9 @@ test("compact tool activity, history actions and fluid message width", async ({
     document.execCommand = () => false;
   });
   await response.hover();
-  await response.getByRole("button", { name: "Copy text", exact: true }).click();
+  await response
+    .getByRole("button", { name: "Copy text", exact: true })
+    .click();
   await expect(page.locator('[data-slot="toast-title"]')).toContainText(
     "Couldn’t copy. Select the text and copy it manually.",
   );
