@@ -92,6 +92,14 @@
   background: var(--native-sidebar-tint);
   padding-top: calc(var(--window-controls-height) + 6px);
 }
+/* Lives here rather than in style.css: this file loads later, so the tint
+   above would otherwise win over the reduced-transparency fallback. */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-native-vibrancy="true"] .settings-navigation {
+    background: var(--sidebar);
+    backdrop-filter: none;
+  }
+}
 .settings-navigation nav {
   display: flex;
   flex-direction: column;
