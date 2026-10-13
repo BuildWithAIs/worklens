@@ -1115,8 +1115,7 @@ kbd {
     display: none;
   }
   .sidebar,
-  :root[data-native-vibrancy="true"] .sidebar,
-  :root[data-native-vibrancy="true"] .settings-navigation {
+  :root[data-native-vibrancy="true"] .sidebar {
     background: var(--sidebar);
     backdrop-filter: none;
   }
