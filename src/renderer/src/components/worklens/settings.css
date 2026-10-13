@@ -327,28 +327,69 @@
 .settings-model-panel {
   padding-bottom: 0;
 }
-.settings-model-copy {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
+/* Details sit under the name, like other settings entries, with slightly
+   tighter spacing because model lists run long. */
+.settings-model-panel .settings-model-row {
+  padding-block: 8px;
 }
-.settings-model-copy .settings-entry-description {
-  margin-top: 0;
+.settings-model-meta {
+  display: block;
+  width: fit-content;
+  margin-top: 1px;
   font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  border-radius: 3px;
 }
-.settings-model-copy .model-test-result {
-  flex-basis: 100%;
+.settings-model-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  border-radius: 3px;
 }
-.settings-model-panel .settings-entry-actions {
-  gap: 16px;
+.settings-model-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.settings-model-status[data-state="failed"] {
+  color: var(--danger);
+}
+.settings-model-status[data-state="failed"]::before {
+  background: var(--danger);
+}
+.settings-model-meta:focus-visible,
+.settings-model-status:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .settings-model-test {
-  color: var(--faint);
+  color: var(--muted);
 }
 .settings-model-test:hover,
 .settings-model-test:focus-visible {
   color: var(--text);
+}
+/* A full-width footer row with a hover fill reads as an action. Buttons have
+   a transparent border that clips their background, so only the top edge
+   keeps one; the fill then reaches the card edges. */
+.settings-model-more {
+  width: calc(100% + 48px);
+  height: 40px;
+  margin-inline: -24px;
+  border-width: 1px 0 0;
+  border-top-color: var(--border);
+  border-radius: 0;
+  color: var(--muted);
+}
+.settings-model-more:active {
+  translate: none;
 }
 .settings-empty {
   color: var(--faint);

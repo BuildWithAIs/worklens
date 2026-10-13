@@ -103,6 +103,7 @@ export function SettingsPage({
   const [query, setQuery] = useState("");
   const [providerScope, setProviderScope] = useState("all");
   const [modelQuery, setModelQuery] = useState("");
+  const [modelCapability, setModelCapability] = useState("all");
   const [manageModels, setManageModels] = useState<ProviderInfo>();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [limits, setLimits] = useState<Record<string, number>>({});
@@ -113,6 +114,10 @@ export function SettingsPage({
   const [removing, setRemoving] = useState(false);
   const [refreshing, setRefreshing] = useState<string>();
   const [testing, setTesting] = useState<Set<string>>(new Set());
+  // Last result per model for this visit; details stay in the toast.
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; duration?: number }>
+  >({});
   const hiddenModels = new Set(data.settings.hiddenModels ?? []);
   const providerFailure = useCallback(
     (message: string, action: "login" | "save" | "browser") => {
@@ -162,14 +167,19 @@ export function SettingsPage({
   ) {
     const key = provider.id + "/" + model.id;
     setTesting((prev) => new Set(prev).add(key));
+    setTestResults(({ [key]: _, ...rest }) => rest);
+    const started = performance.now();
     try {
       await api.invoke("test", {
         provider: provider.id,
         model: model.id,
         thinking: model.levels.includes("medium") ? "medium" : model.levels[0],
       });
+      const duration = performance.now() - started;
+      setTestResults((prev) => ({ ...prev, [key]: { ok: true, duration } }));
       onSuccess(t("settingsFeedback.modelConnected", { service: model.name }));
     } catch (e) {
+      setTestResults((prev) => ({ ...prev, [key]: { ok: false } }));
       toast.add(
         settingsFailure(
           t("connectors.notice.testFailed", { service: model.name }),
@@ -199,6 +209,8 @@ export function SettingsPage({
     (p) => p.configured || p.credentialType || p.credentialError,
   );
   const others = filtered.filter((p) => !connected.includes(p));
+  const modelSearch = modelQuery.trim().toLowerCase();
+  const modelFiltering = !!modelSearch || modelCapability !== "all";
   const modelGroups = data.providers
     .filter((p) => p.configured || p.credentialType || p.credentialError)
     .map((p) => ({
@@ -210,19 +222,35 @@ export function SettingsPage({
       models: p.models.filter(
         (m) =>
           !hiddenModels.has(p.id + "/" + m.id) &&
+          (modelCapability !== "thinking" || m.reasoning) &&
+          (modelCapability !== "vision" || m.image) &&
           (p.name + " " + m.name + " " + m.id)
             .toLowerCase()
-            .includes(modelQuery.trim().toLowerCase()),
+            .includes(modelSearch),
       ),
     }))
     .filter(
       (p) =>
-        !modelQuery.trim() ||
+        !modelFiltering ||
         p.models.length ||
-        (p.name + " " + p.id)
-          .toLowerCase()
-          .includes(modelQuery.trim().toLowerCase()),
+        (modelCapability === "all" &&
+          (p.name + " " + p.id).toLowerCase().includes(modelSearch)),
     );
+  const formatNumber = (value: number, options: Intl.NumberFormatOptions) =>
+    Intl.NumberFormat(languageTag(language), options).format(value);
+  const formatDuration = (ms: number) =>
+    ms < 1000
+      ? formatNumber(Math.round(ms), {
+          style: "unit",
+          unit: "millisecond",
+          unitDisplay: "narrow",
+        })
+      : formatNumber(ms / 1000, {
+          style: "unit",
+          unit: "second",
+          unitDisplay: "narrow",
+          maximumFractionDigits: 1,
+        });
   const methodName = (p: ProviderInfo) =>
     p.methods.find((m) => m.type === p.credentialType)?.name ??
     (p.configured
@@ -410,6 +438,25 @@ export function SettingsPage({
                       setLimits({});
                     }}
                   />
+                  <NativeSelect
+                    aria-label={t("settings.filterModels")}
+                    value={modelCapability}
+                    onChange={(event) => {
+                      setModelCapability(event.target.value);
+                      setExpanded({});
+                      setLimits({});
+                    }}
+                  >
+                    <NativeSelectOption value="all">
+                      {t("settings.allModels")}
+                    </NativeSelectOption>
+                    <NativeSelectOption value="thinking">
+                      {t("settings.thinkingCapability")}
+                    </NativeSelectOption>
+                    <NativeSelectOption value="vision">
+                      {t("settings.visionCapability")}
+                    </NativeSelectOption>
+                  </NativeSelect>
                 </div>
                 {!!modelGroups.length && (
                   <Accordion
@@ -418,8 +465,7 @@ export function SettingsPage({
                     value={modelGroups
                       .filter(
                         (p) =>
-                          expanded[p.id] ??
-                          (!!modelQuery.trim() || p.configured),
+                          expanded[p.id] ?? (modelFiltering || p.configured),
                       )
                       .map((p) => p.id)}
                     onValueChange={(values) =>
@@ -458,7 +504,7 @@ export function SettingsPage({
                                   count: p.selectedCount,
                                   total: p.totalCount,
                                 })}
-                                {modelQuery.trim() && (
+                                {modelFiltering && (
                                   <>
                                     {" "}
                                     ·{" "}
@@ -496,9 +542,13 @@ export function SettingsPage({
                           <div className="settings-list settings-model-list">
                             {p.models.slice(0, limits[p.id] ?? 50).map((m) => {
                               const key = p.id + "/" + m.id;
+                              const result = testResults[key];
                               return (
-                                <div className="settings-entry" key={key}>
-                                  <div className="settings-entry-copy settings-model-copy">
+                                <div
+                                  className="settings-entry settings-model-row"
+                                  key={key}
+                                >
+                                  <div className="settings-entry-copy">
                                     <div className="settings-entry-title">
                                       {m.name}
                                     </div>
@@ -507,32 +557,52 @@ export function SettingsPage({
                                         "settings.contextWindowAndCapabilities",
                                       )}
                                     >
-                                      <div
-                                        className="settings-entry-description"
+                                      <span
+                                        className="settings-entry-description settings-model-meta"
                                         tabIndex={0}
                                       >
-                                        {Intl.NumberFormat(
-                                          languageTag(language),
-                                          {
-                                            notation: "compact",
-                                            maximumFractionDigits: 1,
-                                          },
-                                        ).format(m.contextWindow)}
+                                        {formatNumber(m.contextWindow, {
+                                          notation: "compact",
+                                          maximumFractionDigits: 1,
+                                        })}
                                         {m.reasoning
                                           ? t("settings.thinkingSuffix")
                                           : ""}
                                         {m.image
                                           ? t("settings.visionSuffix")
                                           : ""}
-                                      </div>
+                                      </span>
                                     </Hint>
                                   </div>
                                   <div className="settings-entry-actions">
                                     {m.available ? (
                                       <>
+                                        {result && !testing.has(key) && (
+                                          <Hint
+                                            content={t(
+                                              result.ok
+                                                ? "settings.lastTestSucceeded"
+                                                : "settings.lastTestFailed",
+                                            )}
+                                          >
+                                            <span
+                                              className="settings-model-status"
+                                              data-state={
+                                                result.ok ? "passed" : "failed"
+                                              }
+                                              tabIndex={0}
+                                            >
+                                              {result.ok
+                                                ? formatDuration(
+                                                    result.duration ?? 0,
+                                                  )
+                                                : t("settings.testFailed")}
+                                            </span>
+                                          </Hint>
+                                        )}
                                         <TooltipIconButton
                                           variant="ghost"
-                                          size="icon-xs"
+                                          size="icon-sm"
                                           className="settings-model-test"
                                           disabled={testing.has(key)}
                                           aria-label={t(
@@ -575,21 +645,23 @@ export function SettingsPage({
                                 )}
                               </p>
                             )}
+                            {p.models.length > (limits[p.id] ?? 50) && (
+                              <Button
+                                variant="ghost"
+                                className="settings-model-more"
+                                onClick={() =>
+                                  setLimits((prev) => ({
+                                    ...prev,
+                                    [p.id]: (prev[p.id] ?? 50) + 50,
+                                  }))
+                                }
+                              >
+                                {t("settings.showMoreModels", {
+                                  count: p.models.length - (limits[p.id] ?? 50),
+                                })}
+                              </Button>
+                            )}
                           </div>
-                          {p.models.length > (limits[p.id] ?? 50) && (
-                            <Button
-                              variant="ghost"
-                              className="mt-3"
-                              onClick={() =>
-                                setLimits((prev) => ({
-                                  ...prev,
-                                  [p.id]: (prev[p.id] ?? 50) + 50,
-                                }))
-                              }
-                            >
-                              {t("settings.showMoreModels")}
-                            </Button>
-                          )}
                         </AccordionContent>
                       </AccordionItem>
                     ))}
@@ -597,7 +669,7 @@ export function SettingsPage({
                 )}
                 {!modelGroups.length && (
                   <div className="settings-empty">
-                    {!modelQuery.trim() &&
+                    {!modelFiltering &&
                     !data.providers.some((p) => p.configured) ? (
                       <>
                         <p className="font-medium text-foreground">
@@ -615,7 +687,13 @@ export function SettingsPage({
                         </Button>
                       </>
                     ) : (
-                      <p>{t("settings.emptyModels")}</p>
+                      <p>
+                        {t(
+                          modelCapability === "all"
+                            ? "settings.emptyModels"
+                            : "settings.noModelsMatchYourFilters",
+                        )}
+                      </p>
                     )}
                   </div>
                 )}

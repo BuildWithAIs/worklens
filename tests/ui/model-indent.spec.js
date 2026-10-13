@@ -23,7 +23,7 @@ for (const theme of ["light", "dark"]) {
       await expect(row).toBeVisible();
       await expect(row).toHaveCSS("padding-left", "0px");
       await expect(row).toHaveCSS("padding-right", "0px");
-      await expect(row).toHaveCSS("padding-top", "10px");
+      await expect(row).toHaveCSS("padding-top", "8px");
       const parentBox = await page
         .locator('[data-slot="accordion-content"]')
         .first()
@@ -38,7 +38,7 @@ for (const theme of ["light", "dark"]) {
       expect(
         parentBox.x + parentBox.width - rowBox.x - rowBox.width,
       ).toBeCloseTo(25, 0);
-      if (width === 1280) expect(rowBox.height).toBe(48);
+      if (width === 1280) expect(rowBox.height).toBeCloseTo(54, 0);
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
