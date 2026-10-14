@@ -13,6 +13,8 @@ export interface ImageOptions {
   maxHeight: number;
   maxBytes: number;
   preserveOriginal?: boolean;
+  sourceBytes?: number;
+  sourcePixels?: number;
 }
 export interface DecodedImage {
   data: string;
@@ -38,6 +40,14 @@ export const originalOptions = {
   maxHeight: 25_000_000,
   maxBytes: Math.ceil(CHAT_IMAGE_LIMITS.perImage / 3) * 4 + 1,
 };
+// New attachments are reduced once, before they are stored with a message.
+export const attachmentOptions = {
+  maxWidth: CHAT_IMAGE_LIMITS.edge,
+  maxHeight: CHAT_IMAGE_LIMITS.edge,
+  maxBytes: CHAT_IMAGE_LIMITS.encodedImage,
+  sourceBytes: CHAT_IMAGE_LIMITS.sourceBytes,
+  sourcePixels: CHAT_IMAGE_LIMITS.sourcePixels,
+};
 
 export async function processChatImage(
   image: { data: string; mimeType: string },
@@ -45,14 +55,15 @@ export async function processChatImage(
   signal?: AbortSignal,
 ): Promise<DecodedImage> {
   signal?.throwIfAborted();
-  if (image.data.length > originalOptions.maxBytes)
+  const sourceBytes = options.sourceBytes ?? CHAT_IMAGE_LIMITS.perImage;
+  const pixelLimit = options.sourcePixels ?? CHAT_IMAGE_LIMITS.pixels;
+  if (image.data.length > Math.ceil(sourceBytes / 3) * 4 + 1)
     throw new Error("CHAT_IMAGE_SIZE");
   const bytes = Buffer.from(image.data, "base64");
-  if (bytes.length > CHAT_IMAGE_LIMITS.perImage)
-    throw new Error("CHAT_IMAGE_SIZE");
+  if (bytes.length > sourceBytes) throw new Error("CHAT_IMAGE_SIZE");
   if (imageMimeType(bytes) !== image.mimeType)
     throw new Error("CHAT_IMAGE_INVALID");
-  imageDimensions(bytes);
+  imageDimensions(bytes, pixelLimit);
   const key = createHash("sha256")
     .update(bytes)
     .update(JSON.stringify(options))
@@ -132,7 +143,7 @@ export async function processChatImage(
           data: image.data,
           mimeType: image.mimeType,
           options,
-          pixelLimit: CHAT_IMAGE_LIMITS.pixels,
+          pixelLimit,
         },
         (error) => {
           if (error) finish();
@@ -140,7 +151,7 @@ export async function processChatImage(
       );
     });
     if (
-      result.originalWidth * result.originalHeight > CHAT_IMAGE_LIMITS.pixels ||
+      result.originalWidth * result.originalHeight > pixelLimit ||
       result.width > options.maxWidth ||
       result.height > options.maxHeight
     )

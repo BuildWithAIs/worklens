@@ -3,15 +3,17 @@ import { CHAT_IMAGE_LIMITS, imageMimeType } from "./chat-images";
 // Read bounded headers before invoking any image decoder. Check every WebP
 // frame header as well as the extended canvas so a small VP8X cannot hide a
 // larger frame. Animated files are not accepted by the chat image pipeline.
-export function imageDimensions(bytes: Uint8Array) {
+export function imageDimensions(
+  bytes: Uint8Array,
+  pixelLimit: number = CHAT_IMAGE_LIMITS.pixels,
+) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const invalid = () => {
     throw new Error("CHAT_IMAGE_INVALID");
   };
   const dimensions = (width: number, height: number) => {
     if (!width || !height) return invalid();
-    if (width * height > CHAT_IMAGE_LIMITS.pixels)
-      throw new Error("CHAT_IMAGE_DIMENSIONS");
+    if (width * height > pixelLimit) throw new Error("CHAT_IMAGE_DIMENSIONS");
     return { width, height };
   };
   const label = (offset: number) =>

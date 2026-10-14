@@ -3,6 +3,7 @@ import * as childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
 import { imageDimensions } from "../src/shared/image-dimensions";
 import {
+  attachmentOptions,
   originalOptions,
   processChatImage,
   thumbnailOptions,
@@ -45,6 +46,20 @@ test("oversized PNG, JPEG and WebP headers are rejected before starting a decode
   webp.writeUIntLE(9999, 27, 3);
   expect(() => imageDimensions(webp)).toThrow("CHAT_IMAGE_DIMENSIONS");
   expect(fork).not.toHaveBeenCalled();
+});
+
+test("attachment sources accept up to 100 MP and reject larger headers before decoding", async () => {
+  const fork = vi.mocked(childProcess.fork);
+  await expect(
+    processChatImage(input(pngHeader(10001, 10000)), attachmentOptions),
+  ).rejects.toThrow("CHAT_IMAGE_DIMENSIONS");
+  expect(fork).not.toHaveBeenCalled();
+  const result = await processChatImage(
+    input(syntheticPng(7088, 3530)),
+    attachmentOptions,
+  );
+  expect([result.originalWidth, result.originalHeight]).toEqual([7088, 3530]);
+  expect([result.width, result.height]).toEqual([2000, 996]);
 });
 
 test("a small WebP canvas cannot conceal an oversized frame", () => {

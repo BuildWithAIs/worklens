@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
 import {
+  preparedImageName,
   validateChatImages,
   validateImageContent,
 } from "../src/main/chat-images";
@@ -76,6 +77,47 @@ async function setup(vision = true, failAlways = false) {
   return { service, paths, runtime, selection, server, events };
 }
 
+test("large attachments are reduced in main before they enter a draft", async () => {
+  const { service } = await setup();
+  // A long screenshot within 20 MiB but above the stored 25 MP limit.
+  const source = syntheticPng(14786, 3390);
+  const prepared = await service.prepareChatImage({
+    image: {
+      name: "long.png",
+      mimeType: "image/png",
+      data: source.toString("base64"),
+    },
+  });
+  expect(prepared.resized).toEqual({ width: 2000, height: 459 });
+  expect(prepared.image.name).toBe("long.png");
+  expect(validateChatImages([prepared.image])).toHaveLength(1);
+  expect(prepared.image.data.length).toBeLessThan(
+    CHAT_IMAGE_LIMITS.encodedImage,
+  );
+  expect(prepared.preview).toMatch(/^data:image\/png;base64,/);
+  const small = await service.prepareChatImage({ image });
+  expect(small.image).toEqual(image);
+  expect(small.resized).toBeUndefined();
+  await expect(
+    service.prepareChatImage({ image: { ...image, data: `${image.data}\n` } }),
+  ).rejects.toThrow("CHAT_IMAGE_INVALID");
+});
+
+test("attachment sources use the source size limit and keep a matching extension", () => {
+  const data = (bytes: number) => "A".repeat(Math.ceil(bytes / 3) * 4);
+  const parse = (bytes: number) =>
+    schemas.prepareChatImage.safeParse({
+      image: { ...image, data: data(bytes) },
+    }).success;
+  expect(parse(CHAT_IMAGE_LIMITS.sourceBytes)).toBe(true);
+  expect(parse(CHAT_IMAGE_LIMITS.sourceBytes + 3)).toBe(false);
+  expect(preparedImageName("photo.webp", "image/png")).toBe("photo.png");
+  expect(preparedImageName("photo.PNG", "image/jpeg")).toBe("photo.jpg");
+  expect(preparedImageName("photo.jpeg", "image/jpeg")).toBe("photo.jpeg");
+  expect(preparedImageName("photo.png", "image/png")).toBe("photo.png");
+  expect(preparedImageName("clipboard", "image/png")).toBe("clipboard");
+});
+
 test("image contract allows image-only messages and rejects forged, oversized and empty payloads", () => {
   const selection = { provider: "test", model: "test", thinking: "off" };
   expect(
@@ -100,14 +142,16 @@ test("image contract allows image-only messages and rejects forged, oversized an
   expect(() =>
     validateChatImages([{ ...image, data: image.data + "garbage" }]),
   ).toThrow("CHAT_IMAGE_INVALID");
-  expect(() => validateChatImages(Array(9).fill(image))).toThrow(
-    "CHAT_IMAGE_LIMITS",
-  );
+  expect(() =>
+    validateChatImages(Array(CHAT_IMAGE_LIMITS.count + 1).fill(image)),
+  ).toThrow("CHAT_IMAGE_LIMITS");
   const bytes = Buffer.alloc(CHAT_IMAGE_LIMITS.perImage);
   Buffer.from(image.data, "base64").copy(bytes);
   expect(() =>
     validateChatImages(
-      Array(5).fill({ ...image, data: bytes.toString("base64") }),
+      Array(
+        Math.floor(CHAT_IMAGE_LIMITS.total / CHAT_IMAGE_LIMITS.perImage) + 1,
+      ).fill({ ...image, data: bytes.toString("base64") }),
     ),
   ).toThrow("CHAT_IMAGE_TOTAL");
   expect(() =>

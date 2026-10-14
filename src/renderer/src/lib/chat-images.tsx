@@ -12,12 +12,19 @@ import {
   base64ImageBytes,
   type ChatImage,
   type EditedChatImage,
+  type PreparedChatImage,
   chatImageSource,
 } from "../../../shared/chat-images";
 import { imageDimensions } from "../../../shared/image-dimensions";
 import type { ImageLease, ImageVariant } from "./image-loader";
 
 export const draftImagePreviews = new WeakMap<File, string>();
+export const draftImageSizes = new WeakMap<
+  File,
+  NonNullable<PreparedChatImage["resized"]>
+>();
+// Upper bound of a prepared image's decoded bytes.
+const preparedBytes = Math.floor((CHAT_IMAGE_LIMITS.encodedImage * 3) / 4);
 
 export const ChatImageContext = createContext({
   supported: false,
@@ -39,7 +46,7 @@ export function createImageAdapter(
     attachments: readonly Attachment[];
   },
 ): AttachmentAdapter {
-  const pending = new Map<string, number>();
+  const pending = new Set<string>();
   return {
     accept: CHAT_IMAGE_TYPES.join(","),
     async *add({ file }) {
@@ -48,28 +55,35 @@ export function createImageAdapter(
       // opened them. Do not fill the draft reserved for a rejected submission.
       if (state.disabled) return;
       if (!state.supported) throw new Error("CHAT_IMAGE_MODEL");
-      if (!file.size || file.size > CHAT_IMAGE_LIMITS.perImage)
-        throw new Error("CHAT_IMAGE_SIZE");
-      const sizes = new Map(
-        state.attachments.map((a) => [
-          a.id,
-          a.file?.size ??
-            base64ImageBytes(
-              a.content?.find((p) => p.type === "image")?.image.split(",")[1] ??
-                "",
-            ),
-        ]),
-      );
-      for (const [id, size] of pending) sizes.set(id, size);
-      if (sizes.size >= CHAT_IMAGE_LIMITS.count)
+      // Name the file: several may be added at once, and a rejected one has
+      // no tile of its own.
+      const fileName = encodeURIComponent(file.name.slice(0, 255) || "image");
+      if (!file.size) throw new Error("CHAT_IMAGE_INVALID");
+      if (file.size > CHAT_IMAGE_LIMITS.sourceBytes)
+        throw new Error(`CHAT_IMAGE_SIZE ${fileName}`);
+      // Images still being prepared count toward the image limit only. Their
+      // stored size is known once main returns it, so the total is checked
+      // again then, and once more when the message is sent.
+      const storedBytes = (except?: string) =>
+        getState().attachments.reduce((total, a) => {
+          const image = a.content?.find((p) => p.type === "image")?.image;
+          return a.id === except || !image
+            ? total
+            : total + base64ImageBytes(image.split(",")[1] ?? "");
+        }, 0);
+      const count = new Set([
+        ...getState().attachments.map((a) => a.id),
+        ...pending,
+      ]).size;
+      if (count >= CHAT_IMAGE_LIMITS.count)
         throw new Error("CHAT_IMAGE_LIMITS");
       if (
-        [...sizes.values()].reduce((sum, size) => sum + size, file.size) >
+        storedBytes() + Math.min(file.size, preparedBytes) >
         CHAT_IMAGE_LIMITS.total
       )
         throw new Error("CHAT_IMAGE_TOTAL");
       const id = crypto.randomUUID();
-      pending.set(id, file.size);
+      pending.add(id);
       const attachment: PendingAttachment = {
         id,
         type: "image",
@@ -84,26 +98,43 @@ export function createImageAdapter(
         const mimeType = imageMimeType(bytes);
         if (!mimeType || mimeType !== file.type)
           throw new Error("CHAT_IMAGE_INVALID");
-        imageDimensions(bytes);
+        // Report the size so the person does not need to look it up.
+        const { width, height } = imageDimensions(bytes, Infinity);
+        if (width * height > CHAT_IMAGE_LIMITS.sourcePixels)
+          throw new Error(
+            `CHAT_IMAGE_DIMENSIONS ${width}x${height} ${fileName}`,
+          );
         const source = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result));
           reader.onerror = () => reject(new Error("CHAT_IMAGE_INVALID"));
           reader.readAsDataURL(file);
         });
-        const preview = await window.worklens.invoke("prepareChatImage", {
-          images: [
-            {
-              name: attachment.name,
-              mimeType,
-              data: source.slice(source.indexOf(",") + 1),
-            },
-          ],
+        const prepared = await window.worklens.invoke("prepareChatImage", {
+          image: {
+            name: attachment.name,
+            mimeType,
+            data: source.slice(source.indexOf(",") + 1),
+          },
         });
-        draftImagePreviews.set(file, preview);
+        const { image } = prepared;
+        if (
+          storedBytes(id) + base64ImageBytes(image.data) >
+          CHAT_IMAGE_LIMITS.total
+        )
+          throw new Error("CHAT_IMAGE_TOTAL");
+        draftImagePreviews.set(file, prepared.preview);
+        if (prepared.resized) draftImageSizes.set(file, prepared.resized);
         yield {
           ...attachment,
-          content: [{ type: "image", image: source }],
+          name: image.name,
+          contentType: image.mimeType,
+          content: [
+            {
+              type: "image",
+              image: `data:${image.mimeType};base64,${image.data}`,
+            },
+          ],
           status: { type: "requires-action", reason: "composer-send" },
         };
       } finally {

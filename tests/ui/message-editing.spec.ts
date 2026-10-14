@@ -54,8 +54,12 @@ async function setup(page: Page, theme = "light", imageOnly = false) {
           return current;
         }
         if (name === "open") return current;
-        if (name === "chatImage" || name === "prepareChatImage")
-          return `data:image/png;base64,${png}`;
+        if (name === "chatImage") return `data:image/png;base64,${png}`;
+        if (name === "prepareChatImage")
+          return {
+            image: input.image,
+            preview: `data:image/png;base64,${png}`,
+          };
         if (name === "editMessage") {
           (window as any).editRequests.push(input);
           if ((window as any).rejectEdit)

@@ -344,6 +344,34 @@ const messages = [
   ],
 ] as const;
 
+const fileErrorPattern = /CHAT_IMAGE_(?:DIMENSIONS (\d+)x(\d+)|SIZE) (\S+)/;
+
+// Errors about one attached file carry its encoded name. Callers that already
+// show the name, or can show it as a title, use the parts separately.
+export function imageFileError(text: string, language: AppLanguage) {
+  const match = fileErrorPattern.exec(text);
+  if (!match) return undefined;
+  const t = i18n.getFixedT(language);
+  const [, width, height, encoded] = match;
+  let name = encoded;
+  try {
+    name = decodeURIComponent(encoded);
+  } catch {
+    // Keep the encoded text when it is not valid URI encoding.
+  }
+  const number = (value: string) =>
+    language === "en" ? Number(value).toLocaleString("en") : value;
+  return {
+    name,
+    message: width
+      ? t("attachments.dimensionsOf", {
+          width: number(width),
+          height: number(height),
+        })
+      : t("attachments.sizeOf"),
+  };
+}
+
 export function systemText(text: string, language: AppLanguage) {
   const t = i18n.getFixedT(language);
   let result = text
@@ -406,6 +434,11 @@ export function systemText(text: string, language: AppLanguage) {
       /请输入不含凭据、查询参数或片段的 (Jira|Confluence) 站点地址/g,
       (_, service) => t("connectors.runtime.siteInvalid", { service }),
     );
+
+  result = result.replace(new RegExp(fileErrorPattern, "g"), (error) => {
+    const { name, message } = imageFileError(error, language)!;
+    return t("attachments.fileError", { name, message });
+  });
 
   for (const [chinese, english, key] of messages) {
     result = result.replaceAll(chinese, t(key)).replaceAll(english, t(key));

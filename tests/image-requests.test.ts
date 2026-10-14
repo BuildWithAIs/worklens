@@ -13,7 +13,7 @@ import {
 } from "../src/main/image-requests";
 import { imageDimensions } from "../src/shared/image-dimensions";
 import { validateChatImages } from "../src/main/chat-images";
-import { syntheticPng } from "./image-fixtures";
+import { pngHeader, syntheticPng } from "./image-fixtures";
 import { fixtureModel } from "./mock-server";
 
 const roots: string[] = [];
@@ -65,6 +65,45 @@ test("provider preparation resizes encoded-size and long-edge violations without
     expect(Math.max(size.width, size.height)).toBeLessThanOrEqual(2000);
   }
   expect(JSON.stringify(context)).toBe(before);
+});
+
+test("large tool images are resized and oversized ones are omitted instead of blocking the session", async () => {
+  const context: Context = {
+    messages: [
+      {
+        role: "toolResult",
+        toolCallId: "synthetic-call",
+        toolName: "read",
+        content: [
+          picture(syntheticPng(14786, 3390)),
+          picture(pngHeader(10001, 10000)),
+        ],
+        isError: false,
+        timestamp: 1,
+      },
+    ],
+  };
+  const prepared = await prepareImageContext(
+    context,
+    model("openai-responses"),
+  );
+  const [resized, omitted] = (
+    prepared.messages[0] as (typeof context.messages)[0] & { content: any[] }
+  ).content;
+  expect(imageDimensions(Buffer.from(resized.data, "base64"))).toEqual({
+    width: 2000,
+    height: 459,
+  });
+  expect(omitted).toEqual({
+    type: "text",
+    text: "[Image omitted: larger than 100 megapixels or 20 MiB.]",
+  });
+  await expect(
+    prepareImageContext(
+      { messages: [user([picture(pngHeader(10001, 10000))])] },
+      model("openai-responses"),
+    ),
+  ).rejects.toThrow("CHAT_IMAGE_DIMENSIONS");
 });
 
 test("all retained turns and tool images share the request budget", async () => {

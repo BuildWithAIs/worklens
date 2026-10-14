@@ -230,7 +230,11 @@ test("image preflight uses the edited branch while ordinary sends and retained h
       messageId: last.entryId!,
       expectedBranchId: current.branchId!,
       text: "Too many images with the retained prefix",
-      images: Array.from({ length: 4 }, () => image),
+      // One more image than the edited prompt had pushes past 100.
+      images: Array.from(
+        { length: (last.images?.length ?? 0) + 1 },
+        () => image,
+      ),
       selection: f.selection,
     }),
   ).rejects.toThrow("CHAT_IMAGE_REQUEST");

@@ -46,8 +46,12 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { useAttachmentSrc } from "@/hooks/use-attachment-src";
 import { cn } from "@/lib/utils";
 import { useAppTranslation } from "@/i18n";
-import { ChatImageContext, useStoredImage } from "@/lib/chat-images";
-import { systemText } from "@/lib/system-text";
+import {
+  ChatImageContext,
+  draftImageSizes,
+  useStoredImage,
+} from "@/lib/chat-images";
+import { imageFileError, systemText } from "@/lib/system-text";
 import { ImageMenu } from "./image-menu";
 
 const MessageImagesContext = createContext<readonly Attachment[]>([]);
@@ -304,6 +308,11 @@ const AttachmentUI: FC = () => {
   const thumbnail = useAttachmentSrc(isComposer || nearViewport);
 
   const isImage = useAuiState((s) => s.attachment.type === "image");
+  const resized = useAuiState((s) =>
+    isComposer && s.attachment.file
+      ? draftImageSizes.get(s.attachment.file)
+      : undefined,
+  );
   const attachmentType = useAuiState((s) => s.attachment.type);
   const typeLabel =
     attachmentType === "image"
@@ -333,7 +342,8 @@ const AttachmentUI: FC = () => {
   );
   const errorMessage = isError
     ? attachmentError
-      ? systemText(attachmentError, language)
+      ? (imageFileError(attachmentError, language)?.message ??
+        systemText(attachmentError, language))
       : t("attachments.uploadFailed")
     : undefined;
 
@@ -397,8 +407,15 @@ const AttachmentUI: FC = () => {
           </AttachmentPreviewDialog>
           {isComposer && <AttachmentRemove />}
         </AttachmentPrimitive.Root>
-        <TooltipContent side="top">
-          <AttachmentPrimitive.Name />
+        <TooltipContent side="top" className="flex-col items-start gap-0.5">
+          <span className="font-medium break-all">
+            <AttachmentPrimitive.Name />
+          </span>
+          {resized && !errorMessage && (
+            <p className="aui-attachment-resized">
+              {t("attachments.resized", resized)}
+            </p>
+          )}
           {errorMessage && (
             <p className="aui-attachment-error-message">{errorMessage}</p>
           )}

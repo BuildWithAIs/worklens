@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test } from "vitest";
 import i18n, { languageTag, normalizeLanguage } from "../src/renderer/src/i18n";
 import en from "../src/renderer/src/i18n/locales/en";
 import zhCN from "../src/renderer/src/i18n/locales/zh-CN";
-import { systemText } from "../src/renderer/src/lib/system-text";
+import {
+  imageFileError,
+  systemText,
+} from "../src/renderer/src/lib/system-text";
 
 function leafKeys(value: Record<string, unknown>, prefix = ""): string[] {
   return Object.entries(value).flatMap(([key, child]) => {
@@ -51,6 +54,33 @@ describe("internationalization resources", () => {
       "Retry failed [已隐藏]",
     );
     expect(systemText("用户原始内容", "en")).toBe("用户原始内容");
+  });
+
+  test("per-file image errors separate the file name from a short reason", () => {
+    const name = encodeURIComponent("Long screenshot.png");
+    expect(
+      imageFileError(`Error: CHAT_IMAGE_DIMENSIONS 12000x9000 ${name}`, "en"),
+    ).toEqual({
+      name: "Long screenshot.png",
+      message:
+        "12,000 × 9,000 pixels is too large. Resize it to fit within 10,000 × 10,000.",
+    });
+    expect(imageFileError(`CHAT_IMAGE_SIZE ${name}`, "zh")).toEqual({
+      name: "Long screenshot.png",
+      message: "超过 20 MiB，请选择更小的图片。",
+    });
+    // Plain-text surfaces keep both parts on one line.
+    expect(systemText(`CHAT_IMAGE_DIMENSIONS 12000x9000 ${name}`, "zh")).toBe(
+      "Long screenshot.png：12000 × 9000 像素过大，请缩小到 10000 × 10000 以内。",
+    );
+    expect(imageFileError("CHAT_IMAGE_SIZE", "en")).toBeUndefined();
+    expect(systemText("CHAT_IMAGE_SIZE", "en")).toBe(
+      "Each image must be 20 MiB or smaller.",
+    );
+    // Without a file this comes from sending conversation history.
+    expect(systemText("CHAT_IMAGE_DIMENSIONS", "en")).toBe(
+      "Couldn’t send an image because it’s too large. Try again.",
+    );
   });
 });
 

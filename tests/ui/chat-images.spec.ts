@@ -795,7 +795,7 @@ test("run-start unlocks editing and Stop even before the send reply arrives", as
   await page.evaluate(() => (window as any).releaseImageSettings());
 });
 
-test("pasted and dropped images share validation; the ninth image is rejected", async ({
+test("pasted and dropped images share validation; the sixteenth image is rejected", async ({
   page,
 }) => {
   await setup(page);
@@ -834,15 +834,15 @@ test("pasted and dropped images share validation; the ninth image is rejected", 
   await expect(page.locator(".aui-composer-attachments img")).toHaveCount(2);
   await choose(
     page,
-    Array.from({ length: 7 }, (_, index) => file(`more-${index}.png`)),
+    Array.from({ length: 14 }, (_, index) => file(`more-${index}.png`)),
   );
   await expect(
     page.locator(".aui-composer-attachments .aui-attachment-root"),
-  ).toHaveCount(8);
+  ).toHaveCount(15);
   await expect(
     page.getByRole("alert").filter({
       hasText:
-        "You can add up to 8 images per message. Remove an image and try again.",
+        "You can add up to 15 images per message. Remove an image and try again.",
     }),
   ).toBeVisible();
 });
@@ -872,13 +872,13 @@ test("invalid and oversized files give feedback, keep text and block incomplete 
   );
   await page.locator(".aui-attachment-tile-remove").click();
   await choose(page, [
-    { ...file(), buffer: Buffer.alloc(5 * 1024 * 1024 + 1) },
+    { ...file(), buffer: Buffer.alloc(20 * 1024 * 1024 + 1) },
   ]);
-  await expect(
-    page
-      .getByRole("alert")
-      .filter({ hasText: "Each image must be 5 MiB or smaller." }),
-  ).toBeVisible();
+  const sizeAlert = page
+    .getByRole("alert")
+    .filter({ hasText: "Larger than 20 MiB. Choose a smaller image." });
+  await expect(sizeAlert).toBeVisible();
+  await expect(sizeAlert).toContainText("screenshot.png");
   await expect(
     page.locator(".aui-composer-attachments .aui-attachment-root"),
   ).toHaveCount(0);
@@ -933,12 +933,15 @@ test("large declared dimensions are rejected before decoding or preview IPC", as
     {
       name: "synthetic-large-header.png",
       mimeType: "image/png",
-      buffer: pngHeader(10000, 10000),
+      buffer: pngHeader(10001, 10000),
     },
   ]);
-  await expect(
-    page.getByRole("alert").filter({ hasText: "25 megapixels" }),
-  ).toBeVisible();
+  const alert = page.getByRole("alert").filter({
+    hasText:
+      "10,001 × 10,000 pixels is too large. Resize it to fit within 10,000 × 10,000.",
+  });
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText("synthetic-large-header.png");
   expect(await page.evaluate(() => (window as any).imagePreparationCalls)).toBe(
     0,
   );
@@ -946,6 +949,48 @@ test("large declared dimensions are rejected before decoding or preview IPC", as
     "Keep this draft",
   );
   await expect(page.locator(".aui-composer-attachments img")).toHaveCount(0);
+});
+
+test("high-resolution images are prepared in main and show their reduced size", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate((png) => {
+    (window as any).prepared = [];
+    const invoke = window.worklens.invoke;
+    window.worklens.invoke = (async (name: string, input: any) => {
+      if (name !== "prepareChatImage") return (invoke as any)(name, input);
+      (window as any).prepared.push(input.image.name);
+      return {
+        image: { name: input.image.name, mimeType: "image/png", data: png },
+        preview: `data:image/png;base64,${png}`,
+        resized: { width: 2000, height: 459 },
+      };
+    }) as typeof window.worklens.invoke;
+    window.createImageBitmap = () => {
+      throw new Error("Renderer must not decode uploads");
+    };
+  }, png);
+  await choose(page, [
+    {
+      name: "long-screenshot.png",
+      mimeType: "image/png",
+      buffer: pngHeader(14786, 3390),
+    },
+  ]);
+  await expect(page.locator(".aui-composer-attachments img")).toHaveCount(1);
+  expect(await page.evaluate(() => (window as any).prepared)).toEqual([
+    "long-screenshot.png",
+  ]);
+  await page.locator(".aui-composer-attachments .aui-attachment-tile").hover();
+  await expect(page.getByText("Resized to 2000 × 459")).toBeVisible();
+  await page.locator(".aui-composer-input").fill("Describe this");
+  await page.locator(".aui-composer-send").click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as any).imageSends[0]?.images[0]?.data),
+    )
+    .toBe(png);
 });
 
 test("history loads nearby thumbnails only and releases Blob URLs when scrolling or leaving", async ({
