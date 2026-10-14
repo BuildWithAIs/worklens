@@ -1,7 +1,4 @@
-import hljs from "highlight.js/lib/core";
-import xml from "highlight.js/lib/languages/xml";
-import css from "highlight.js/lib/languages/css";
-import javascript from "highlight.js/lib/languages/javascript";
+import { syntaxHighlighter as hljs } from "@/lib/syntax-highlight";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -38,10 +35,6 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { useAppTranslation } from "@/i18n";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { inspectConversationFile } from "@/lib/file-inspection-queue";
-
-hljs.registerLanguage("xml", xml);
-hljs.registerLanguage("css", css);
-hljs.registerLanguage("javascript", javascript);
 
 type Artifact = {
   path?: string;

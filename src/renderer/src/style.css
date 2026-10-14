@@ -965,6 +965,9 @@ kbd {
   --syntax-string: #16752c;
   --syntax-number: #a54f00;
   --syntax-comment: #747780;
+  --syntax-function: #7a3fd1;
+  --syntax-type: #0f7b8a;
+  --syntax-variable: #b4232f;
 }
 :root[data-theme="dark"] {
   --syntax-tag: #f38b98;
@@ -972,6 +975,9 @@ kbd {
   --syntax-string: #9bce9a;
   --syntax-number: #edb776;
   --syntax-comment: #999da6;
+  --syntax-function: #c9a2ff;
+  --syntax-type: #6fd3dc;
+  --syntax-variable: #ff9b8f;
 }
 .aui-md-pre,
 .artifact-source,
@@ -1025,9 +1031,54 @@ kbd {
 }
 .hljs-comment {
   color: var(--syntax-comment);
+  font-style: italic;
 }
-.hljs-title {
-  color: var(--syntax-keyword);
+.hljs-addition {
+  color: var(--success);
+}
+.hljs-deletion {
+  color: var(--danger);
+}
+.hljs-title,
+.hljs-section {
+  color: var(--syntax-function);
+}
+.hljs-title.class_,
+.hljs-class .hljs-title {
+  color: var(--syntax-type);
+}
+.hljs-variable,
+.hljs-template-variable,
+.hljs-symbol {
+  color: var(--syntax-variable);
+}
+.hljs-property,
+.hljs-params {
+  color: inherit;
+}
+.hljs-attribute,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: var(--syntax-type);
+}
+.hljs-regexp,
+.hljs-link {
+  color: var(--syntax-string);
+}
+.hljs-meta .hljs-keyword,
+.hljs-meta .hljs-string {
+  color: inherit;
+}
+.language-python .hljs-meta,
+.hljs-doctag {
+  color: var(--syntax-function);
+}
+.hljs-section,
+.hljs-strong {
+  font-weight: 600;
+}
+.hljs-emphasis {
+  font-style: italic;
 }
 @keyframes spin {
   to {
@@ -2049,7 +2100,8 @@ kbd {
 }
 .aui-code-header-root:hover .aui-code-copy,
 .aui-code-header-root:focus-within .aui-code-copy,
-.aui-code-header-root:has(+ .aui-md-pre:hover) .aui-code-copy {
+.aui-code-header-root:has(+ .aui-md-pre:hover) .aui-code-copy,
+.aui-code-header-root:has(+ .aui-md-pre:focus-within) .aui-code-copy {
   opacity: 1;
   pointer-events: auto;
 }
@@ -2071,6 +2123,18 @@ kbd {
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   overflow-wrap: anywhere;
+}
+.aui-md .katex {
+  font-size: 1em;
+}
+.aui-md .katex-display {
+  margin: 1em 0;
+  padding: 0.25em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.aui-md .katex-display > .katex {
+  text-align: start;
 }
 @media (hover: none) {
   .aui-code-header-root .aui-code-copy {
