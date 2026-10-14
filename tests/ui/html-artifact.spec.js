@@ -432,6 +432,98 @@ for (const width of [1440, 850]) {
   }
 }
 
+test("automatic preview opens the reply's last HTML file and skips replies without one", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockWorklens(page);
+  await page.addInitScript(() => {
+    const invoke = window.worklens.invoke;
+    const view = {
+      id: "versioned-html",
+      title: "Versioned page",
+      phase: "generating",
+      updatedAt: new Date().toISOString(),
+      messages: [
+        { id: "u1", role: "user", text: "Make a page" },
+        { id: "a1", role: "assistant", text: "[First](workspace/v1.html)" },
+        { id: "u2", role: "user", text: "Make it better" },
+        { id: "a2", role: "assistant", text: "[Draft](workspace/v2.html)" },
+        { id: "a3", role: "assistant", text: "[Final](workspace/v3.html)" },
+      ],
+    };
+    // Later files verify more slowly, so the earliest card is ready first.
+    const delays = { "v1.html": 0, "v2.html": 50, "v3.html": 400 };
+    window.worklens.onChat = (listener) => {
+      const end = (runId, sequence) => {
+        view.phase = "completed";
+        listener({
+          conversationId: view.id,
+          runId,
+          sequence,
+          type: "run_end",
+          view: structuredClone(view),
+        });
+      };
+      window.finishVersions = () => end("html", 1);
+      window.finishWithoutHtml = () => {
+        view.messages.push(
+          { id: "u3", role: "user", text: "Summarize it" },
+          { id: "a4", role: "assistant", text: "It has three sections." },
+        );
+        view.phase = "generating";
+        listener({
+          conversationId: view.id,
+          runId: "summary",
+          sequence: 1,
+          type: "run_start",
+          view: structuredClone(view),
+        });
+        setTimeout(() => end("summary", 2), 100);
+      };
+      return () => {};
+    };
+    window.worklens.invoke = async (name, input) => {
+      if (name === "conversationFile") {
+        const file = input.path.split("/").pop();
+        if (input.action === "inspect")
+          await new Promise((resolve) => setTimeout(resolve, delays[file]));
+        return {
+          path: `/Users/example/WorkLens/sessions/current/workspace/${file}`,
+          kind: "html",
+          produced: true,
+          ...(input.action === "preview"
+            ? { content: `<html><body><h1>${file}</h1></body></html>` }
+            : {}),
+        };
+      }
+      if (name === "open") return structuredClone(view);
+      const result = await invoke(name, input);
+      if (name === "bootstrap") {
+        result.conversations = [view];
+        result.settings.lastConversation = view.id;
+      }
+      return result;
+    };
+  });
+  await page.goto("/");
+  await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(3);
+  await page.evaluate(() => window.finishVersions());
+  const panel = page.locator(".artifact-panel");
+  await expect(panel).toBeVisible();
+  await expect(
+    page.frameLocator("iframe").getByRole("heading", { name: "v3.html" }),
+  ).toBeVisible();
+  await page.waitForTimeout(600);
+  await expect(panel).toContainText("Final");
+  await page.getByRole("button", { name: "Close preview" }).click();
+
+  await page.evaluate(() => window.finishWithoutHtml());
+  await expect(page.getByText("It has three sections.")).toBeVisible();
+  await page.waitForTimeout(600);
+  await expect(panel).toHaveCount(0);
+});
+
 for (const theme of ["light", "dark"]) {
   test(`saved artifact split actions preserve behavior (${theme})`, async ({
     page,
