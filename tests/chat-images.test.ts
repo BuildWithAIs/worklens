@@ -14,7 +14,7 @@ import { schemas } from "../src/main/validation";
 import { CHAT_IMAGE_LIMITS, type ChatImage } from "../src/shared/chat-images";
 import type { ChatEvent, Selection } from "../src/shared/contracts";
 import { fixtureModel, mockServer } from "./mock-server";
-import { syntheticPng } from "./image-fixtures";
+import { pngHeader, syntheticGif, syntheticPng } from "./image-fixtures";
 import * as imageProcessing from "../src/main/image-processing";
 
 const image: ChatImage = {
@@ -117,6 +117,50 @@ test("attachment sources use the source size limit and keep a matching extension
   expect(preparedImageName("photo.png", "image/png")).toBe("photo.png");
   expect(preparedImageName("clipboard", "image/png")).toBe("clipboard");
 });
+
+test.each([
+  ["gif", syntheticGif(true), "only the first frame"],
+  ["png", pngHeader(10001, 10000), "CHAT_IMAGE_DIMENSIONS"],
+] as const)(
+  "actual read of a synthetic %s completes and allows a later text-only turn",
+  async (extension, bytes, note) => {
+    const { service, paths, selection, server, events } = await setup();
+    const path = join(paths.runtime, `synthetic-media.${extension}`);
+    await writeFile(path, bytes);
+    const first = await service.send({
+      requestId: randomUUID(),
+      text: "TOOL " + JSON.stringify({ name: "read", args: { path } }),
+      selection,
+    });
+    await expect
+      .poll(() =>
+        events.some(
+          (event) => event.type === "run_end" && event.runId === first.runId,
+        ),
+      )
+      .toBe(true);
+    expect((await service.open(first.id)).phase).toBe("completed");
+    expect(server.requests).toHaveLength(2);
+    expect(JSON.stringify(server.requests[1])).toContain(note);
+    const next = await service.send({
+      requestId: randomUUID(),
+      conversationId: first.id,
+      text: "Continue the task.",
+      selection,
+    });
+    await expect
+      .poll(() =>
+        events.some(
+          (event) => event.type === "run_end" && event.runId === next.runId,
+        ),
+      )
+      .toBe(true);
+    expect((await service.open(first.id)).phase).toBe("completed");
+    expect(server.requests).toHaveLength(3);
+    expect(JSON.stringify(server.requests[2])).toContain(note);
+    expect(await readFile(path)).toEqual(bytes);
+  },
+);
 
 test("image contract allows image-only messages and rejects forged, oversized and empty payloads", () => {
   const selection = { provider: "test", model: "test", thinking: "off" };

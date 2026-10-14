@@ -8,7 +8,7 @@ import {
   processChatImage,
   thumbnailOptions,
 } from "../src/main/image-processing";
-import { pngHeader, syntheticPng } from "./image-fixtures";
+import { pngHeader, syntheticGif, syntheticPng } from "./image-fixtures";
 import sharp from "sharp";
 
 vi.mock("node:child_process", async (importOriginal) => {
@@ -26,6 +26,52 @@ afterEach(() => {
 const input = (bytes: Buffer) => ({
   mimeType: "image/png",
   data: bytes.toString("base64"),
+});
+
+test.each([false, true])(
+  "tool GIF converts the first frame to a supported still image (animated: %s)",
+  async (animated) => {
+    const image = {
+      mimeType: "image/gif",
+      data: syntheticGif(animated).toString("base64"),
+    };
+    const result = await processChatImage(image, {
+      ...thumbnailOptions,
+      allowGif: true,
+    });
+    expect(result.mimeType).toBe("image/png");
+    expect(result.firstFrameOnly === true).toBe(animated);
+    const { data, info } = await sharp(Buffer.from(result.data, "base64"))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect([info.width, info.height]).toEqual([1, 1]);
+    expect([...data.subarray(0, 3)]).toEqual([255, 0, 0]);
+    await expect(processChatImage(image, originalOptions)).rejects.toThrow(
+      "CHAT_IMAGE_INVALID",
+    );
+  },
+);
+
+test("GIF headers are bounded before decoding and corrupt pixels fail in isolation", async () => {
+  const options = { ...thumbnailOptions, allowGif: true };
+  const oversized = syntheticGif();
+  oversized.writeUInt16LE(10000, 6);
+  oversized.writeUInt16LE(10000, 8);
+  const gif = (bytes: Buffer) => ({
+    mimeType: "image/gif",
+    data: bytes.toString("base64"),
+  });
+  await expect(processChatImage(gif(oversized), options)).rejects.toThrow(
+    "CHAT_IMAGE_DIMENSIONS",
+  );
+  await expect(
+    processChatImage(gif(Buffer.from("GIF89a")), options),
+  ).rejects.toThrow("CHAT_IMAGE_INVALID");
+  expect(childProcess.fork).not.toHaveBeenCalled();
+  await expect(
+    processChatImage(gif(syntheticGif().subarray(0, 19)), options),
+  ).rejects.toThrow("CHAT_IMAGE_INVALID");
+  expect(childProcess.fork).toHaveBeenCalledTimes(1);
 });
 
 test("oversized PNG, JPEG and WebP headers are rejected before starting a decoder", async () => {

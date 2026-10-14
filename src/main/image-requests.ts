@@ -3,6 +3,16 @@ import type { Context, Model, Api } from "@earendil-works/pi-ai";
 import { CHAT_IMAGE_LIMITS } from "../shared/chat-images";
 import { processChatImage } from "./image-processing";
 
+const toolImageErrors = new Set([
+  "CHAT_IMAGE_INVALID",
+  "CHAT_IMAGE_SIZE",
+  "CHAT_IMAGE_DIMENSIONS",
+  "CHAT_IMAGE_REQUEST",
+  "CHAT_IMAGE_PROCESSING",
+  "CHAT_IMAGE_TIMEOUT",
+  "CHAT_IMAGE_BUSY",
+]);
+
 export function imageRequestLimits(
   model: Pick<Model<Api>, "api" | "provider">,
 ) {
@@ -56,34 +66,44 @@ export async function prepareImageContext<T extends Context>(
         content.push(part);
         continue;
       }
-      // Tool results keep the full images that tools return. Accept the same
-      // sources as attachments so one large read cannot block the session.
-      const resized = await processChatImage(
-        part,
-        {
-          maxWidth: limits.edge,
-          maxHeight: limits.edge,
-          maxBytes,
-          sourceBytes: CHAT_IMAGE_LIMITS.sourceBytes,
-          sourcePixels: CHAT_IMAGE_LIMITS.sourcePixels,
-        },
-        signal,
-      ).catch((error: Error) => {
+      try {
+        const resized = await processChatImage(
+          part,
+          {
+            maxWidth: limits.edge,
+            maxHeight: limits.edge,
+            maxBytes,
+            sourceBytes: CHAT_IMAGE_LIMITS.sourceBytes,
+            sourcePixels: CHAT_IMAGE_LIMITS.sourcePixels,
+            allowGif: message.role === "toolResult",
+          },
+          signal,
+        );
+        content.push({
+          ...part,
+          data: resized.data,
+          mimeType: resized.mimeType,
+        });
+        if (resized.firstFrameOnly)
+          content.push({
+            type: "text" as const,
+            text: "WorkLens image processing: only the first frame of this animated GIF is included. The remaining frames have not been inspected. Tell the user about this limitation; do not claim to have analyzed the animation. If the task requires motion or a sequence of actions, retrieve additional frames before drawing conclusions.",
+          });
+      } catch (error) {
+        // Cancellation must stop the request. A failed tool image, however,
+        // must not poison the current request or later turns in this history.
+        signal?.throwIfAborted();
         if (
           message.role !== "toolResult" ||
-          !["CHAT_IMAGE_SIZE", "CHAT_IMAGE_DIMENSIONS"].includes(error.message)
+          !(error instanceof Error) ||
+          !toolImageErrors.has(error.message)
         )
           throw error;
-        return undefined;
-      });
-      content.push(
-        resized
-          ? { ...part, data: resized.data, mimeType: resized.mimeType }
-          : {
-              type: "text" as const,
-              text: "[Image omitted: larger than 100 megapixels or 20 MiB.]",
-            },
-      );
+        content.push({
+          type: "text" as const,
+          text: `[Image omitted: ${error.message}.] WorkLens could not process a tool image for this model request. The original tool result is retained. Tell the user which material could not be inspected, and do not claim to have analyzed this image. Use another supported representation if the task requires it.`,
+        });
+      }
     }
     messages.push({ ...message, content });
   }

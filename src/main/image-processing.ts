@@ -15,6 +15,7 @@ export interface ImageOptions {
   preserveOriginal?: boolean;
   sourceBytes?: number;
   sourcePixels?: number;
+  allowGif?: boolean;
 }
 export interface DecodedImage {
   data: string;
@@ -23,6 +24,7 @@ export interface DecodedImage {
   originalHeight: number;
   width: number;
   height: number;
+  firstFrameOnly?: boolean;
 }
 const cache = new Map<string, DecodedImage>();
 let cachedBytes = 0;
@@ -61,9 +63,21 @@ export async function processChatImage(
     throw new Error("CHAT_IMAGE_SIZE");
   const bytes = Buffer.from(image.data, "base64");
   if (bytes.length > sourceBytes) throw new Error("CHAT_IMAGE_SIZE");
-  if (imageMimeType(bytes) !== image.mimeType)
-    throw new Error("CHAT_IMAGE_INVALID");
-  imageDimensions(bytes, pixelLimit);
+  if (options.allowGif && image.mimeType === "image/gif") {
+    // Check the logical canvas before starting the isolated, single-frame
+    // decoder. GIF is accepted only for tool results, not chat uploads.
+    const signature = bytes.subarray(0, 6).toString("ascii");
+    if (bytes.length < 13 || !["GIF87a", "GIF89a"].includes(signature))
+      throw new Error("CHAT_IMAGE_INVALID");
+    const width = bytes.readUInt16LE(6),
+      height = bytes.readUInt16LE(8);
+    if (!width || !height) throw new Error("CHAT_IMAGE_INVALID");
+    if (width * height > pixelLimit) throw new Error("CHAT_IMAGE_DIMENSIONS");
+  } else {
+    if (imageMimeType(bytes) !== image.mimeType)
+      throw new Error("CHAT_IMAGE_INVALID");
+    imageDimensions(bytes, pixelLimit);
+  }
   const key = createHash("sha256")
     .update(bytes)
     .update(JSON.stringify(options))

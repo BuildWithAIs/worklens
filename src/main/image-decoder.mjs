@@ -13,8 +13,10 @@ process.once("message", async ({ data, mimeType, options, pixelLimit }) => {
     const source = sharp(bytes, {
       limitInputPixels: pixelLimit,
       failOn: "warning",
+      pages: 1,
     });
     const metadata = await source.metadata();
+    const firstFrameOnly = (metadata.pages ?? 1) > 1;
     const swapped = (metadata.orientation ?? 1) >= 5;
     const originalWidth = swapped ? metadata.height : metadata.width;
     const originalHeight = swapped ? metadata.width : metadata.height;
@@ -28,6 +30,7 @@ process.once("message", async ({ data, mimeType, options, pixelLimit }) => {
     let result;
     if (
       scale === 1 &&
+      mimeType !== "image/gif" &&
       fits(bytes) &&
       (options.preserveOriginal || (metadata.orientation ?? 1) === 1)
     ) {
@@ -91,6 +94,7 @@ process.once("message", async ({ data, mimeType, options, pixelLimit }) => {
         }
       }
     }
+    if (result && firstFrameOnly) result.firstFrameOnly = true;
     process.send?.(result ? { result } : { error: "CHAT_IMAGE_REQUEST" }, () =>
       process.exit(0),
     );
@@ -98,7 +102,7 @@ process.once("message", async ({ data, mimeType, options, pixelLimit }) => {
     const message = String(error);
     const code = /pixel limit/i.test(message)
       ? "CHAT_IMAGE_DIMENSIONS"
-      : /corrupt|truncat|invalid|unsupported image|premature|pngload|jpegload|webpload|VipsJpeg|VipsPng|VipsWebp/i.test(
+      : /corrupt|truncat|invalid|unsupported image|premature|pngload|jpegload|webpload|gifload|VipsJpeg|VipsPng|VipsWebp|VipsGif/i.test(
             message,
           )
         ? "CHAT_IMAGE_INVALID"

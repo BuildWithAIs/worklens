@@ -36,3 +36,56 @@ export function pngHeader(width: number, height: number) {
   bytes.writeUInt32BE(crc32(bytes.subarray(12, 29)), 29);
   return bytes;
 }
+
+// A one-pixel red frame, optionally followed by a blue frame. The LZW blocks
+// contain only clear, palette index and end codes; no user image is involved.
+export function syntheticGif(animated = false) {
+  const header = Buffer.from([
+    ...Buffer.from("GIF89a"),
+    1,
+    0,
+    1,
+    0,
+    0x80,
+    0,
+    0,
+    255,
+    0,
+    0,
+    0,
+    0,
+    255,
+  ]);
+  const frame = (pixel: number) =>
+    Buffer.from([
+      0x21,
+      0xf9,
+      4,
+      0,
+      10,
+      0,
+      0,
+      0,
+      0x2c,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      2,
+      2,
+      pixel ? 0x4c : 0x44,
+      1,
+      0,
+    ]);
+  return Buffer.concat([
+    header,
+    frame(0),
+    ...(animated ? [frame(1)] : []),
+    Buffer.from([0x3b]),
+  ]);
+}
