@@ -1,4 +1,9 @@
-import type { ChatImage, ChatImageRef, EditedChatImage } from "./chat-images";
+import type {
+  ChatImage,
+  ChatImageRef,
+  EditedChatImage,
+  PreparedChatImage,
+} from "./chat-images";
 
 export type Thinking =
   | "off"
@@ -434,7 +439,10 @@ export interface Requests {
     };
     output: string;
   };
-  prepareChatImage: { input: { images: ChatImage[] }; output: string };
+  prepareChatImage: {
+    input: { image: ChatImage };
+    output: PreparedChatImage;
+  };
   recoveryImages: { input: { runId: string }; output: ChatImage[] };
   recoverMessageEdit: {
     input: { runId: string; expectedBranchId: string };

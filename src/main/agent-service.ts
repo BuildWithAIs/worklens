@@ -57,8 +57,13 @@ import type { McpService } from "./mcp-service";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import { shareUnchanged } from "./structural-sharing";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
-import { validateChatImages, validateImageContent } from "./chat-images";
 import {
+  preparedImageName,
+  validateChatImages,
+  validateImageContent,
+} from "./chat-images";
+import {
+  attachmentOptions,
   processChatImage,
   thumbnailOptions,
   originalOptions,
@@ -67,7 +72,7 @@ import {
   installImageRequestGuard,
   prepareImageContext,
 } from "./image-requests";
-import type { ChatImage } from "../shared/chat-images";
+import type { ChatImage, PreparedChatImage } from "../shared/chat-images";
 import type {
   Requests,
   ChatEvent,
@@ -282,11 +287,30 @@ export class AgentService {
     );
     return `data:${decoded.mimeType};base64,${decoded.data}`;
   }
-  async prepareChatImage(input: { images: ChatImage[] }) {
-    const [image] = validateChatImages(input.images);
-    if (input.images.length !== 1) throw new Error("CHAT_IMAGE_INVALID");
-    const decoded = await processChatImage(image, thumbnailOptions);
-    return `data:${decoded.mimeType};base64,${decoded.data}`;
+  async prepareChatImage(input: {
+    image: ChatImage;
+  }): Promise<PreparedChatImage> {
+    const source = input.image;
+    if (Buffer.from(source.data, "base64").toString("base64") !== source.data)
+      throw new Error("CHAT_IMAGE_INVALID");
+    const decoded = await processChatImage(source, attachmentOptions);
+    const [image] = validateChatImages([
+      {
+        name: preparedImageName(source.name, decoded.mimeType),
+        mimeType: decoded.mimeType,
+        data: decoded.data,
+      },
+    ]);
+    const preview = await processChatImage(image, thumbnailOptions);
+    return {
+      image,
+      preview: `data:${preview.mimeType};base64,${preview.data}`,
+      resized:
+        decoded.width !== decoded.originalWidth ||
+        decoded.height !== decoded.originalHeight
+          ? { width: decoded.width, height: decoded.height }
+          : undefined,
+    };
   }
   private assertSelection(selection: Selection) {
     const model = this.modelRuntime.getModel(

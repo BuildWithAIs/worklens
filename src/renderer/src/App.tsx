@@ -45,7 +45,8 @@ import {
 import type { SettingsSection } from "@/components/worklens/SettingsPage";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
-import { systemText } from "@/lib/system-text";
+import { imageFileError, systemText } from "@/lib/system-text";
+import { shortFileName } from "@/lib/link-label";
 import { useAppTranslation } from "@/i18n";
 import { UsagePopover } from "@/components/worklens/UsagePopover";
 import { newerGlobalUsage } from "../../shared/usage";
@@ -168,11 +169,17 @@ export function App() {
         english("system.connectProvider"),
         english("system.modelUnavailable"),
       ].some((message) => message === englishText);
+    const fileError = imageFileError(notice.text, language);
     let disposed = false;
     const id = toast.add({
-      title: needsSettings
-        ? t("app.connectAProviderToStartChatting")
-        : systemText(notice.text.replace(/^Error: /, ""), language),
+      title: needsSettings ? (
+        t("app.connectAProviderToStartChatting")
+      ) : fileError ? (
+        <span title={fileError.name}>{shortFileName(fileError.name, 32)}</span>
+      ) : (
+        systemText(notice.text.replace(/^Error: /, ""), language)
+      ),
+      description: fileError?.message,
       onClose: () => {
         if (!disposed)
           setNotice((current) => (current === notice ? undefined : current));

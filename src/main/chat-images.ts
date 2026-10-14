@@ -7,6 +7,18 @@ import {
   imageMimeType,
 } from "../shared/chat-images";
 
+// A new attachment before it is reduced to the stored image limits.
+export const chatImageSourceSchema = z
+  .object({
+    name: z.string().min(1).max(255),
+    mimeType: z.enum(CHAT_IMAGE_TYPES),
+    data: z
+      .string()
+      .min(4)
+      .max(Math.ceil(CHAT_IMAGE_LIMITS.sourceBytes / 3) * 4),
+  })
+  .strict();
+
 export const chatImagesSchema = z
   .array(
     z
@@ -61,4 +73,18 @@ export async function validateImageContent(images: ChatImage[]) {
   for (const image of images) {
     await processChatImage(image, originalOptions);
   }
+}
+
+// Re-encoding can change the format. Keep the file extension consistent.
+export function preparedImageName(
+  name: string,
+  mimeType: ChatImage["mimeType"],
+) {
+  const extension = mimeType === "image/jpeg" ? "jpg" : mimeType.slice(6);
+  const match = /\.(png|jpe?g|webp)$/i.exec(name);
+  if (!match || (mimeType === "image/jpeg" && /^jpe?g$/i.test(match[1])))
+    return name;
+  return match[1].toLowerCase() === extension
+    ? name
+    : `${name.slice(0, match.index)}.${extension}`;
 }

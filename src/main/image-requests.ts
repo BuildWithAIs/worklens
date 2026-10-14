@@ -1,5 +1,6 @@
 import type { Agent } from "@earendil-works/pi-agent-core";
 import type { Context, Model, Api } from "@earendil-works/pi-ai";
+import { CHAT_IMAGE_LIMITS } from "../shared/chat-images";
 import { processChatImage } from "./image-processing";
 
 export function imageRequestLimits(
@@ -55,12 +56,34 @@ export async function prepareImageContext<T extends Context>(
         content.push(part);
         continue;
       }
+      // Tool results keep the full images that tools return. Accept the same
+      // sources as attachments so one large read cannot block the session.
       const resized = await processChatImage(
         part,
-        { maxWidth: limits.edge, maxHeight: limits.edge, maxBytes },
+        {
+          maxWidth: limits.edge,
+          maxHeight: limits.edge,
+          maxBytes,
+          sourceBytes: CHAT_IMAGE_LIMITS.sourceBytes,
+          sourcePixels: CHAT_IMAGE_LIMITS.sourcePixels,
+        },
         signal,
+      ).catch((error: Error) => {
+        if (
+          message.role !== "toolResult" ||
+          !["CHAT_IMAGE_SIZE", "CHAT_IMAGE_DIMENSIONS"].includes(error.message)
+        )
+          throw error;
+        return undefined;
+      });
+      content.push(
+        resized
+          ? { ...part, data: resized.data, mimeType: resized.mimeType }
+          : {
+              type: "text" as const,
+              text: "[Image omitted: larger than 100 megapixels or 20 MiB.]",
+            },
       );
-      content.push({ ...part, data: resized.data, mimeType: resized.mimeType });
     }
     messages.push({ ...message, content });
   }

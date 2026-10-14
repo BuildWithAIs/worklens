@@ -826,12 +826,16 @@ const en = {
     historyUnsupported: "This model can’t view images in this conversation.",
     format: "Choose a PNG, JPEG, or WebP image.",
     invalid: "Couldn’t read this image. Try exporting it as PNG or JPEG.",
-    size: "Each image must be 5 MiB or smaller.",
+    sizeOf: "Larger than 20 MiB. Choose a smaller image.",
+    fileError: "{{name}}: {{message}}",
+    size: "Each image must be 20 MiB or smaller.",
     limits:
-      "You can add up to 8 images per message. Remove an image and try again.",
+      "You can add up to 15 images per message. Remove an image and try again.",
     total:
-      "The combined image size must be 20 MiB or less. Remove some images and try again.",
-    dimensions: "Choose an image with a resolution of 25 megapixels or less.",
+      "The combined image size must be 40 MiB or less. Remove some images and try again.",
+    dimensionsOf:
+      "{{width}} × {{height}} pixels is too large. Resize it to fit within 10,000 × 10,000.",
+    dimensions: "Couldn’t send an image because it’s too large. Try again.",
     requestLimit:
       "This conversation exceeds the model provider’s limits. Start a new chat with fewer images or less text.",
     processingFailed:
@@ -851,6 +855,7 @@ const en = {
     label: "{{type}} attachment",
     uploadFailedLabel: "{{type}} attachment, processing failed",
     uploadingLabel: "{{type}} attachment, processing",
+    resized: "Resized to {{width}} × {{height}}",
     uploadFailed: "Couldn’t process this attachment",
     removeFile: "Remove attachment",
     addAttachment: "Add images",

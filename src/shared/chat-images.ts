@@ -3,17 +3,33 @@ export const CHAT_IMAGE_TYPES = [
   "image/jpeg",
   "image/webp",
 ] as const;
+// Per-message limits stay below common provider limits: 20 images per message
+// (ChatGPT, Claude.ai, Bedrock) and 48-50 MiB request bodies (DeepSeek, older
+// OpenAI). Images are resized again to fit each provider's request budget.
 export const CHAT_IMAGE_LIMITS = {
-  count: 8,
+  count: 15,
   perImage: 5 * 1024 * 1024,
-  total: 20 * 1024 * 1024,
+  total: 40 * 1024 * 1024,
   pixels: 25_000_000,
+  // Larger sources are accepted when attached and reduced to fit the edge and
+  // encoded-size budget below before they enter a draft.
+  sourceBytes: 20 * 1024 * 1024,
+  sourcePixels: 100_000_000,
+  edge: 2000,
+  encodedImage: 4_500_000,
 } as const;
 
 export interface ChatImage {
   name: string;
   mimeType: (typeof CHAT_IMAGE_TYPES)[number];
   data: string;
+}
+
+export interface PreparedChatImage {
+  image: ChatImage;
+  preview: string;
+  // Present only when the stored image is smaller than the source.
+  resized?: { width: number; height: number };
 }
 
 export type EditedChatImage = ChatImage | { existingIndex: number };

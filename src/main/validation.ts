@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { connectorSchemas } from "./connectors/ipc";
-import { chatImagesSchema } from "./chat-images";
+import { chatImageSourceSchema, chatImagesSchema } from "./chat-images";
 import { CHAT_IMAGE_LIMITS } from "../shared/chat-images";
 import { normalizeProxyUrl } from "../shared/network-proxy";
 
@@ -72,11 +72,7 @@ export const schemas = {
       variant: z.enum(["thumbnail", "original"]).optional(),
     })
     .strict(),
-  prepareChatImage: z
-    .object({
-      images: chatImagesSchema.refine((images) => images.length === 1),
-    })
-    .strict(),
+  prepareChatImage: z.object({ image: chatImageSourceSchema }).strict(),
   recoveryImages: z.object({ runId: id }).strict(),
   recoverMessageEdit: z.object({ runId: id, expectedBranchId: id }).strict(),
   conversationFile: z
