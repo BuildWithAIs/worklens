@@ -28,6 +28,16 @@ export interface DecodedImage {
 }
 const cache = new Map<string, DecodedImage>();
 let cachedBytes = 0;
+// Requests prepare the whole history again, so remember images that failed in
+// a way a retry would repeat. Expire them in case a timeout came from load.
+const failures = new Map<string, { code: string; expires: number }>();
+const REMEMBERED_FAILURES = [
+  "CHAT_IMAGE_INVALID",
+  "CHAT_IMAGE_DIMENSIONS",
+  "CHAT_IMAGE_REQUEST",
+  "CHAT_IMAGE_TIMEOUT",
+];
+const FAILURE_TTL = 10 * 60 * 1000;
 let running = 0;
 const waiting: { resume: () => void }[] = [];
 const CACHE_BYTES = 16 * 1024 * 1024;
@@ -82,6 +92,9 @@ export async function processChatImage(
     .update(bytes)
     .update(JSON.stringify(options))
     .digest("hex");
+  const failed = failures.get(key);
+  if (failed && failed.expires > Date.now()) throw new Error(failed.code);
+  if (failed) failures.delete(key);
   const existing = cache.get(key);
   if (existing) {
     cache.delete(key);
@@ -188,6 +201,15 @@ export async function processChatImage(
     cache.set(key, result);
     cachedBytes += result.data.length;
     return result;
+  } catch (error) {
+    if (error instanceof Error && REMEMBERED_FAILURES.includes(error.message)) {
+      if (failures.size >= 256) failures.delete(failures.keys().next().value!);
+      failures.set(key, {
+        code: error.message,
+        expires: Date.now() + FAILURE_TTL,
+      });
+    }
+    throw error;
   } finally {
     const next = waiting.shift();
     if (next) next.resume();

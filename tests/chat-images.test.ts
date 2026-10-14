@@ -120,7 +120,7 @@ test("attachment sources use the source size limit and keep a matching extension
 
 test.each([
   ["gif", syntheticGif(true), "only the first frame"],
-  ["png", pngHeader(10001, 10000), "CHAT_IMAGE_DIMENSIONS"],
+  ["png", pngHeader(10001, 10000), "larger than 100 megapixels"],
 ] as const)(
   "actual read of a synthetic %s completes and allows a later text-only turn",
   async (extension, bytes, note) => {

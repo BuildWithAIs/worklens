@@ -92,12 +92,12 @@ test.each([false, true])(
 );
 
 test.each([
-  ["image/gif", Buffer.from("GIF89a"), "CHAT_IMAGE_INVALID"],
-  ["image/png", pngHeader(10001, 10000), "CHAT_IMAGE_DIMENSIONS"],
-  ["image/bmp", Buffer.from("BM"), "CHAT_IMAGE_INVALID"],
+  ["image/gif", Buffer.from("GIF89a"), "unsupported or corrupt image"],
+  ["image/png", pngHeader(10001, 10000), "larger than 100 megapixels"],
+  ["image/bmp", Buffer.from("BM"), "unsupported or corrupt image"],
 ] as const)(
   "unreadable %s tool image becomes an explicit omission while other content remains usable",
-  async (mimeType, bytes, code) => {
+  async (mimeType, bytes, reason) => {
     const context: Context = {
       messages: [
         toolImage(bytes, mimeType),
@@ -115,7 +115,8 @@ test.each([
     }[];
     expect(content[0].text).toBe("Synthetic file read result");
     expect(content.some((part) => part.type === "image")).toBe(false);
-    expect(content[1].text).toContain(code);
+    expect(content[1].text).toContain(`[Image omitted: ${reason}.]`);
+    expect(content[1].text).not.toContain("CHAT_IMAGE_");
     expect(content[1].text).toContain("Tell the user");
     expect(prepared.messages[1].content).toEqual(context.messages[1].content);
     expect(JSON.stringify(context)).toBe(before);
@@ -213,8 +214,9 @@ test("large tool images are resized and oversized ones are omitted instead of bl
     height: 459,
   });
   expect(omitted.type).toBe("text");
-  expect(omitted.text).toContain("Image omitted");
-  expect(omitted.text).toContain("CHAT_IMAGE_DIMENSIONS");
+  expect(omitted.text).toContain(
+    "[Image omitted: larger than 100 megapixels.]",
+  );
   await expect(
     prepareImageContext(
       { messages: [user([picture(pngHeader(10001, 10000))])] },
@@ -249,8 +251,47 @@ test("all retained turns and tool images share the request budget", async () => 
       if (typeof part !== "string" && part.type === "image")
         expect(part.data.length).toBeLessThan((20_000_000 * 0.75) / 24);
     }
+  // Bedrock accepts 20 images: the four oldest tool images are left out.
+  const bedrock = await prepareImageContext(
+    context,
+    model("bedrock-converse-stream"),
+  );
+  const toolContent = bedrock.messages[2].content as {
+    type: string;
+    text?: string;
+    data?: string;
+  }[];
+  expect(toolContent.map((part) => part.type)).toEqual([
+    ...Array(4).fill("text"),
+    ...Array(4).fill("image"),
+  ]);
+  expect(toolContent[0].text).toContain("more images than this model accepts");
+  for (const part of toolContent.slice(4))
+    expect(part.data!.length).toBeLessThan((20_000_000 * 0.75) / 20);
+  expect(bedrock.messages[0].content).toHaveLength(8);
+  expect(bedrock.messages[1].content).toHaveLength(8);
+});
+
+test("user images over the count limit still block the request", async () => {
+  const image = picture(syntheticPng(8, 6));
   await expect(
-    prepareImageContext(context, model("bedrock-converse-stream")),
+    prepareImageContext(
+      {
+        messages: [
+          user(Array(12).fill(image)),
+          user(Array(9).fill(image)),
+          {
+            role: "toolResult",
+            toolCallId: "synthetic-call",
+            toolName: "read",
+            content: [image],
+            isError: false,
+            timestamp: 2,
+          },
+        ],
+      },
+      model("bedrock-converse-stream"),
+    ),
   ).rejects.toThrow("CHAT_IMAGE_REQUEST");
 });
 

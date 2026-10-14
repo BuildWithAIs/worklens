@@ -281,6 +281,53 @@ test("stalled decoders time out and running/queued work can be cancelled", async
   expect(child.kill).toHaveBeenCalled();
 });
 
+test("repeatable decoder failures are remembered for a while instead of decoding every request", async () => {
+  vi.useFakeTimers();
+  const child = fakeChild();
+  const image = input(syntheticPng(14, 9));
+  const first = processChatImage(image, thumbnailOptions);
+  const rejection = expect(first).rejects.toThrow("CHAT_IMAGE_INVALID");
+  child.emit("message", { error: "CHAT_IMAGE_INVALID" });
+  await rejection;
+  await expect(processChatImage(image, thumbnailOptions)).rejects.toThrow(
+    "CHAT_IMAGE_INVALID",
+  );
+  expect(childProcess.fork).toHaveBeenCalledTimes(1);
+  // Other options are a different request and are decoded separately.
+  const other = processChatImage(image, originalOptions);
+  child.emit("message", { error: "CHAT_IMAGE_INVALID" });
+  await expect(other).rejects.toThrow("CHAT_IMAGE_INVALID");
+  expect(childProcess.fork).toHaveBeenCalledTimes(2);
+  vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+  const retried = processChatImage(image, thumbnailOptions);
+  child.emit("message", {
+    result: {
+      data: "aa",
+      mimeType: "image/png",
+      originalWidth: 14,
+      originalHeight: 9,
+      width: 14,
+      height: 9,
+    },
+  });
+  await expect(retried).resolves.toMatchObject({ data: "aa" });
+  expect(childProcess.fork).toHaveBeenCalledTimes(3);
+});
+
+test("crashes are not remembered, so a later request can decode again", async () => {
+  const child = fakeChild();
+  const image = input(syntheticPng(15, 9));
+  const first = processChatImage(image, thumbnailOptions);
+  const rejection = expect(first).rejects.toThrow("CHAT_IMAGE_PROCESSING");
+  child.emit("exit", 1);
+  await rejection;
+  const second = processChatImage(image, thumbnailOptions);
+  const again = expect(second).rejects.toThrow("CHAT_IMAGE_PROCESSING");
+  child.emit("exit", 1);
+  await again;
+  expect(childProcess.fork).toHaveBeenCalledTimes(2);
+});
+
 test("processed-image cache evicts by retained bytes instead of growing with history", async () => {
   const child = fakeChild();
   const images = Array.from({ length: 5 }, (_, index) =>

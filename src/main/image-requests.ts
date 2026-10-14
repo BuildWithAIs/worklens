@@ -3,15 +3,33 @@ import type { Context, Model, Api } from "@earendil-works/pi-ai";
 import { CHAT_IMAGE_LIMITS } from "../shared/chat-images";
 import { processChatImage } from "./image-processing";
 
-const toolImageErrors = new Set([
-  "CHAT_IMAGE_INVALID",
-  "CHAT_IMAGE_SIZE",
-  "CHAT_IMAGE_DIMENSIONS",
-  "CHAT_IMAGE_REQUEST",
-  "CHAT_IMAGE_PROCESSING",
-  "CHAT_IMAGE_TIMEOUT",
-  "CHAT_IMAGE_BUSY",
+// Reasons shown to the model when a tool image cannot be included. Keep them
+// plain: the model may repeat them to the user.
+const toolImageErrors = new Map([
+  ["CHAT_IMAGE_INVALID", "unsupported or corrupt image"],
+  [
+    "CHAT_IMAGE_SIZE",
+    `file larger than ${CHAT_IMAGE_LIMITS.sourceBytes / 1024 / 1024} MiB`,
+  ],
+  [
+    "CHAT_IMAGE_DIMENSIONS",
+    `larger than ${CHAT_IMAGE_LIMITS.sourcePixels / 1_000_000} megapixels`,
+  ],
+  [
+    "CHAT_IMAGE_REQUEST",
+    "could not be reduced to fit this model's request size",
+  ],
+  ["CHAT_IMAGE_PROCESSING", "image processing failed"],
+  ["CHAT_IMAGE_TIMEOUT", "image processing timed out"],
+  ["CHAT_IMAGE_BUSY", "image processing was busy"],
 ]);
+const tooManyImages =
+  "this conversation has more images than this model accepts in one request";
+
+const omittedToolImage = (reason: string) => ({
+  type: "text" as const,
+  text: `[Image omitted: ${reason}.] WorkLens could not include this tool image in the model request. The original tool result is retained. Tell the user which material could not be inspected, and do not claim to have analyzed this image.`,
+});
 
 export function imageRequestLimits(
   model: Pick<Model<Api>, "api" | "provider">,
@@ -39,19 +57,30 @@ export async function prepareImageContext<T extends Context>(
   if (!model.input.includes("image")) return context;
   const limits = imageRequestLimits(model);
   let count = 0;
-  for (const message of context.messages)
-    if (Array.isArray(message.content))
-      count += message.content.filter((part) => part.type === "image").length;
+  const toolImages: string[] = [];
+  context.messages.forEach((message, index) => {
+    if (!Array.isArray(message.content)) return;
+    message.content.forEach((part, partIndex) => {
+      if (part.type !== "image") return;
+      count++;
+      if (message.role === "toolResult")
+        toolImages.push(`${index}:${partIndex}`);
+    });
+  });
   if (!count) return context;
-  if (count > limits.count) throw new Error("CHAT_IMAGE_REQUEST");
+  // Over the count limit, leave out the oldest tool images first. Only images
+  // the user attached are a hard limit, because they cannot be left out silently.
+  const excess = count - limits.count;
+  if (excess > toolImages.length) throw new Error("CHAT_IMAGE_REQUEST");
+  const dropped = new Set(toolImages.slice(0, Math.max(0, excess)));
   // Share the image budget across the full retained history, including tool
   // images. Leave room for text/tools; the final serialized payload is checked too.
   const maxBytes = Math.min(
     limits.encodedImage,
-    Math.floor((limits.request * 0.75) / count),
+    Math.floor((limits.request * 0.75) / (count - dropped.size)),
   );
   const messages: Context["messages"] = [];
-  for (const message of context.messages) {
+  for (const [index, message] of context.messages.entries()) {
     if (
       message.role === "system" ||
       message.role === "assistant" ||
@@ -61,9 +90,13 @@ export async function prepareImageContext<T extends Context>(
       continue;
     }
     const content = [];
-    for (const part of message.content) {
+    for (const [partIndex, part] of message.content.entries()) {
       if (part.type !== "image") {
         content.push(part);
+        continue;
+      }
+      if (dropped.has(`${index}:${partIndex}`)) {
+        content.push(omittedToolImage(tooManyImages));
         continue;
       }
       try {
@@ -87,22 +120,18 @@ export async function prepareImageContext<T extends Context>(
         if (resized.firstFrameOnly)
           content.push({
             type: "text" as const,
-            text: "WorkLens image processing: only the first frame of this animated GIF is included. The remaining frames have not been inspected. Tell the user about this limitation; do not claim to have analyzed the animation. If the task requires motion or a sequence of actions, retrieve additional frames before drawing conclusions.",
+            text: "WorkLens image processing: only the first frame of this animated GIF is included. Later frames were not inspected. Tell the user about this limitation, and do not claim to have analyzed the animation or anything that happens after the first frame.",
           });
       } catch (error) {
         // Cancellation must stop the request. A failed tool image, however,
         // must not poison the current request or later turns in this history.
         signal?.throwIfAborted();
-        if (
-          message.role !== "toolResult" ||
-          !(error instanceof Error) ||
-          !toolImageErrors.has(error.message)
-        )
-          throw error;
-        content.push({
-          type: "text" as const,
-          text: `[Image omitted: ${error.message}.] WorkLens could not process a tool image for this model request. The original tool result is retained. Tell the user which material could not be inspected, and do not claim to have analyzed this image. Use another supported representation if the task requires it.`,
-        });
+        const reason =
+          error instanceof Error
+            ? toolImageErrors.get(error.message)
+            : undefined;
+        if (message.role !== "toolResult" || !reason) throw error;
+        content.push(omittedToolImage(reason));
       }
     }
     messages.push({ ...message, content });
