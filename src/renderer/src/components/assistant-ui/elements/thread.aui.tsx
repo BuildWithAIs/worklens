@@ -60,6 +60,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ChevronRightIcon,
+  CircleAlertIcon,
   CopyIcon,
   DownloadIcon,
   LoaderCircleIcon,
@@ -468,8 +469,12 @@ const ComposerAction: FC = () => {
 const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex w-fit max-w-full items-start gap-1.5 rounded-lg bg-destructive/5 px-2.5 py-1.5 text-sm leading-5 text-destructive dark:bg-destructive/10 dark:text-red-300">
+        <CircleAlertIcon
+          className="mt-0.5 size-4 shrink-0"
+          aria-hidden="true"
+        />
+        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2 min-w-0" />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );
