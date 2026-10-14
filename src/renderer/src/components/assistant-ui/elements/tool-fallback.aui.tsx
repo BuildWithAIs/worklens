@@ -3,8 +3,7 @@
 import { useShimmer } from "@/hooks/use-shimmer";
 
 import { memo, useCallback, useMemo, useRef, useState } from "react";
-import hljs from "highlight.js/lib/core";
-import json from "highlight.js/lib/languages/json";
+import { syntaxHighlighter as hljs } from "@/lib/syntax-highlight";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -37,7 +36,6 @@ import { formatDuration } from "@/lib/duration";
 import type { TFunction } from "i18next";
 
 const ANIMATION_DURATION = 200;
-hljs.registerLanguage("json", json);
 
 const pressable = "active:scale-[0.98]";
 

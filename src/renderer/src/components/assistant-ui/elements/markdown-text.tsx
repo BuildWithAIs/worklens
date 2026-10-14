@@ -13,6 +13,10 @@ import {
   useArtifactWorkspace,
 } from "@/components/worklens/HtmlArtifact";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
+import { preprocessMarkdownMath } from "@/lib/markdown-math";
 import { remarkCjkAutolinks } from "@/lib/remark-cjk-autolinks";
 import { remarkLocalFiles } from "@/lib/remark-local-files";
 import { LocalFileLink } from "@/components/worklens/LocalFileLink";
@@ -49,6 +53,8 @@ import { cn } from "@/lib/utils";
 import { useAppTranslation } from "@/i18n";
 import { toast } from "@/components/ui/toast";
 import { inspectConversationFile } from "@/lib/file-inspection-queue";
+import { isPlainTextLanguage } from "@/lib/syntax-highlight";
+import { CodeBlockContent, codeBlockClassName } from "./code-block-content";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   compact?: boolean;
@@ -151,12 +157,20 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
     <MarkdownTextPrimitive
       remarkPlugins={[
         remarkGfm,
+        remarkMath,
         remarkCjkAutolinks,
         [
           remarkLocalFiles,
           { enabled: assistant, producedPaths, availablePaths },
         ],
       ]}
+      rehypePlugins={[
+        [
+          rehypeKatex,
+          { trust: false, errorColor: "var(--danger)", maxSize: 10 },
+        ],
+      ]}
+      preprocess={preprocessMarkdownMath}
       className={cn(
         "aui-md font-normal antialiased",
         compact ? "text-sm leading-6" : "text-[14px] leading-[1.7]",
@@ -168,8 +182,6 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
 };
 
 export const MarkdownText = memo(MarkdownTextImpl);
-
-const plainTextLanguages = new Set(["text", "plaintext", "txt", "plain"]);
 
 const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   const { t } = useAppTranslation();
@@ -187,7 +199,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
     return <HtmlArtifactCard code={code} />;
 
   const showLanguage = Boolean(
-    language?.trim() && !plainTextLanguages.has(language.trim().toLowerCase()),
+    language?.trim() && !isPlainTextLanguage(language),
   );
 
   return (
@@ -449,13 +461,7 @@ const defaultComponents = memoizeMarkdownComponents({
     />
   ),
   pre: ({ className, ...props }) => (
-    <pre
-      className={cn(
-        "aui-md-pre border-border/30 bg-muted/30 my-3 overflow-x-auto rounded-md border text-[13px] leading-relaxed",
-        className,
-      )}
-      {...props}
-    />
+    <pre className={cn(codeBlockClassName, className)} {...props} />
   ),
   code: function Code({ className, ...props }) {
     const isCodeBlock = useIsMarkdownCodeBlock();
@@ -476,4 +482,5 @@ const defaultComponents = memoizeMarkdownComponents({
     );
   },
   CodeHeader,
+  SyntaxHighlighter: CodeBlockContent,
 });
