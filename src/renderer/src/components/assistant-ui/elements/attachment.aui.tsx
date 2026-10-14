@@ -52,6 +52,7 @@ import {
   useStoredImage,
 } from "@/lib/chat-images";
 import { imageFileError, systemText } from "@/lib/system-text";
+import { shortFileName } from "@/lib/link-label";
 import { ImageMenu } from "./image-menu";
 
 const MessageImagesContext = createContext<readonly Attachment[]>([]);
@@ -308,6 +309,7 @@ const AttachmentUI: FC = () => {
   const thumbnail = useAttachmentSrc(isComposer || nearViewport);
 
   const isImage = useAuiState((s) => s.attachment.type === "image");
+  const attachmentName = useAuiState((s) => s.attachment.name);
   const resized = useAuiState((s) =>
     isComposer && s.attachment.file
       ? draftImageSizes.get(s.attachment.file)
@@ -409,7 +411,7 @@ const AttachmentUI: FC = () => {
         </AttachmentPrimitive.Root>
         <TooltipContent side="top" className="flex-col items-start gap-0.5">
           <span className="font-medium break-all">
-            <AttachmentPrimitive.Name />
+            {shortFileName(attachmentName)}
           </span>
           {resized && !errorMessage && (
             <p className="aui-attachment-resized">

@@ -46,6 +46,7 @@ import type { SettingsSection } from "@/components/worklens/SettingsPage";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { imageFileError, systemText } from "@/lib/system-text";
+import { shortFileName } from "@/lib/link-label";
 import { useAppTranslation } from "@/i18n";
 import { UsagePopover } from "@/components/worklens/UsagePopover";
 import { newerGlobalUsage } from "../../shared/usage";
@@ -171,10 +172,13 @@ export function App() {
     const fileError = imageFileError(notice.text, language);
     let disposed = false;
     const id = toast.add({
-      title: needsSettings
-        ? t("app.connectAProviderToStartChatting")
-        : (fileError?.name ??
-          systemText(notice.text.replace(/^Error: /, ""), language)),
+      title: needsSettings ? (
+        t("app.connectAProviderToStartChatting")
+      ) : fileError ? (
+        <span title={fileError.name}>{shortFileName(fileError.name, 32)}</span>
+      ) : (
+        systemText(notice.text.replace(/^Error: /, ""), language)
+      ),
       description: fileError?.message,
       onClose: () => {
         if (!disposed)

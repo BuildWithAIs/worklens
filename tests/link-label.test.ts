@@ -1,5 +1,9 @@
 import { expect, test } from "vitest";
-import { fileName, shortUrl } from "../src/renderer/src/lib/link-label";
+import {
+  fileName,
+  shortFileName,
+  shortUrl,
+} from "../src/renderer/src/lib/link-label";
 import { isLocalReference } from "../src/shared/file-references";
 import { remarkLocalFiles } from "../src/renderer/src/lib/remark-local-files";
 import type { Root } from "mdast";
@@ -559,4 +563,21 @@ test("explicit available file links keep navigation without claiming output prov
       },
     ],
   });
+});
+
+test("long file names keep their start and extension", () => {
+  expect(shortFileName("image-2025-11-19_15-36-39.png")).toBe(
+    "image-2025-11-19_15-36-39.png",
+  );
+  const long = "image-2025-11-19_15-36-39-very-long-export-name-final-v3.png";
+  const short = shortFileName(long);
+  expect(Array.from(short)).toHaveLength(40);
+  expect(short).toBe("image-2025-11-19_15…rt-name-final-v3.png");
+  // CJK characters and emoji take two columns.
+  const cjk = shortFileName("设计评审".repeat(12) + "示例.png", 32);
+  expect(cjk).toMatch(/^设计评审.*….*示例\.png$/);
+  expect(Array.from(cjk).length).toBeLessThanOrEqual(20);
+  expect(shortFileName("😀".repeat(50) + ".png")).toMatch(
+    /^(😀)+…(😀)+\.png$/u,
+  );
 });
