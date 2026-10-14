@@ -35,8 +35,11 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { useAppTranslation } from "@/i18n";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { inspectConversationFile } from "@/lib/file-inspection-queue";
+import { useAuiState } from "@assistant-ui/react";
 
 type Artifact = {
+  /** Card that requested an automatic preview. */
+  source?: string;
   path?: string;
   code: string;
   title: string;
@@ -44,11 +47,15 @@ type Artifact = {
   trigger: HTMLElement;
   manual: boolean;
 };
+type AutoPreview = {
+  preview: () => void;
+  element: () => HTMLElement | null;
+};
 const Context = createContext<{
   conversationId?: string;
   outputPaths: readonly string[];
   open: (artifact: Artifact) => void;
-  register: (id: string, preview: () => void) => () => void;
+  register: (id: string, candidate: AutoPreview) => () => void;
 } | null>(null);
 
 export function useArtifactWorkspace() {
@@ -183,6 +190,7 @@ function ArtifactCard({
           filename,
           trigger: button.current,
           manual,
+          source: id,
         });
     } catch {
       if (current === generation.current) setError(true);
@@ -197,9 +205,17 @@ function ArtifactCard({
   auto.current = () => {
     void action(false, false);
   };
+  // Only the newest reply's cards are automatic preview candidates.
+  const latest = useAuiState((s) => s.message.isLast);
   useEffect(
-    () => context?.register(id, () => auto.current()),
-    [context?.register, id],
+    () =>
+      latest
+        ? context?.register(id, {
+            preview: () => auto.current(),
+            element: () => button.current,
+          })
+        : undefined,
+    [context?.register, id, latest],
   );
   return (
     <span className="artifact-card-container">
@@ -283,51 +299,59 @@ export function HtmlArtifactWorkspace({
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [mode, setMode] = useState<"preview" | "code">("preview");
   const closeButton = useRef<HTMLButtonElement>(null);
-  const registry = useRef(new Map<string, () => void>());
-  const baseline = useRef(new Set<string>());
+  const registry = useRef(new Map<string, AutoPreview>());
   const wasRunning = useRef(running);
   const autoPending = useRef(false);
-  const previewFresh = useCallback(() => {
+  const autoTarget = useRef<string | undefined>(undefined);
+  const current = useRef(artifact);
+  current.current = artifact;
+  const previewLatest = useCallback(() => {
     if (!autoPending.current) return;
     if (!window.matchMedia("(min-width: 1101px)").matches) {
       autoPending.current = false;
       return;
     }
-    const fresh = [...registry.current].filter(
-      ([id]) => !baseline.current.has(id),
-    );
-    if (!fresh.length) return;
-    autoPending.current = false;
-    fresh.at(-1)?.[1]();
+    // Verified cards register asynchronously and in any order. Until the user
+    // takes over, follow the last card in the reply rather than the first ready.
+    let target: [string, HTMLElement] | undefined;
+    for (const [id, candidate] of registry.current) {
+      const element = candidate.element();
+      if (
+        element?.isConnected &&
+        (!target ||
+          target[1].compareDocumentPosition(element) &
+            Node.DOCUMENT_POSITION_FOLLOWING)
+      )
+        target = [id, element];
+    }
+    if (!target || target[0] === autoTarget.current) return;
+    autoTarget.current = target[0];
+    registry.current.get(target[0])!.preview();
   }, []);
   const register = useCallback(
-    (id: string, preview: () => void) => {
-      registry.current.set(id, preview);
-      // File inspection may finish after the run-end frame. Wait for the verified
-      // card to register before consuming this run's automatic preview.
-      const frame = requestAnimationFrame(previewFresh);
+    (id: string, candidate: AutoPreview) => {
+      registry.current.set(id, candidate);
+      const frame = requestAnimationFrame(previewLatest);
       return () => {
         cancelAnimationFrame(frame);
         registry.current.delete(id);
       };
     },
-    [previewFresh],
+    [previewLatest],
   );
   useEffect(() => {
     autoPending.current = false;
   }, [conversationId]);
   useEffect(() => {
-    if (running && !wasRunning.current) {
-      autoPending.current = false;
-      baseline.current = new Set(registry.current.keys());
-    }
+    if (running && !wasRunning.current) autoPending.current = false;
     const completed = wasRunning.current && !running;
     wasRunning.current = running;
     if (!completed) return;
     autoPending.current = true;
-    const frame = requestAnimationFrame(previewFresh);
+    autoTarget.current = undefined;
+    const frame = requestAnimationFrame(previewLatest);
     return () => cancelAnimationFrame(frame);
-  }, [running, previewFresh]);
+  }, [running, previewLatest]);
   const document = useMemo(
     () => (artifact ? staticHtml(artifact.code) : ""),
     [artifact],
@@ -342,7 +366,14 @@ export function HtmlArtifactWorkspace({
     if (artifact?.manual) closeButton.current?.focus();
   }, [artifact]);
   const open = useCallback((item: Artifact) => {
-    autoPending.current = false;
+    if (item.manual) autoPending.current = false;
+    // A slower, superseded automatic preview must not replace the latest one.
+    else if (!autoPending.current || item.source !== autoTarget.current) return;
+    else if (
+      current.current?.path === item.path &&
+      current.current?.code === item.code
+    )
+      return;
     setArtifact(item);
     setMode("preview");
   }, []);
