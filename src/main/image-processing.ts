@@ -15,6 +15,7 @@ export interface ImageOptions {
   preserveOriginal?: boolean;
   sourceBytes?: number;
   sourcePixels?: number;
+  allowGif?: boolean;
 }
 export interface DecodedImage {
   data: string;
@@ -23,9 +24,20 @@ export interface DecodedImage {
   originalHeight: number;
   width: number;
   height: number;
+  firstFrameOnly?: boolean;
 }
 const cache = new Map<string, DecodedImage>();
 let cachedBytes = 0;
+// Requests prepare the whole history again, so remember images that failed in
+// a way a retry would repeat. Expire them in case a timeout came from load.
+const failures = new Map<string, { code: string; expires: number }>();
+const REMEMBERED_FAILURES = [
+  "CHAT_IMAGE_INVALID",
+  "CHAT_IMAGE_DIMENSIONS",
+  "CHAT_IMAGE_REQUEST",
+  "CHAT_IMAGE_TIMEOUT",
+];
+const FAILURE_TTL = 10 * 60 * 1000;
 let running = 0;
 const waiting: { resume: () => void }[] = [];
 const CACHE_BYTES = 16 * 1024 * 1024;
@@ -61,13 +73,28 @@ export async function processChatImage(
     throw new Error("CHAT_IMAGE_SIZE");
   const bytes = Buffer.from(image.data, "base64");
   if (bytes.length > sourceBytes) throw new Error("CHAT_IMAGE_SIZE");
-  if (imageMimeType(bytes) !== image.mimeType)
-    throw new Error("CHAT_IMAGE_INVALID");
-  imageDimensions(bytes, pixelLimit);
+  if (options.allowGif && image.mimeType === "image/gif") {
+    // Check the logical canvas before starting the isolated, single-frame
+    // decoder. GIF is accepted only for tool results, not chat uploads.
+    const signature = bytes.subarray(0, 6).toString("ascii");
+    if (bytes.length < 13 || !["GIF87a", "GIF89a"].includes(signature))
+      throw new Error("CHAT_IMAGE_INVALID");
+    const width = bytes.readUInt16LE(6),
+      height = bytes.readUInt16LE(8);
+    if (!width || !height) throw new Error("CHAT_IMAGE_INVALID");
+    if (width * height > pixelLimit) throw new Error("CHAT_IMAGE_DIMENSIONS");
+  } else {
+    if (imageMimeType(bytes) !== image.mimeType)
+      throw new Error("CHAT_IMAGE_INVALID");
+    imageDimensions(bytes, pixelLimit);
+  }
   const key = createHash("sha256")
     .update(bytes)
     .update(JSON.stringify(options))
     .digest("hex");
+  const failed = failures.get(key);
+  if (failed && failed.expires > Date.now()) throw new Error(failed.code);
+  if (failed) failures.delete(key);
   const existing = cache.get(key);
   if (existing) {
     cache.delete(key);
@@ -174,6 +201,15 @@ export async function processChatImage(
     cache.set(key, result);
     cachedBytes += result.data.length;
     return result;
+  } catch (error) {
+    if (error instanceof Error && REMEMBERED_FAILURES.includes(error.message)) {
+      if (failures.size >= 256) failures.delete(failures.keys().next().value!);
+      failures.set(key, {
+        code: error.message,
+        expires: Date.now() + FAILURE_TTL,
+      });
+    }
+    throw error;
   } finally {
     const next = waiting.shift();
     if (next) next.resume();

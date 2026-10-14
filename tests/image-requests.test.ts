@@ -13,7 +13,7 @@ import {
 } from "../src/main/image-requests";
 import { imageDimensions } from "../src/shared/image-dimensions";
 import { validateChatImages } from "../src/main/chat-images";
-import { pngHeader, syntheticPng } from "./image-fixtures";
+import { pngHeader, syntheticGif, syntheticPng } from "./image-fixtures";
 import { fixtureModel } from "./mock-server";
 
 const roots: string[] = [];
@@ -37,6 +37,125 @@ const user = (images: ReturnType<typeof picture>[]) => ({
   role: "user" as const,
   content: images,
   timestamp: 1,
+});
+
+const toolImage = (
+  data: Buffer,
+  mimeType: string,
+): Context["messages"][number] => ({
+  role: "toolResult",
+  toolCallId: "synthetic-image-call",
+  toolName: "read",
+  content: [
+    { type: "text", text: "Synthetic file read result" },
+    { type: "image", data: data.toString("base64"), mimeType },
+  ],
+  isError: false,
+  timestamp: 1,
+});
+
+test.each([false, true])(
+  "tool GIF survives this request and a later text turn without mutating history (animated: %s)",
+  async (animated) => {
+    const context: Context = {
+      messages: [toolImage(syntheticGif(animated), "image/gif")],
+    };
+    const before = JSON.stringify(context);
+    const prepared = await prepareImageContext(
+      context,
+      model("anthropic-messages"),
+    );
+    const content = prepared.messages[0].content as {
+      type: string;
+      mimeType?: string;
+      text?: string;
+    }[];
+    expect(content.find((part) => part.type === "image")?.mimeType).toBe(
+      "image/png",
+    );
+    expect(
+      content.some((part) => part.text?.includes("only the first frame")),
+    ).toBe(animated);
+    expect(JSON.stringify(context)).toBe(before);
+    context.messages.push({
+      role: "user",
+      content: [{ type: "text", text: "Continue the task." }],
+      timestamp: 2,
+    });
+    await expect(
+      prepareImageContext(context, model("bedrock-converse-stream")),
+    ).resolves.toBeDefined();
+    expect(JSON.stringify(context.messages[0])).toBe(
+      JSON.stringify(JSON.parse(before).messages[0]),
+    );
+  },
+);
+
+test.each([
+  ["image/gif", Buffer.from("GIF89a"), "unsupported or corrupt image"],
+  ["image/png", pngHeader(10001, 10000), "larger than 100 megapixels"],
+  ["image/bmp", Buffer.from("BM"), "unsupported or corrupt image"],
+] as const)(
+  "unreadable %s tool image becomes an explicit omission while other content remains usable",
+  async (mimeType, bytes, reason) => {
+    const context: Context = {
+      messages: [
+        toolImage(bytes, mimeType),
+        user([picture(syntheticPng(8, 6))]),
+      ],
+    };
+    const before = JSON.stringify(context);
+    const prepared = await prepareImageContext(
+      context,
+      model("anthropic-messages"),
+    );
+    const content = prepared.messages[0].content as {
+      type: string;
+      text?: string;
+    }[];
+    expect(content[0].text).toBe("Synthetic file read result");
+    expect(content.some((part) => part.type === "image")).toBe(false);
+    expect(content[1].text).toContain(`[Image omitted: ${reason}.]`);
+    expect(content[1].text).not.toContain("CHAT_IMAGE_");
+    expect(content[1].text).toContain("Tell the user");
+    expect(prepared.messages[1].content).toEqual(context.messages[1].content);
+    expect(JSON.stringify(context)).toBe(before);
+    context.messages.push({
+      role: "user",
+      content: [{ type: "text", text: "Continue." }],
+      timestamp: 3,
+    });
+    await expect(
+      prepareImageContext(context, model("anthropic-messages")),
+    ).resolves.toBeDefined();
+  },
+);
+
+test("tool-image recovery preserves cancellation and user-image validation", async () => {
+  const controller = new AbortController();
+  controller.abort(new Error("synthetic cancellation"));
+  await expect(
+    prepareImageContext(
+      { messages: [toolImage(syntheticGif(), "image/gif")] },
+      model("anthropic-messages"),
+      controller.signal,
+    ),
+  ).rejects.toThrow("synthetic cancellation");
+  await expect(
+    prepareImageContext(
+      { messages: [user([picture(Buffer.from("invalid pixels"))])] },
+      model("anthropic-messages"),
+    ),
+  ).rejects.toThrow("CHAT_IMAGE_INVALID");
+  const context: Context = {
+    messages: [toolImage(syntheticGif(), "image/gif")],
+  };
+  await expect(
+    prepareImageContext(context, {
+      ...model("anthropic-messages"),
+      input: ["text"],
+    }),
+  ).resolves.toBe(context);
 });
 
 test("provider preparation resizes encoded-size and long-edge violations without changing stored originals", async () => {
@@ -94,10 +213,10 @@ test("large tool images are resized and oversized ones are omitted instead of bl
     width: 2000,
     height: 459,
   });
-  expect(omitted).toEqual({
-    type: "text",
-    text: "[Image omitted: larger than 100 megapixels or 20 MiB.]",
-  });
+  expect(omitted.type).toBe("text");
+  expect(omitted.text).toContain(
+    "[Image omitted: larger than 100 megapixels.]",
+  );
   await expect(
     prepareImageContext(
       { messages: [user([picture(pngHeader(10001, 10000))])] },
@@ -132,8 +251,47 @@ test("all retained turns and tool images share the request budget", async () => 
       if (typeof part !== "string" && part.type === "image")
         expect(part.data.length).toBeLessThan((20_000_000 * 0.75) / 24);
     }
+  // Bedrock accepts 20 images: the four oldest tool images are left out.
+  const bedrock = await prepareImageContext(
+    context,
+    model("bedrock-converse-stream"),
+  );
+  const toolContent = bedrock.messages[2].content as {
+    type: string;
+    text?: string;
+    data?: string;
+  }[];
+  expect(toolContent.map((part) => part.type)).toEqual([
+    ...Array(4).fill("text"),
+    ...Array(4).fill("image"),
+  ]);
+  expect(toolContent[0].text).toContain("more images than this model accepts");
+  for (const part of toolContent.slice(4))
+    expect(part.data!.length).toBeLessThan((20_000_000 * 0.75) / 20);
+  expect(bedrock.messages[0].content).toHaveLength(8);
+  expect(bedrock.messages[1].content).toHaveLength(8);
+});
+
+test("user images over the count limit still block the request", async () => {
+  const image = picture(syntheticPng(8, 6));
   await expect(
-    prepareImageContext(context, model("bedrock-converse-stream")),
+    prepareImageContext(
+      {
+        messages: [
+          user(Array(12).fill(image)),
+          user(Array(9).fill(image)),
+          {
+            role: "toolResult",
+            toolCallId: "synthetic-call",
+            toolName: "read",
+            content: [image],
+            isError: false,
+            timestamp: 2,
+          },
+        ],
+      },
+      model("bedrock-converse-stream"),
+    ),
   ).rejects.toThrow("CHAT_IMAGE_REQUEST");
 });
 

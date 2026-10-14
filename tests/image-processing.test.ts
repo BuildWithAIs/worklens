@@ -8,7 +8,7 @@ import {
   processChatImage,
   thumbnailOptions,
 } from "../src/main/image-processing";
-import { pngHeader, syntheticPng } from "./image-fixtures";
+import { pngHeader, syntheticGif, syntheticPng } from "./image-fixtures";
 import sharp from "sharp";
 
 vi.mock("node:child_process", async (importOriginal) => {
@@ -26,6 +26,52 @@ afterEach(() => {
 const input = (bytes: Buffer) => ({
   mimeType: "image/png",
   data: bytes.toString("base64"),
+});
+
+test.each([false, true])(
+  "tool GIF converts the first frame to a supported still image (animated: %s)",
+  async (animated) => {
+    const image = {
+      mimeType: "image/gif",
+      data: syntheticGif(animated).toString("base64"),
+    };
+    const result = await processChatImage(image, {
+      ...thumbnailOptions,
+      allowGif: true,
+    });
+    expect(result.mimeType).toBe("image/png");
+    expect(result.firstFrameOnly === true).toBe(animated);
+    const { data, info } = await sharp(Buffer.from(result.data, "base64"))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect([info.width, info.height]).toEqual([1, 1]);
+    expect([...data.subarray(0, 3)]).toEqual([255, 0, 0]);
+    await expect(processChatImage(image, originalOptions)).rejects.toThrow(
+      "CHAT_IMAGE_INVALID",
+    );
+  },
+);
+
+test("GIF headers are bounded before decoding and corrupt pixels fail in isolation", async () => {
+  const options = { ...thumbnailOptions, allowGif: true };
+  const oversized = syntheticGif();
+  oversized.writeUInt16LE(10000, 6);
+  oversized.writeUInt16LE(10000, 8);
+  const gif = (bytes: Buffer) => ({
+    mimeType: "image/gif",
+    data: bytes.toString("base64"),
+  });
+  await expect(processChatImage(gif(oversized), options)).rejects.toThrow(
+    "CHAT_IMAGE_DIMENSIONS",
+  );
+  await expect(
+    processChatImage(gif(Buffer.from("GIF89a")), options),
+  ).rejects.toThrow("CHAT_IMAGE_INVALID");
+  expect(childProcess.fork).not.toHaveBeenCalled();
+  await expect(
+    processChatImage(gif(syntheticGif().subarray(0, 19)), options),
+  ).rejects.toThrow("CHAT_IMAGE_INVALID");
+  expect(childProcess.fork).toHaveBeenCalledTimes(1);
 });
 
 test("oversized PNG, JPEG and WebP headers are rejected before starting a decoder", async () => {
@@ -233,6 +279,53 @@ test("stalled decoders time out and running/queued work can be cancelled", async
   second.abort();
   await Promise.all(rejections);
   expect(child.kill).toHaveBeenCalled();
+});
+
+test("repeatable decoder failures are remembered for a while instead of decoding every request", async () => {
+  vi.useFakeTimers();
+  const child = fakeChild();
+  const image = input(syntheticPng(14, 9));
+  const first = processChatImage(image, thumbnailOptions);
+  const rejection = expect(first).rejects.toThrow("CHAT_IMAGE_INVALID");
+  child.emit("message", { error: "CHAT_IMAGE_INVALID" });
+  await rejection;
+  await expect(processChatImage(image, thumbnailOptions)).rejects.toThrow(
+    "CHAT_IMAGE_INVALID",
+  );
+  expect(childProcess.fork).toHaveBeenCalledTimes(1);
+  // Other options are a different request and are decoded separately.
+  const other = processChatImage(image, originalOptions);
+  child.emit("message", { error: "CHAT_IMAGE_INVALID" });
+  await expect(other).rejects.toThrow("CHAT_IMAGE_INVALID");
+  expect(childProcess.fork).toHaveBeenCalledTimes(2);
+  vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+  const retried = processChatImage(image, thumbnailOptions);
+  child.emit("message", {
+    result: {
+      data: "aa",
+      mimeType: "image/png",
+      originalWidth: 14,
+      originalHeight: 9,
+      width: 14,
+      height: 9,
+    },
+  });
+  await expect(retried).resolves.toMatchObject({ data: "aa" });
+  expect(childProcess.fork).toHaveBeenCalledTimes(3);
+});
+
+test("crashes are not remembered, so a later request can decode again", async () => {
+  const child = fakeChild();
+  const image = input(syntheticPng(15, 9));
+  const first = processChatImage(image, thumbnailOptions);
+  const rejection = expect(first).rejects.toThrow("CHAT_IMAGE_PROCESSING");
+  child.emit("exit", 1);
+  await rejection;
+  const second = processChatImage(image, thumbnailOptions);
+  const again = expect(second).rejects.toThrow("CHAT_IMAGE_PROCESSING");
+  child.emit("exit", 1);
+  await again;
+  expect(childProcess.fork).toHaveBeenCalledTimes(2);
 });
 
 test("processed-image cache evicts by retained bytes instead of growing with history", async () => {
