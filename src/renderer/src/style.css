@@ -968,12 +968,6 @@ kbd {
   --syntax-function: #7a3fd1;
   --syntax-type: #0f7b8a;
   --syntax-variable: #b4232f;
-  --diagram-node: #ffffff;
-  --diagram-node-border: #d4d4d8;
-  --diagram-cluster: #f4f4f5;
-  --diagram-cluster-border: #e4e4e7;
-  --diagram-line: #a1a1aa;
-  --diagram-label: #ffffff;
 }
 :root[data-theme="dark"] {
   --syntax-tag: #f38b98;
@@ -984,12 +978,6 @@ kbd {
   --syntax-function: #c9a2ff;
   --syntax-type: #6fd3dc;
   --syntax-variable: #ff9b8f;
-  --diagram-node: #26262a;
-  --diagram-node-border: #45454d;
-  --diagram-cluster: #222225;
-  --diagram-cluster-border: #34343a;
-  --diagram-line: #71717a;
-  --diagram-label: #26262a;
 }
 .aui-md-pre,
 .artifact-source,
@@ -2148,143 +2136,14 @@ kbd {
 .aui-md .katex-display > .katex {
   text-align: start;
 }
-.aui-mermaid {
-  position: relative;
-}
-.aui-mermaid > img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 4px auto;
-}
-.aui-mermaid-source {
-  margin: 0;
-  font: inherit;
-  white-space: pre;
-}
-.aui-mermaid-actions {
-  position: absolute;
-  top: 8px;
-  right: 40px;
-  display: flex;
-}
-.aui-mermaid-actions .aui-button-icon {
-  width: 28px;
-  height: 28px;
-  color: var(--muted);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
-}
-.aui-mermaid-actions .aui-button-icon svg {
-  width: 14px;
-  height: 14px;
-}
-.aui-mermaid:hover .aui-button-icon,
-.aui-mermaid:focus-within .aui-button-icon,
-.aui-code-header-root:hover + .aui-mermaid .aui-button-icon,
-.aui-code-header-root:focus-within + .aui-mermaid .aui-button-icon {
-  opacity: 1;
-  pointer-events: auto;
-}
-.aui-mermaid-status {
-  margin: 0 0 12px;
-  color: var(--faint);
-  font-size: 12px;
-  line-height: 20px;
-}
-.aui-mermaid-dialog[data-slot="dialog-content"] {
-  width: calc(100vw - 48px);
-  max-width: calc(100vw - 48px);
-  height: calc(100vh - 48px);
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-}
-/* Keep the header clear of the macOS window controls. */
-:root[data-native-vibrancy="true"]
-  .aui-mermaid-dialog[data-slot="dialog-content"] {
-  top: calc(50% + 12px);
-  height: calc(100vh - 72px);
-}
-.aui-mermaid-dialog-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 48px;
-  padding: 8px 52px 8px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.aui-mermaid-dialog-header [data-slot="dialog-title"] {
-  flex: 1;
-  min-width: 0;
-}
-.aui-mermaid-zoom {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  color: var(--muted);
-}
-.aui-mermaid-zoom .aui-button-icon {
-  width: 28px;
-  height: 28px;
-}
-.aui-mermaid-zoom .aui-button-icon svg {
-  width: 15px;
-  height: 15px;
-}
-.aui-mermaid-zoom-value {
-  min-width: 52px;
-  height: 28px;
-  padding: 0 6px;
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.aui-mermaid-zoom-value:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-.aui-mermaid-zoom-value:focus-visible,
-.aui-mermaid-expanded:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.aui-mermaid-expanded {
-  display: flex;
-  min-height: 0;
-  padding: 24px;
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: var(--surface);
-  cursor: grab;
-}
-.aui-mermaid-expanded[data-panning="true"] {
-  cursor: grabbing;
-  user-select: none;
-}
-.aui-mermaid-expanded > img {
-  display: block;
-  flex: none;
-  max-width: none;
-  margin: auto;
-  -webkit-user-drag: none;
-}
 @media (hover: none) {
   .aui-code-header-root .aui-code-copy {
     opacity: 1;
     pointer-events: auto;
   }
-  .aui-mermaid-actions .aui-button-icon {
-    opacity: 1;
-    pointer-events: auto;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .aui-code-header-root .aui-code-copy,
-  .aui-mermaid-actions .aui-button-icon {
+  .aui-code-header-root .aui-code-copy {
     transition: none;
   }
 }
