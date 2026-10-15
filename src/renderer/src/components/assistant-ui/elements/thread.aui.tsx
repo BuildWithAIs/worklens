@@ -104,6 +104,8 @@ export type ThreadComponents = {
     | undefined;
   LiveStatus?: ComponentType;
   MessageFooter?: ComponentType;
+  /** Rendered in place of the default error line of a failed message. */
+  MessageError?: ComponentType;
   ProcessGroup?: ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>;
   ReasoningGroup?:
     | ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>>
@@ -386,6 +388,7 @@ const ComposerAction: FC = () => {
             value={modelMenu.selection}
             onChange={modelMenu.onChange}
             onManage={modelMenu.onManage}
+            openRequest={modelMenu.openRequest}
           />
         )}
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
@@ -467,6 +470,13 @@ const ComposerAction: FC = () => {
 };
 
 const MessageError: FC = () => {
+  const { MessageError: Custom } = useContext(ThreadComponentsContext);
+  if (Custom)
+    return (
+      <MessagePrimitive.Error>
+        <Custom />
+      </MessagePrimitive.Error>
+    );
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex w-fit max-w-full items-start gap-1.5 rounded-lg bg-destructive/5 px-2.5 py-1.5 text-sm leading-5 text-destructive dark:bg-destructive/10 dark:text-red-300">
@@ -642,7 +652,7 @@ const MessageCopy: FC = () => {
       (s.message.role === "assistant" &&
         s.message.status?.type === "incomplete" &&
         s.message.status.reason === "error" &&
-        s.message.status.error !== undefined),
+        !!s.message.status.error),
   );
   if (!hasText) return null;
   return (

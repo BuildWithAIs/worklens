@@ -1,5 +1,5 @@
 import { ProviderIcon } from "./ProviderIcon";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@/components/ui/radio-group";
 import {
@@ -38,15 +38,23 @@ export function ModelMenu({
   disabled,
   onChange,
   onManage,
+  openRequest,
 }: {
   data: Bootstrap;
   value?: Selection;
   disabled?: boolean;
   onChange: (value: Selection) => void;
   onManage: () => void;
+  openRequest?: number;
 }) {
   const { t } = useAppTranslation();
   const [open, setOpen] = useState(false);
+  const handledRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest === handledRequest.current) return;
+    handledRequest.current = openRequest;
+    if (!disabled) setOpen(true);
+  }, [openRequest, disabled]);
   const [query, setQuery] = useState("");
   const [showThinking, setShowThinking] = useState(false);
   const thinkingTrigger = useRef<HTMLButtonElement>(null);
