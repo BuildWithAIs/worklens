@@ -936,6 +936,11 @@ export function App() {
                 );
               }}
               onCancel={cancelCurrent}
+              onOpenProviderSettings={() => {
+                setSettingsSection("providers");
+                setPage("settings");
+              }}
+              onNewConversation={newConversation}
               modelMenu={{
                 data,
                 selection,

@@ -31,7 +31,6 @@ import {
 import { Hint } from "@/components/ui/tooltip";
 import { ArtifactFiles } from "./ArtifactFiles";
 import { activityIcon } from "@/lib/activity-icon";
-import { systemText } from "@/lib/system-text";
 import { useAppTranslation } from "@/i18n";
 import { formatDuration } from "@/lib/duration";
 import {
@@ -67,6 +66,11 @@ import {
   ModelMenuContext,
   type ModelMenuProps,
 } from "@/components/worklens/model-menu-context";
+import { RunErrorCard } from "./RunErrorCard";
+import {
+  RunErrorActionsContext,
+  type RunErrorActions,
+} from "./run-error-context";
 import type {
   ConversationView,
   MessageView,
@@ -95,6 +99,8 @@ type Props = {
     images: EditedChatImage[],
   ) => Promise<void>;
   onSelectVersion: (messageId: string, targetId: string) => Promise<void>;
+  onOpenProviderSettings: () => void;
+  onNewConversation: () => void;
   modelMenu?: ModelMenuProps;
 };
 
@@ -108,11 +114,7 @@ const activePhases = new Set([
   "stopping",
 ]);
 
-function messageStatus(
-  view: ConversationView | undefined,
-  index: number,
-  language: "en" | "zh",
-) {
+function messageStatus(view: ConversationView | undefined, index: number) {
   const isLast = index === (view?.messages.length ?? 0) - 1;
   const message = view?.messages[index];
   if (isLast && view && activePhases.has(view.phase))
@@ -123,22 +125,19 @@ function messageStatus(
   // remain tool-local and must not turn an otherwise successful reply into an error.
   if (message?.role === "assistant" && message.status === "cancelled")
     return { type: "incomplete" as const, reason: "cancelled" as const };
+  // The error card classifies and translates this redacted text; keep it
+  // intact so Copy and Details carry the provider's original message.
   if (message?.role === "assistant" && message.status === "error")
     return {
       type: "incomplete" as const,
       reason: "error" as const,
-      error: systemText(message.error?.trim() || "模型请求失败", language),
+      error: message.error?.trim() ?? "",
     };
   if (isLast && view?.phase === "failed")
     return {
       type: "incomplete" as const,
       reason: "error" as const,
-      error: systemText(
-        view.error?.trim() ||
-          view.messages[index]?.error?.trim() ||
-          "模型请求失败",
-        language,
-      ),
+      error: view.error?.trim() || view.messages[index]?.error?.trim() || "",
     };
   return { type: "complete" as const, reason: "stop" as const };
 }
@@ -176,10 +175,7 @@ function toolResult(message: MessageView) {
   };
 }
 
-function convertMessage(
-  view: ConversationView | undefined,
-  language: "en" | "zh",
-) {
+function convertMessage(view: ConversationView | undefined) {
   return (message: MessageView, index: number): ThreadMessageLike => {
     if (message.role === "user") {
       return {
@@ -209,7 +205,7 @@ function convertMessage(
       return {
         id: message.id,
         role: "assistant",
-        status: messageStatus(view, index, language),
+        status: messageStatus(view, index),
         content: [
           {
             type: "tool-call",
@@ -249,7 +245,7 @@ function convertMessage(
       id: message.id,
       role: "assistant",
       content,
-      status: messageStatus(view, index, language),
+      status: messageStatus(view, index),
     };
   };
 }
@@ -488,6 +484,7 @@ const threadComponents = {
   ProcessGroup: WorkLensToolGroup,
   LiveStatus: WorkLensLiveStatus,
   MessageFooter: JevUsage,
+  MessageError: RunErrorCard,
 };
 
 export function AgentThread({
@@ -508,6 +505,8 @@ export function AgentThread({
   onSend,
   onEdit,
   onSelectVersion,
+  onOpenProviderSettings,
+  onNewConversation,
   onCancel,
   modelMenu,
 }: Props) {
@@ -532,7 +531,7 @@ export function AgentThread({
   });
   // Presentation only: one activity disclosure per turn; source records stay intact.
   const messages = useMemo(() => {
-    const convert = convertMessage(view, language);
+    const convert = convertMessage(view);
     const displayed: ThreadMessageLike[] = [];
     const source = view?.messages ?? [];
     if (
@@ -552,7 +551,7 @@ export function AgentThread({
       // Keep full records for the completed disclosure; live rendering uses one status.
       // Only at turn end classify text preceding a tool as process narration;
       // the API has no progress/final channel, so never guess from wording.
-      const status = messageStatus(view, turn[turn.length - 1].index, language);
+      const status = messageStatus(view, turn[turn.length - 1].index);
       const running = status.type === "running";
       if (running) {
         const order = liveOrder.current;
@@ -798,7 +797,7 @@ export function AgentThread({
         id: `${view.id}-request-error`,
         role: "assistant",
         content: [],
-        status: messageStatus(view, source.length - 1, language),
+        status: messageStatus(view, source.length - 1),
       });
     }
     return displayed;
@@ -901,6 +900,8 @@ export function AgentThread({
     onSelectVersion,
     onError,
     onConsentChange,
+    onOpenProviderSettings,
+    onNewConversation,
   });
   handlers.current = {
     onRecoveredEditLoaded,
@@ -908,6 +909,8 @@ export function AgentThread({
     onSelectVersion,
     onError,
     onConsentChange,
+    onOpenProviderSettings,
+    onNewConversation,
   };
   const busy = isRunning || submitting;
   const editing = useMemo(
@@ -959,6 +962,48 @@ export function AgentThread({
     }),
     [editingId, recoveredEdit, busy, canSend, view],
   );
+  const [modelMenuRequest, setModelMenuRequest] = useState(0);
+  const menu = useMemo(
+    () => modelMenu && { ...modelMenu, openRequest: modelMenuRequest },
+    [modelMenu, modelMenuRequest],
+  );
+  // Next steps on the error card of the latest failed run. Retry resends the
+  // last prompt unchanged as a new version, with the selected model.
+  const lastPrompt = view?.messages.findLast(
+    (message) => message.role === "user",
+  );
+  const hasModelMenu = !!modelMenu;
+  const runErrorActions = useMemo<RunErrorActions>(() => {
+    const entryId = lastPrompt?.entryId;
+    const idle = !busy && !editingId;
+    return {
+      retry:
+        entryId && idle && canSend
+          ? () =>
+              void handlers.current
+                .onEdit(
+                  entryId,
+                  lastPrompt.text,
+                  (lastPrompt.images ?? []).map((image) => ({
+                    existingIndex: image.index,
+                  })),
+                )
+                .catch((error) => handlers.current.onError(String(error)))
+          : undefined,
+      chooseModel: hasModelMenu
+        ? () => setModelMenuRequest((request) => request + 1)
+        : undefined,
+      openSettings: () => handlers.current.onOpenProviderSettings(),
+      newChat: () => handlers.current.onNewConversation(),
+      editMessage:
+        entryId && idle
+          ? () => {
+              handlers.current.onRecoveredEditLoaded();
+              setEditingId(entryId);
+            }
+          : undefined,
+    };
+  }, [lastPrompt, busy, editingId, canSend, hasModelMenu]);
   const images = useMemo(
     () => ({
       supported: supportsImages,
@@ -1000,14 +1045,16 @@ export function AgentThread({
     <MessageEditingContext.Provider value={editing}>
       <AssistantRuntimeProvider runtime={runtime}>
         <ChatImageContext.Provider value={images}>
-          <ModelMenuContext.Provider value={modelMenu}>
-            <HtmlArtifactWorkspace
-              conversationId={view?.id}
-              outputPaths={outputPaths}
-              running={isRunning}
-            >
-              <div className="agent-thread">{thread}</div>
-            </HtmlArtifactWorkspace>
+          <ModelMenuContext.Provider value={menu}>
+            <RunErrorActionsContext.Provider value={runErrorActions}>
+              <HtmlArtifactWorkspace
+                conversationId={view?.id}
+                outputPaths={outputPaths}
+                running={isRunning}
+              >
+                <div className="agent-thread">{thread}</div>
+              </HtmlArtifactWorkspace>
+            </RunErrorActionsContext.Provider>
           </ModelMenuContext.Provider>
         </ChatImageContext.Provider>
       </AssistantRuntimeProvider>

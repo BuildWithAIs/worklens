@@ -6,6 +6,8 @@ export type ModelMenuProps = {
   selection?: Selection;
   onChange: (value: Selection) => void;
   onManage: () => void;
+  /** Opens the menu each time the number changes. */
+  openRequest?: number;
 };
 
 export const ModelMenuContext = createContext<ModelMenuProps | undefined>(

@@ -69,28 +69,45 @@ const cases = [
   {
     name: "authentication error before any text",
     error: "401 Invalid API key",
+    title: "Couldn’t authenticate with the provider",
+    detail: "Invalid API key",
+    actions: ["Open settings"],
   },
   {
     name: "explicit provider billing error",
     error: "402 Insufficient credits",
+    title: "The provider reported a quota or billing limit",
+    detail: "Insufficient credits",
+    actions: ["Choose model"],
   },
   {
     name: "network error without billing speculation",
     error: "Connection timed out",
+    title: "The request timed out",
+    detail:
+      "Try again. If it keeps timing out, check your network or proxy settings.",
+    actions: [],
   },
   {
     name: "unknown failure uses a generic message",
-    expected: "The model request failed.",
+    title: "The model request failed",
+    detail: "Try again.",
+    actions: [],
   },
   {
     name: "failure before an assistant message exists",
     error: "Service unavailable",
     noAssistant: true,
+    title: "The model service is temporarily unavailable",
+    detail: "Try again later, or choose another model.",
+    actions: ["Choose model"],
   },
   {
     name: "message-level error fallback",
     messageError: "Provider rejected the request",
-    expected: "Provider rejected the request",
+    title: "The model request failed",
+    detail: "Provider rejected the request",
+    actions: [],
   },
   {
     name: "partial answer remains visible",
@@ -117,10 +134,20 @@ for (const scenario of cases) {
     const error = page.locator(".aui-message-error-root");
     await expect(error).toHaveCount(1);
     await expect(error).toBeVisible();
-    await expect(error).toHaveText(scenario.expected ?? scenario.error);
+    await expect(error.locator(".aui-message-error-title")).toHaveText(
+      scenario.title ?? "The model request failed",
+    );
+    await expect(error.locator(".aui-message-error-message")).toHaveText(
+      scenario.detail ?? scenario.error,
+    );
     if (!scenario.error?.includes("credits")) {
       await expect(error).not.toContainText(/credits|balance|充值|余额/i);
     }
+    // The fixture prompt has no stored entry, so Retry cannot resend it.
+    if (scenario.actions)
+      await expect(
+        error.getByRole("button").filter({ hasNotText: "Details" }),
+      ).toHaveText(scenario.actions);
     if (scenario.text)
       await expect(
         page.getByText(scenario.text, { exact: true }),
@@ -130,6 +157,97 @@ for (const scenario of cases) {
     ).toHaveCount(0);
   });
 }
+
+test("provider errors show the provider's explanation and keep the original in Details", async ({
+  page,
+}) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await setup(page);
+  const raw =
+    '503: {"message":"Service is too busy. Try another provider. (request_id: 40ee2127-9214-448d-a299-5c0b7e1d93fa)"}';
+  await page.evaluate((error) => window.finishRequest({ error }), raw);
+  const error = page.locator(".aui-message-error-root");
+  await expect(error).toHaveAttribute("data-kind", "unavailable");
+  await expect(error.locator(".aui-message-error-title")).toHaveText(
+    "The model service is temporarily unavailable",
+  );
+  await expect(error.locator(".aui-message-error-message")).toHaveText(
+    "Service is too busy. Try another provider.",
+  );
+  await expect(error.locator("pre")).toHaveCount(0);
+  const details = error.getByRole("button", { name: "Details", exact: true });
+  await details.click();
+  await expect(details).toHaveAttribute("aria-expanded", "true");
+  await expect(error.locator("pre")).toHaveText(raw);
+  await error.getByRole("button", { name: "Copy details" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(raw);
+});
+
+test("error actions retry the last prompt and choose a model", async ({
+  page,
+}) => {
+  await setup(page, {
+    branchId: "branch",
+    messages: [{ id: "user", entryId: "user", role: "user", text: "Hello" }],
+  });
+  await page.evaluate(() => {
+    const invoke = window.worklens.invoke;
+    window.worklens.invoke = async (name, input) => {
+      if (name === "editMessage") {
+        window.editInput = input;
+        throw new Error("fixture stop");
+      }
+      return invoke(name, input);
+    };
+    window.finishRequest({ error: "503 Service unavailable" });
+  });
+  const error = page.locator(".aui-message-error-root");
+  await error.getByRole("button", { name: "Retry" }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.editInput))
+    .toMatchObject({ messageId: "user", text: "Hello", images: [] });
+
+  await error.getByRole("button", { name: "Choose model" }).click();
+  await expect(page.locator(".chat-model-picker")).toBeVisible();
+});
+
+test("authentication errors open provider settings", async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() =>
+    window.finishRequest({ error: "401 Invalid API key" }),
+  );
+  await page
+    .locator(".aui-message-error-root")
+    .getByRole("button", { name: "Open settings" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Providers", exact: true }),
+  ).toBeVisible();
+});
+
+test("earlier failures stay readable without next steps", async ({ page }) => {
+  await setup(page, {
+    phase: "completed",
+    branchId: "branch",
+    messages: [
+      { id: "user", entryId: "user", role: "user", text: "Hello" },
+      {
+        id: "failure",
+        role: "assistant",
+        text: "",
+        error: "503 Service unavailable",
+        status: "error",
+      },
+      { id: "followup", entryId: "followup", role: "user", text: "Again" },
+      { id: "answer", role: "assistant", text: "Successful reply" },
+    ],
+  });
+  const error = page.locator(".aui-message-error-root");
+  await expect(error.locator(".aui-message-error-title")).toContainText(
+    "The model service is temporarily unavailable",
+  );
+  await expect(error.getByRole("button")).toHaveText(["Details"]);
+});
 
 test("cancelling a request does not produce a failure hint", async ({
   page,
@@ -158,7 +276,7 @@ test("copy on a textless failure includes the complete visually clamped error", 
     .locator('[data-slot="aui_assistant-message-root"]')
     .filter({ has: page.locator(".aui-message-error-root") });
   await expect(response.locator(".aui-message-error-message")).toHaveClass(
-    /line-clamp-2/,
+    /line-clamp-3/,
   );
   await response
     .getByRole("button", { name: "Copy text", exact: true })
@@ -215,13 +333,12 @@ for (const phase of ["idle", "completed"]) {
         { id: "answer", role: "assistant", text: "Successful reply" },
       );
     await setup(page, { phase, messages });
-    await expect(page.locator(".aui-message-error-root")).toHaveText(
-      "Provider rejected the request",
+    const detail = page.locator(
+      ".aui-message-error-root .aui-message-error-message",
     );
+    await expect(detail).toHaveText("Provider rejected the request");
     await page.reload();
-    await expect(page.locator(".aui-message-error-root")).toHaveText(
-      "Provider rejected the request",
-    );
+    await expect(detail).toHaveText("Provider rejected the request");
     if (phase === "completed")
       await expect(
         page.getByText("Successful reply", { exact: true }),
