@@ -9,7 +9,7 @@ const index = (text: string): SearchIndex => ({
 });
 
 test("evicts by retained bytes, refreshes recency, and releases removed entries", () => {
-  const cache = new SearchCache(4000);
+  const cache = new SearchCache(3500);
   for (const id of ["a", "b", "c", "d"]) cache.set(id, index(id.repeat(48)));
   expect(cache.get("a")?.messages).toBeDefined();
   cache.set("e", index("e".repeat(48)));
@@ -106,4 +106,42 @@ test("a complete index below the global budget still observes the per-conversati
   expect(cache.get("large")?.messages).toBeUndefined();
   expect(cache.get("large")?.parsed.size).toBeGreaterThan(0);
   expect(cache.bytes).toBeLessThanOrEqual(cache.limit / 4);
+});
+
+test("counts reply text shared with its parse result once", () => {
+  const full = largeIndex(4);
+  const cache = new SearchCache(100000);
+  cache.set("full", full);
+  const withMessages = cache.bytes;
+  cache.set("parsed", { ...full, messages: undefined });
+  const messageBytes = withMessages - (cache.bytes - withMessages);
+  // Messages add only their folded text; their text is the parsed result.
+  expect(messageBytes).toBe(
+    full.messages!.reduce(
+      (total, message) => total + 64 + message.folded.length * 2,
+      0,
+    ),
+  );
+  // A complete index exactly at the per-conversation limit stays complete.
+  const exact = new SearchCache(withMessages * 4);
+  exact.set("full", full);
+  expect(exact.get("full")?.messages).toBe(full.messages);
+  expect(exact.bytes).toBe(withMessages);
+});
+
+test("still counts a prompt equal to a reply's parsed text", () => {
+  const text = "same text";
+  const index: SearchIndex = {
+    key: "k",
+    parsed: new Map([[`**${text}**`, text]]),
+    messages: [
+      { text, folded: text },
+      { text, folded: text },
+    ],
+  };
+  const cache = new SearchCache(100000);
+  cache.set("both", index);
+  const both = cache.bytes;
+  cache.set("reply", { ...index, messages: [{ text, folded: text }] });
+  expect(both - (cache.bytes - both)).toBe(64 + text.length * 4);
 });

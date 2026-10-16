@@ -10,15 +10,18 @@ export interface SearchIndex {
 /** Conservative UTF-16 byte accounting, including the retained Markdown keys. */
 function sizeOf(index: SearchIndex) {
   let bytes = 256 + index.key.length * 2 + (index.source?.length ?? 0) * 2;
-  for (const message of index.messages ?? [])
-    bytes +=
-      64 +
-      (message.text.length +
-        message.folded.length +
-        (message.turnId?.length ?? 0)) *
-        2;
-  for (const [source, text] of index.parsed)
+  // A reply's text is the string stored in `parsed`, so count it there only.
+  // Each parsed text excuses one message, so equal prompts are still counted.
+  const shared = new Set<string>();
+  for (const [source, text] of index.parsed) {
     bytes += 64 + (source.length + text.length) * 2;
+    shared.add(text);
+  }
+  for (const message of index.messages ?? []) {
+    const text = shared.delete(message.text) ? 0 : message.text.length;
+    bytes +=
+      64 + (text + message.folded.length + (message.turnId?.length ?? 0)) * 2;
+  }
   return bytes;
 }
 
