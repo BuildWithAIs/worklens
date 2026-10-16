@@ -62,15 +62,18 @@ export interface SearchableMessage {
   turnId?: string;
 }
 
-/** Awaited between pieces of work: yields to other work and stops when cancelled. */
-export type Checkpoint = () => Promise<void>;
+/**
+ * Awaited after each piece of work: throws when cancelled, and returns a
+ * promise only when the time budget is spent and it yields to other work.
+ */
+export type Checkpoint = () => Promise<void> | undefined;
 
 // Only visible prompt and reply text is searched; thinking and tool output are
 // not. Replies come first, as ChatGPT does: titles usually repeat the first
 // prompt, so a reply makes the more informative snippet.
 export async function searchableMessages(
   messages: readonly MessageView[],
-  checkpoint: Checkpoint = async () => {},
+  checkpoint: Checkpoint = () => undefined,
   /** Plain text of replies parsed before, by their Markdown; kept current. */
   parsed: Map<string, string> = new Map(),
 ): Promise<SearchableMessage[]> {
@@ -90,7 +93,6 @@ export async function searchableMessages(
         // Stored at once, so work before a cancellation is kept.
         text = markdownText(message.text);
         parsed.set(message.text, text);
-        await checkpoint();
       } else text = known;
     }
     if (text.trim())
@@ -99,6 +101,8 @@ export async function searchableMessages(
         folded: foldSearchText(text),
         turnId,
       });
+    // After every message, parsed or cached: folding long text takes time too.
+    await checkpoint();
   }
   for (const markdown of parsed.keys())
     if (!used.has(markdown)) parsed.delete(markdown);

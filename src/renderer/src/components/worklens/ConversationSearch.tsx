@@ -93,13 +93,19 @@ export function ConversationSearch({
   const trimmed = query.trim();
 
   useEffect(() => {
+    if (!open) return;
     // Index conversations while the query is typed; a search takes over.
-    if (open) api.invoke("prepareSearch", {}).catch(() => {});
+    api.invoke("prepareSearch", {}).catch(() => {});
+    // Closing stops the warm-up and any search; finished indexing stays.
+    return () =>
+      void api.invoke("cancelSearch", { warmUp: true }).catch(() => {});
   }, [open]);
   useEffect(() => {
     if (!open || !trimmed) return;
     let cancelled = false;
+    let inFlight = false;
     const timer = setTimeout(() => {
+      inFlight = true;
       api
         .invoke("searchConversations", { query: trimmed })
         .then((items) => {
@@ -109,11 +115,15 @@ export function ConversationSearch({
         })
         .catch(() => {
           if (!cancelled) setFailed(trimmed);
-        });
+        })
+        .finally(() => (inFlight = false));
     }, 150);
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      // Nobody waits for this search once the query changes or is cleared.
+      if (inFlight)
+        api.invoke("cancelSearch", { warmUp: false }).catch(() => {});
     };
   }, [open, trimmed]);
 
@@ -125,12 +135,14 @@ export function ConversationSearch({
   const stale = searching && results?.query !== trimmed;
   const pending = stale && failed !== trimmed;
   const [slow, setSlow] = useState(false);
+  // Restarts whenever a pending query is shown again: a new query or a
+  // reopened dialog.
   useEffect(() => {
     setSlow(false);
-    if (!trimmed) return;
+    if (!open || !trimmed) return;
     const timer = setTimeout(() => setSlow(true), SKELETON_DELAY);
     return () => clearTimeout(timer);
-  }, [trimmed]);
+  }, [open, trimmed]);
   // Placeholders replace results of the previous query once it is slow.
   const skeleton = pending && slow;
   const selected = Math.min(active, Math.max(0, items.length - 1));

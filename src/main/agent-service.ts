@@ -643,15 +643,27 @@ export class AgentService {
   // gives way, so it never cancels a search whose results are still wanted.
   private searchGeneration = 0;
   private warmGeneration = 0;
+  /** Searches up to this generation were cancelled without a newer one. */
+  private cancelledSearch = 0;
+  /**
+   * Stops searches nobody waits for, as when the query is cleared, and with
+   * `warmUp` the warm-up too, as when the dialog closes. Finished indexing
+   * stays cached.
+   */
+  cancelSearch(warmUp: boolean) {
+    this.cancelledSearch = this.searchGeneration;
+    if (warmUp) this.warmGeneration++;
+  }
   private checkpoint(stale: () => boolean, budgetMs: number): Checkpoint {
     let started = performance.now();
-    return async () => {
+    return () => {
       if (stale()) throw new SearchCancelled();
-      if (performance.now() - started < budgetMs) return;
-      // Let IPC and streaming replies run between slices of indexing.
-      await new Promise((resolve) => setImmediate(resolve));
-      started = performance.now();
-      if (stale()) throw new SearchCancelled();
+      if (performance.now() - started < budgetMs) return undefined;
+      // Let IPC and streaming replies run between slices of work.
+      return new Promise<void>((resolve) => setImmediate(resolve)).then(() => {
+        started = performance.now();
+        if (stale()) throw new SearchCancelled();
+      });
     };
   }
   private async searchable(
@@ -707,6 +719,7 @@ export class AgentService {
         file.searchable = null;
         return [];
       }
+      await checkpoint();
       file.parsed ??= new Map();
       file.searchable = await this.searchable(
         file.info.id,
@@ -729,11 +742,15 @@ export class AgentService {
       await loadMarkdownParser();
       await this.listInfos();
       await checkpoint();
-      for (const [id, runtime] of [...this.sessions])
+      for (const [id, runtime] of [...this.sessions]) {
         await this.runtimeIndex(id, runtime, checkpoint);
-      for (const [path, file] of [...this.files])
+        await checkpoint();
+      }
+      for (const [path, file] of [...this.files]) {
         if (!this.sessions.has(file.info.id))
           await this.fileIndex(path, file, checkpoint);
+        await checkpoint();
+      }
     } catch (error) {
       if (!(error instanceof SearchCancelled)) throw error;
     }
@@ -746,7 +763,9 @@ export class AgentService {
     const needle = foldSearchText(query.trim());
     if (!needle) return [];
     const checkpoint = this.checkpoint(
-      () => generation !== this.searchGeneration,
+      () =>
+        generation !== this.searchGeneration ||
+        generation <= this.cancelledSearch,
       10,
     );
     try {
@@ -761,7 +780,7 @@ export class AgentService {
     await this.listInfos();
     await checkpoint();
     const found: (ConversationSearchResult & { titleMatch: boolean })[] = [];
-    const match = (
+    const match = async (
       id: string,
       rawTitle: string,
       updatedAt: string,
@@ -770,6 +789,7 @@ export class AgentService {
       const title = this.redact(rawTitle);
       const titleMatch = findSearchMatch(title, needle) >= 0;
       for (const message of messages) {
+        await checkpoint();
         if (!message.folded.includes(needle)) continue;
         // Search the redacted text so a match inside a secret is never shown.
         const text = this.redact(message.text);
@@ -789,8 +809,9 @@ export class AgentService {
     };
     // Snapshots: conversations can open or close while indexing yields.
     for (const [id, runtime] of [...this.sessions]) {
+      await checkpoint();
       const summary = this.summary(id, runtime);
-      match(
+      await match(
         id,
         summary.title,
         summary.updatedAt,
@@ -798,6 +819,7 @@ export class AgentService {
       );
     }
     for (const [path, file] of [...this.files]) {
+      await checkpoint();
       const { info } = file;
       if (this.sessions.has(info.id)) continue;
       const title = fileTitle(info);
@@ -807,7 +829,7 @@ export class AgentService {
         findSearchMatch(this.redact(title), needle) < 0
       )
         continue;
-      match(
+      await match(
         info.id,
         title,
         info.modified.toISOString(),

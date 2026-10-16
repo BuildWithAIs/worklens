@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
 import * as conversationSearch from "../src/main/conversation-search";
+const realSearchable = conversationSearch.searchableMessages;
 import {
   loadMarkdownParser,
   markdownText,
@@ -86,29 +87,28 @@ test("prefilters stored Markdown without missing split phrases", () => {
   expect(prefilterSource("no references")).toBe("no references");
 });
 
-test("reuses parsed replies and drops ones no longer in the branch", async () => {
-  const parsed = new Map<string, string>();
-  let parses = 0;
-  const counting = async () => void parses++;
+test("reuses parsed replies, checks in after every message and drops stale ones", async () => {
   const turn = (text: string) => [
     { id: `u-${text}`, role: "user" as const, entryId: text, text },
     { id: `a-${text}`, role: "assistant" as const, text: `**${text}** reply` },
   ];
-  await searchableMessages([...turn("one"), ...turn("two")], counting, parsed);
-  expect(parses).toBe(2);
-  const grown = await searchableMessages(
-    [...turn("one"), ...turn("two"), ...turn("three")],
+  // A cached reply is used as stored rather than parsed again.
+  const parsed = new Map([["**one** reply", "cached one"]]);
+  let checks = 0;
+  const counting = () => void checks++;
+  const messages = await searchableMessages(
+    [...turn("one"), ...turn("two")],
     counting,
     parsed,
   );
-  expect(parses).toBe(3);
-  expect(grown.map(({ text }) => text).slice(0, 3)).toEqual([
-    "one reply",
+  expect(messages.map(({ text }) => text).slice(0, 2)).toEqual([
+    "cached one",
     "two reply",
-    "three reply",
   ]);
+  // Cached or not, every message yields a chance to pause or cancel.
+  expect(checks).toBe(4);
+  expect([...parsed.keys()]).toEqual(["**one** reply", "**two** reply"]);
   await searchableMessages(turn("three"), counting, parsed);
-  expect(parses).toBe(3);
   expect([...parsed.keys()]).toEqual(["**three** reply"]);
 });
 
@@ -237,10 +237,8 @@ test("searches the current branch of loaded and stored conversations", async () 
   // A fresh service reads the conversation from its session file.
   await expectations(await create());
 
-  // Open conversations keep their index until their branch changes.
+  // A new message in an open conversation is found by the next search.
   const indexing = vi.spyOn(conversationSearch, "searchableMessages");
-  await service.search("beta");
-  expect(indexing).not.toHaveBeenCalled();
   await settle(
     await service.send({
       requestId: randomUUID(),
@@ -250,7 +248,16 @@ test("searches the current branch of loaded and stored conversations", async () 
     }),
   );
   expect(await service.search("€7")).toMatchObject([{ id: priced.id }]);
-  expect(indexing).toHaveBeenCalledTimes(1);
+
+  // Open conversations keep their index until their branch changes. They are
+  // opened from their files, so no run is still writing to them.
+  const reader = await create();
+  await reader.open(first.id);
+  await reader.open(priced.id);
+  await reader.search("beta");
+  indexing.mockClear();
+  await reader.search("beta");
+  expect(indexing).not.toHaveBeenCalled();
 
   // A newer search cancels an older one, which returns nothing.
   const cold = await create();
@@ -273,4 +280,46 @@ test("searches the current branch of loaded and stored conversations", async () 
   const preparing = warming.prepareSearch();
   expect(await warming.search("beta")).toMatchObject([{ id: first.id }]);
   await preparing;
+
+  // Cancelling stops a pending search; without warmUp the warm-up goes on
+  // and fills the cache, with it the warm-up stops too.
+  const clearing = await create();
+  const pending = clearing.search("beta");
+  const keptWarm = clearing.prepareSearch();
+  clearing.cancelSearch(false);
+  expect(await pending).toEqual([]);
+  await keptWarm;
+  indexing.mockClear();
+  expect(await clearing.search("beta")).toMatchObject([{ id: first.id }]);
+  expect(indexing).not.toHaveBeenCalled();
+  const closing = await create();
+  const stopped = closing.prepareSearch();
+  closing.cancelSearch(true);
+  await stopped;
+  indexing.mockClear();
+  await closing.search("beta");
+  expect(indexing).toHaveBeenCalled();
+
+  // Rebuilding an open conversation's index from cached replies still
+  // checks in after every message, so a long conversation can't hold the
+  // main process.
+  let checks = 0;
+  indexing.mockImplementation((messages, checkpoint, parsed) =>
+    realSearchable(
+      messages,
+      () => {
+        checks++;
+        return checkpoint?.();
+      },
+      parsed,
+    ),
+  );
+  await reader.rename(first.id, "Weekly report, renamed");
+  indexing.mockClear();
+  await reader.search("beta");
+  // Only the renamed conversation is rebuilt, from its cached replies.
+  expect(indexing).toHaveBeenCalledTimes(1);
+  const [[rebuilt]] = indexing.mock.calls;
+  expect(rebuilt.length).toBeGreaterThan(0);
+  expect(checks).toBe(rebuilt.length);
 });

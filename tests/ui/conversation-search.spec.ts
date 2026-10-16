@@ -63,6 +63,7 @@ async function setup(page: Page) {
     (window as any).holdSearch = (query: string) => (held.query = query);
     // True once the held search was waiting and has been released.
     (window as any).prepared = 0;
+    (window as any).cancels = [];
     (window as any).skeletonSeen = false;
     new MutationObserver(() => {
       if (document.querySelector('[data-slot="search-skeleton"]'))
@@ -73,6 +74,10 @@ async function setup(page: Page) {
       if (name === "open") return structuredClone(views[input.id]);
       if (name === "prepareSearch") {
         (window as any).prepared += 1;
+        return;
+      }
+      if (name === "cancelSearch") {
+        (window as any).cancels.push(input);
         return;
       }
       if (name === "searchConversations") {
@@ -300,4 +305,47 @@ test("reveals a phrase that spans two table cells", async ({ page }) => {
   await expect
     .poll(() => highlighted(page))
     .toEqual({ role: "assistant", text: "aldersilver", visible: true });
+});
+
+test("clearing or closing stops the pending search and reopening restarts the placeholder delay", async ({
+  page,
+}) => {
+  await setup(page);
+  const cancels = () => page.evaluate(() => (window as any).cancels);
+  const release = () =>
+    expect
+      .poll(() => page.evaluate(() => (window as any).releaseSearch()))
+      .toBe(true);
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  const input = dialog.getByRole("combobox", { name: "Search conversations" });
+  const skeleton = dialog.locator('[data-slot="search-skeleton"]');
+
+  // Clearing stops the search in progress but keeps the warm-up.
+  await page.evaluate(() => (window as any).holdSearch("zebra"));
+  await input.fill("zebra");
+  // Placeholders show only after the request went out.
+  await expect(skeleton).toBeVisible();
+  await input.fill("");
+  await expect.poll(cancels).toEqual([{ warmUp: false }]);
+  await release();
+
+  // Closing while a search waits stops it and the warm-up.
+  await page.evaluate(() => (window as any).holdSearch("violet"));
+  await input.fill("violet");
+  await expect(skeleton).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect.poll(async () => (await cancels()).length).toBe(3);
+  expect((await cancels()).slice(1)).toEqual(
+    expect.arrayContaining([{ warmUp: false }, { warmUp: true }]),
+  );
+
+  // Reopening the same pending query waits again before placeholders.
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(input).toHaveValue("violet");
+  await expect(skeleton).toHaveCount(0);
+  await expect(skeleton).toBeVisible();
+  await release();
+  await expect(skeleton).toHaveCount(0);
 });

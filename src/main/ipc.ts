@@ -185,6 +185,7 @@ export function requestHandlers(context: RequestContext): RequestHandlers {
     rename: (input) => agents.rename(input.id, input.title),
     searchConversations: (input) => agents.search(input.query),
     prepareSearch: () => agents.prepareSearch(),
+    cancelSearch: (input) => agents.cancelSearch(input.warmUp),
     delete: (input) => agents.delete(input.id),
     send: (input) => agents.send(input),
     editMessage: (input) => agents.editMessage(input),

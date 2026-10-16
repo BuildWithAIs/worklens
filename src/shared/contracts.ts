@@ -418,6 +418,8 @@ export interface Requests {
   };
   /** Indexes conversations ahead of a search; gives way to any search. */
   prepareSearch: { input: Record<string, never>; output: void };
+  /** Stops pending searches, and with `warmUp` the warm-up too. */
+  cancelSearch: { input: { warmUp: boolean }; output: void };
   delete: { input: { id: string }; output: void };
   send: {
     input: {
