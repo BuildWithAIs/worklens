@@ -56,6 +56,7 @@ import type { JevConsent } from "./connectors/jev/consent";
 import type { McpService } from "./mcp-service";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import {
+  mayContain,
   searchSnippet,
   searchableMessages,
   type SearchableMessage,
@@ -678,7 +679,7 @@ export class AgentService {
       const title = fileTitle(info);
       file.searchText ??= foldSearchText(info.allMessagesText);
       if (
-        !file.searchText.includes(needle) &&
+        !mayContain(file.searchText, needle) &&
         findSearchMatch(this.redact(title), needle) < 0
       )
         continue;

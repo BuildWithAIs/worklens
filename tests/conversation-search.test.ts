@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
 import {
+  markdownText,
+  mayContain,
   searchSnippet,
   searchableMessages,
 } from "../src/main/conversation-search";
@@ -42,6 +44,33 @@ test("builds snippets around the match with collapsed whitespace", () => {
     match: "Needle",
     after: "",
   });
+});
+
+test("reads replies as rendered Markdown", () => {
+  expect(
+    markdownText("Use **copper** leaf, see [the docs](https://x.test)."),
+  ).toBe("Use copper leaf, see the docs.");
+  expect(
+    markdownText(
+      "## Steps\n\n- one\n- `two`\n\n```ts\nconst a = 1;\n```\n\n| A | B |\n| - | - |\n| x | y |\n\n![chart](c.png) $x^2$",
+    ),
+  ).toBe("Steps\none\ntwo\nconst a = 1;\nA B\nx y\nchart x^2");
+  // Prompts are shown as typed, so their markup stays.
+  expect(
+    searchableMessages([
+      { id: "u", role: "user", entryId: "t", text: "**raw** prompt" },
+      { id: "a", role: "assistant", text: "**copper** leaf" },
+    ]).map(({ text }) => text),
+  ).toEqual(["copper leaf", "**raw** prompt"]);
+});
+
+test("prefilters stored Markdown without missing split phrases", () => {
+  const source = foldSearchText(
+    "见[这篇文章](https://x.test)的 **copper** leaf",
+  );
+  expect(mayContain(source, foldSearchText("Copper leaf"))).toBe(true);
+  expect(mayContain(source, "这篇文章的")).toBe(true);
+  expect(mayContain(source, "zinc")).toBe(false);
 });
 
 test("indexes replies before prompts by turn, skipping tools and thinking", () => {
@@ -123,7 +152,7 @@ test("searches the current branch of loaded and stored conversations", async () 
       requestId: randomUUID(),
       messageId: original.entryId!,
       expectedBranchId: first.branchId!,
-      text: "Revised Beta question with hunter2",
+      text: "Revised **Beta** question with hunter2",
       images: [],
       selection,
     }),
@@ -142,6 +171,12 @@ test("searches the current branch of loaded and stored conversations", async () 
       snippet: { before: "已完成：Revised ", match: "Beta" },
     });
     expect(match.snippet!.after).toContain("[redacted]");
+    // A phrase split by Markdown markup matches as rendered, without markup.
+    expect((await instance.search("beta question"))[0].snippet).toEqual({
+      before: "已完成：Revised ",
+      match: "Beta question",
+      after: " with [redacted]",
+    });
     expect(await instance.search("hunter2")).toEqual([]);
     expect(await instance.search("weekly")).toEqual([
       { id: first.id, title: "Weekly report", updatedAt: expect.any(String) },

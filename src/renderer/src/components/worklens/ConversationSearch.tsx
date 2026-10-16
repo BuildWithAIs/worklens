@@ -83,7 +83,8 @@ export function ConversationSearch({
     query: string;
     items: ConversationSearchResult[];
   }>();
-  const [failed, setFailed] = useState(false);
+  /** The query whose search failed. */
+  const [failed, setFailed] = useState<string>();
   const [active, setActive] = useState(0);
   const trimmed = query.trim();
 
@@ -95,11 +96,11 @@ export function ConversationSearch({
         .invoke("searchConversations", { query: trimmed })
         .then((items) => {
           if (cancelled) return;
-          setFailed(false);
+          setFailed(undefined);
           setResults({ query: trimmed, items });
         })
         .catch(() => {
-          if (!cancelled) setFailed(true);
+          if (!cancelled) setFailed(trimmed);
         });
     }, 150);
     return () => {
@@ -112,7 +113,9 @@ export function ConversationSearch({
   const items: (ConversationSearchResult & { query?: string })[] = searching
     ? (results?.items ?? []).map((item) => ({ ...item, query: results?.query }))
     : recents.slice(0, RECENT_LIMIT);
-  const pending = searching && results?.query !== trimmed && !failed;
+  // Results of an earlier query stay visible but can't be chosen.
+  const stale = searching && results?.query !== trimmed;
+  const pending = stale && failed !== trimmed;
   const selected = Math.min(active, Math.max(0, items.length - 1));
   const optionId = (index: number) => `${listId}-option-${index}`;
 
@@ -124,6 +127,7 @@ export function ConversationSearch({
   });
 
   const choose = (item: (typeof items)[number]) =>
+    !stale &&
     onSelect({
       id: item.id,
       ...(item.query && item.snippet
@@ -132,8 +136,8 @@ export function ConversationSearch({
     });
 
   let status: ReactNode;
-  if (searching && failed) status = t("search.couldntSearch");
-  else if (searching && !pending && !items.length)
+  if (searching && failed === trimmed) status = t("search.couldntSearch");
+  else if (searching && !stale && !items.length)
     status = t("search.noConversationsMatch");
   else if (!searching && !items.length) status = t("app.noConversationsYet");
 
@@ -159,11 +163,11 @@ export function ConversationSearch({
             data-slot="conversation-search-input"
             role="combobox"
             aria-label={t("search.searchConversations")}
-            aria-expanded={items.length > 0}
+            aria-expanded={items.length > 0 && !stale}
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={
-              items.length ? optionId(selected) : undefined
+              items.length && !stale ? optionId(selected) : undefined
             }
             placeholder={t("search.search")}
             className="min-w-0 flex-1 bg-transparent py-1 text-[15px] outline-none placeholder:text-muted-foreground"
@@ -175,15 +179,21 @@ export function ConversationSearch({
               if (event.nativeEvent.isComposing) return;
               if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
-                if (!items.length) return;
+                if (!items.length || stale) return;
                 const step = event.key === "ArrowDown" ? 1 : -1;
                 setActive((selected + step + items.length) % items.length);
-              } else if (event.key === "Enter" && items[selected]) {
+              } else if (event.key === "Enter") {
+                // Never open a result of the previous query.
                 event.preventDefault();
-                choose(items[selected]);
+                if (items[selected]) choose(items[selected]);
               }
             }}
           />
+          {pending && (
+            <span role="status" className="text-xs text-muted-foreground">
+              {t("search.searching")}
+            </span>
+          )}
           {query && (
             <Button
               variant="ghost"
@@ -227,13 +237,15 @@ export function ConversationSearch({
             role="listbox"
             aria-label={searching ? t("search.results") : t("app.recents")}
             aria-busy={pending}
+            aria-disabled={stale || undefined}
+            className={stale ? "opacity-50" : undefined}
           >
             {items.map((item, index) => (
               <div
                 key={item.id}
                 id={optionId(index)}
                 role="option"
-                aria-selected={index === selected}
+                aria-selected={!stale && index === selected}
                 className="conversation-search-option"
                 onMouseMove={() => setActive(index)}
                 onClick={() => choose(item)}

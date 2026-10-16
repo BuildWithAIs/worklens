@@ -616,6 +616,7 @@ const zhCN = {
     searchConversations: "搜索会话",
     search: "搜索",
     clear: "清除",
+    searching: "搜索中…",
     results: "搜索结果",
     noConversationsMatch: "没有匹配的会话。请换个关键词试试。",
     couldntSearch: "无法搜索会话，请重试。",

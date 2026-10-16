@@ -8,10 +8,10 @@ export function clearSearchHighlight() {
 }
 
 // Rendered Markdown splits text across elements, so match across the text
-// nodes of one message and map the offsets back to a DOM range.
-export function findRenderedMatch(message: Element, query: string) {
+// nodes of one message and map the offsets back to DOM ranges.
+export function findRenderedMatches(message: Element, query: string) {
   const needle = foldSearchText(query.trim());
-  if (!needle) return undefined;
+  if (!needle) return [];
   const nodes: { node: Text; start: number }[] = [];
   let text = "";
   const walker = document.createTreeWalker(message, NodeFilter.SHOW_TEXT);
@@ -22,18 +22,58 @@ export function findRenderedMatch(message: Element, query: string) {
     nodes.push({ node: node as Text, start: text.length });
     text += (node as Text).data;
   }
-  const index = foldSearchText(text).indexOf(needle);
-  if (index < 0) return undefined;
   const locate = (offset: number, end: boolean) => {
     const found = nodes.findLast(({ node, start }) =>
       end ? start < offset : start <= offset && offset < start + node.length,
     )!;
     return [found.node, offset - found.start] as const;
   };
-  const range = document.createRange();
-  range.setStart(...locate(index, false));
-  range.setEnd(...locate(index + needle.length, true));
-  return range;
+  const folded = foldSearchText(text);
+  const ranges: Range[] = [];
+  for (
+    let index = folded.indexOf(needle);
+    index >= 0;
+    index = folded.indexOf(needle, index + needle.length)
+  ) {
+    const range = document.createRange();
+    range.setStart(...locate(index, false));
+    range.setEnd(...locate(index + needle.length, true));
+    ranges.push(range);
+  }
+  return ranges;
+}
+
+// Text past the edge of a box that clips without scrolling, such as a
+// collapsed prompt, is not visible.
+function clipped(range: Range, boundary: Element) {
+  const rect = range.getBoundingClientRect();
+  for (
+    let element = range.startContainer.parentElement;
+    element && element !== boundary;
+    element = element.parentElement
+  ) {
+    const { overflowX, overflowY } = getComputedStyle(element);
+    if (!/hidden|clip/.test(`${overflowX} ${overflowY}`)) continue;
+    const box = element.getBoundingClientRect();
+    if (
+      rect.top < box.top ||
+      rect.bottom > box.bottom ||
+      rect.left < box.left ||
+      rect.right > box.right
+    )
+      return true;
+  }
+  return false;
+}
+
+function scroller(element: Element) {
+  for (
+    let parent = element.parentElement;
+    parent;
+    parent = parent.parentElement
+  )
+    if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) return parent;
+  return document.scrollingElement;
 }
 
 /**
@@ -47,32 +87,42 @@ export function revealSearchMatch(
   messageId?: string,
 ) {
   clearSearchHighlight();
-  let range: Range | undefined;
   // Replies first, matching the snippet chosen by the search.
   const messages = [
     ...thread.querySelectorAll('[data-role="assistant"]'),
     ...thread.querySelectorAll('[data-role="user"]'),
   ];
+  let range: Range | undefined;
   for (const message of messages) {
-    range = findRenderedMatch(message, query);
+    range = findRenderedMatches(message, query).find(
+      (candidate) => !clipped(candidate, thread),
+    );
     if (range) break;
   }
-  const target =
-    range?.startContainer.parentElement ??
-    (messageId
-      ? thread.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)
-      : null);
-  if (!target) return false;
+  const prompt = messageId
+    ? thread.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)
+    : null;
+  const view = scroller(thread);
+  if (!(range ?? prompt) || !view) return false;
   if (range && typeof Highlight === "function")
     CSS.highlights?.set(HIGHLIGHT, new Highlight(range));
-  const block = range ? "center" : "start";
-  target.scrollIntoView({ block, behavior: "instant" });
+  const place = () => {
+    if (!range) {
+      prompt?.scrollIntoView({ block: "start", behavior: "instant" });
+      return;
+    }
+    // Center the match itself: in a long paragraph it can be far from the
+    // paragraph's center. Leave room for the composer below.
+    const box = view.getBoundingClientRect();
+    const match = range.getBoundingClientRect();
+    view.scrollBy({
+      top: match.top + match.height / 2 - (box.top + box.height * 0.4),
+      behavior: "instant",
+    });
+  };
+  place();
   // Messages above may still have estimated heights (content-visibility);
   // scroll again once they have been laid out.
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() =>
-      target.scrollIntoView({ block, behavior: "instant" }),
-    ),
-  );
+  requestAnimationFrame(() => requestAnimationFrame(place));
   return true;
 }

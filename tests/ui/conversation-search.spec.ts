@@ -30,30 +30,42 @@ async function setup(page: Page) {
         },
       ]).flat(),
     });
+    const long = turns("long", "Long chat");
+    // A collapsed prompt with the match past its cut, and a reply paragraph
+    // much taller than the window with the match at its end.
+    long.messages[6].text = `${"Background line.\n".repeat(60)}zebra crossing`;
+    long.messages[11].text = `${"Lorem ipsum dolor sit amet. ".repeat(400)}violet horizon.`;
     const views: Record<string, any> = {
       current: turns("current", "Current chat"),
       target: turns("target", "Body language", 3),
+      long,
     };
-    (window as any).searches = [];
+    const result = (id: string, match: string, messageId: string) => ({
+      id,
+      title: views[id].title,
+      updatedAt: views[id].updatedAt,
+      snippet: { before: "…", match, after: "" },
+      messageId,
+    });
+    const results: Record<string, unknown[]> = {
+      rubbing: [result("target", "rubbing fingers", "target-entry-3")],
+      zebra: [result("long", "zebra crossing", "long-entry-3")],
+      violet: [result("long", "violet horizon", "long-entry-5")],
+    };
+    // A query whose search waits until the test releases it.
+    const held: { query?: string; release?: () => void } = {};
+    (window as any).holdSearch = (query: string) => (held.query = query);
+    // True once the held search was waiting and has been released.
+    (window as any).releaseSearch = () => !!held.release?.() || !!held.release;
     window.worklens.invoke = (async (name: string, input: any) => {
       if (name === "open") return structuredClone(views[input.id]);
       if (name === "searchConversations") {
-        (window as any).searches.push(input.query);
-        return input.query.toLowerCase().includes("rubbing")
-          ? [
-              {
-                id: "target",
-                title: "Body language",
-                updatedAt: views.target.updatedAt,
-                snippet: {
-                  before: "Notably, **",
-                  match: "rubbing** fingers",
-                  after: " has no fixed meaning.",
-                },
-                messageId: "target-entry-3",
-              },
-            ]
-          : [];
+        if (input.query === held.query)
+          await new Promise<void>((resolve) => (held.release = resolve));
+        const key = Object.keys(results).find((word) =>
+          input.query.toLowerCase().startsWith(word),
+        );
+        return key ? results[key] : [];
       }
       const result = await (invoke as any)(name, input);
       if (name === "bootstrap") {
@@ -92,7 +104,7 @@ test("searches conversations, opens a result and reveals the match", async ({
   const dialog = page.getByRole("dialog", { name: "Search conversations" });
   const input = dialog.getByRole("combobox", { name: "Search conversations" });
   await expect(input).toBeFocused();
-  await expect(dialog.getByRole("option")).toHaveCount(2);
+  await expect(dialog.getByRole("option")).toHaveCount(3);
   await expect(input).toHaveAttribute("placeholder", "Search");
   // Placed as if centered at its full 530px height, then fits its results;
   // on tall windows the top stops at 25vh.
@@ -119,7 +131,7 @@ test("searches conversations, opens a result and reveals the match", async ({
   await input.fill("Rubbing fingers");
   const option = dialog.getByRole("option", { name: /Body language/ });
   await expect(option).toHaveAttribute("aria-selected", "true");
-  await expect(option.locator("mark")).toHaveText("rubbing** fingers");
+  await expect(option.locator("mark")).toHaveText("rubbing fingers");
   await input.press("Enter");
 
   await expect(dialog).toBeHidden();
@@ -175,4 +187,80 @@ test("search button sits beside the sidebar toggle in both sidebar states", asyn
   expect(
     Math.abs(popup.x + popup.width / 2 - viewport.width / 2),
   ).toBeLessThanOrEqual(1);
+});
+
+test("Enter waits for the current query instead of opening older results", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  const input = dialog.getByRole("combobox", { name: "Search conversations" });
+  await input.fill("rubbing");
+  await expect(
+    dialog.getByRole("option", { name: /Body language/ }),
+  ).toHaveAttribute("aria-selected", "true");
+
+  await page.evaluate(() => (window as any).holdSearch("zebra"));
+  await input.fill("zebra");
+  await input.press("Enter");
+  await expect(dialog.getByRole("status")).toHaveText("Searching…");
+  await expect(dialog.getByRole("listbox")).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await expect(dialog.getByRole("option", { selected: true })).toHaveCount(0);
+  // Disabled for assistive technology; a pointer click must not open it either.
+  await dialog
+    .getByRole("option", { name: /Body language/ })
+    .click({ force: true });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('[data-slot="chat-title"]')).toHaveAttribute(
+    "aria-label",
+    "Current chat",
+  );
+
+  // The search starts after the input debounce; release it once it waits.
+  await expect
+    .poll(() => page.evaluate(() => (window as any).releaseSearch()))
+    .toBe(true);
+  await expect(dialog.getByRole("status")).toHaveCount(0);
+  await expect(
+    dialog.getByRole("option", { name: /Long chat/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  await input.press("Enter");
+  await expect(page.locator('[data-slot="chat-title"]')).toHaveAttribute(
+    "aria-label",
+    "Long chat",
+  );
+});
+
+test("reveals a match deep in a long paragraph and falls back for a collapsed prompt", async ({
+  page,
+}) => {
+  await setup(page);
+  const open = async (query: string) => {
+    await page.keyboard.press("ControlOrMeta+k");
+    const dialog = page.getByRole("dialog", { name: "Search conversations" });
+    await dialog.getByRole("combobox").fill(query);
+    await expect(
+      dialog.getByRole("option", { name: /Long chat/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+  };
+
+  // The match itself is centered, not the paragraph around it.
+  await open("violet horizon");
+  await expect
+    .poll(() => highlighted(page))
+    .toEqual({ role: "assistant", text: "violet horizon", visible: true });
+
+  // A match past a collapsed prompt's cut is not visible, so the turn's
+  // prompt is shown instead and nothing is highlighted.
+  await open("zebra crossing");
+  const prompt = page.locator('[data-message-id="long-entry-3"]');
+  await expect(prompt).toBeInViewport();
+  await expect.poll(() => highlighted(page)).toBeUndefined();
+  await expect(prompt.getByRole("button", { name: "Show more" })).toBeVisible();
 });
