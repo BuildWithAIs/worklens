@@ -3,7 +3,7 @@ import type { Root } from "mdast";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
-import { remarkCjkAutolinks } from "../src/renderer/src/lib/remark-cjk-autolinks";
+import { remarkCjkAutolinks } from "../src/shared/remark-cjk-autolinks";
 
 function parse(text: string) {
   const processor = unified()

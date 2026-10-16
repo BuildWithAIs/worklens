@@ -11,6 +11,7 @@ export default defineConfig({
         input: {
           index: resolve("src/main/index.ts"),
           "image-decoder": resolve("src/main/image-decoder.mjs"),
+          "search-parser-worker": resolve("src/main/search-parser-worker.ts"),
         },
         output: {
           entryFileNames: (chunk) =>

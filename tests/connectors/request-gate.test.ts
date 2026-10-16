@@ -343,6 +343,47 @@ test("Jev retries explicit overload rejections but never repeats a lost evaluati
   expect(failed).toHaveBeenCalledOnce();
 });
 
+test.each([429, 529])(
+  "Jev finishes the cooldown when a retry timer wakes early after HTTP %i",
+  async (status) => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, { status, headers: { "retry-after": "0" } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(null, { status, headers: { "retry-after": "0" } }),
+      )
+      .mockImplementation(async () => ok());
+    clock.onWait = () => {
+      // A real timer may settle just before the wall-clock cooldown expires.
+      clock.now--;
+      clock.onWait = undefined;
+    };
+    await expect(call("Jev", fetcher, true)).resolves.toEqual({ ok: true });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(clock.waits).toEqual([500, 1, 1000]);
+  },
+);
+
+test("Jev cancellation during an early retry wakeup prevents another request", async () => {
+  const controller = new AbortController();
+  const fetcher = vi.fn<typeof fetch>(
+    async () =>
+      new Response(null, { status: 429, headers: { "retry-after": "0" } }),
+  );
+  let waits = 0;
+  clock.onWait = () => {
+    if (++waits === 1) clock.now--;
+    else controller.abort(new Error("cancelled during retry"));
+  };
+  await expect(
+    call("Jev", fetcher, true, undefined, undefined, controller.signal),
+  ).rejects.toThrow("cancelled during retry");
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(clock.waits).toEqual([500, 1]);
+});
+
 test.each([false, true])(
   "GitHub observes body-only limits before dispatching queued clients: GraphQL %s",
   async (graphql) => {

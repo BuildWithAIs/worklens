@@ -1,11 +1,15 @@
-import type { Nodes } from "mdast";
 import type {
   ConversationSearchSnippet,
   MessageView,
 } from "../shared/contracts";
 import { foldSearchText } from "../shared/search-text";
+import {
+  searchParser,
+  type IndexedSearchText,
+  type SearchTextKind,
+} from "./search-parser";
 
-let parser: { parse(markdown: string): Nodes } | undefined;
+let parser: typeof import("./search-markdown") | undefined;
 let loading: Promise<void> | undefined;
 
 /**
@@ -13,17 +17,9 @@ let loading: Promise<void> | undefined;
  * read. Loaded on the first search rather than at startup.
  */
 export function loadMarkdownParser() {
-  loading ??= Promise.all([
-    import("unified"),
-    import("remark-parse"),
-    import("remark-gfm"),
-    import("remark-math"),
-  ]).then(
-    ([{ unified }, remarkParse, remarkGfm, remarkMath]) => {
-      parser = unified()
-        .use(remarkParse.default)
-        .use(remarkGfm.default)
-        .use(remarkMath.default);
+  loading ??= import("./search-markdown").then(
+    (module) => {
+      parser = module;
     },
     (error) => {
       loading = undefined;
@@ -33,26 +29,30 @@ export function loadMarkdownParser() {
   return loading;
 }
 
-const lines = new Set(["root", "blockquote", "list", "listItem", "table"]);
-
-function plainText(node: Nodes): string {
-  if (node.type === "image") return node.alt ?? "";
-  if (node.type === "break") return "\n";
-  if (node.type === "definition") return "";
-  if ("value" in node) return node.value;
-  if (!("children" in node)) return "";
-  const separator = lines.has(node.type)
-    ? "\n"
-    : node.type === "tableRow"
-      ? " "
-      : "";
-  return node.children.map(plainText).join(separator);
-}
-
 /** The text a reader sees in rendered Markdown, with blocks on their own lines. */
 export function markdownText(markdown: string) {
   if (!parser) throw new Error("Call loadMarkdownParser() first");
-  return plainText(parser.parse(markdown));
+  return parser.parseSearchMarkdown(markdown);
+}
+
+// Above this size, parsing and case folding run away from the Electron main thread.
+const WORKER_THRESHOLD = 8 * 1024;
+export async function indexSearchText(
+  text: string,
+  kind: SearchTextKind,
+  checkpoint: Checkpoint,
+): Promise<IndexedSearchText> {
+  if (text.length > WORKER_THRESHOLD) {
+    const result = await searchParser.read(text, kind, checkpoint);
+    await checkpoint();
+    return result;
+  }
+  if (kind === "source") {
+    if (!parser) throw new Error("Call loadMarkdownParser() first");
+    return { text: "", folded: parser.searchSourceCharacters(text) };
+  }
+  const value = kind === "markdown" ? markdownText(text) : text;
+  return { text: value, folded: foldSearchText(value) };
 }
 
 export interface SearchableMessage {
@@ -86,19 +86,32 @@ export async function searchableMessages(
     if (message.role !== "user" && message.role !== "assistant") continue;
     // Prompts are shown as typed; replies are rendered Markdown.
     let text = message.text;
+    let folded: string | undefined;
     if (message.role === "assistant") {
       used.add(message.text);
       const known = parsed.get(message.text);
       if (known === undefined) {
         // Stored at once, so work before a cancellation is kept.
-        text = markdownText(message.text);
+        const indexed = await indexSearchText(
+          message.text,
+          "markdown",
+          checkpoint,
+        );
+        text = indexed.text;
+        folded = indexed.folded;
         parsed.set(message.text, text);
-      } else text = known;
+      } else {
+        text = known;
+        // Preserve encounter order when a bounded cache keeps only recent replies.
+        parsed.delete(message.text);
+        parsed.set(message.text, known);
+      }
     }
     if (text.trim())
       (message.role === "user" ? prompts : replies).push({
         text,
-        folded: foldSearchText(text),
+        folded:
+          folded ?? (await indexSearchText(text, "text", checkpoint)).folded,
         turnId,
       });
     // After every message, parsed or cached: folding long text takes time too.
@@ -109,17 +122,13 @@ export async function searchableMessages(
   return [...replies, ...prompts];
 }
 
-const reference =
-  /&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g;
-
 /**
  * Stored Markdown for the prefilter, followed by what its character
  * references render as: `&euro;` shows as €, a character the source lacks.
  */
 export function prefilterSource(markdown: string) {
-  const references = new Set(markdown.match(reference));
-  if (!references.size) return markdown;
-  return [markdown, ...[...references].map(markdownText)].join("\n");
+  if (!parser) throw new Error("Call loadMarkdownParser() first");
+  return parser.searchPrefilterSource(markdown);
 }
 
 /**

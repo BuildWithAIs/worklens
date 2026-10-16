@@ -40,6 +40,7 @@ async function setup(page: Page) {
     long.messages[13].text =
       "| Wood | Metal |\n| --- | --- |\n| alder | silver |";
     long.messages[17].text = "The zebra crossing is on the corner.";
+    long.messages[19].text = String.raw`Cost $12 and $24. www.example.com（**今天** 很好） Formula $x^2$ and \(\frac{a}{b}\).`;
     const views: Record<string, any> = {
       current: turns("current", "Current chat"),
       target: turns("target", "Body language", 3),
@@ -57,6 +58,10 @@ async function setup(page: Page) {
       zebra: [result("long", "zebra crossing", "long-entry-3")],
       violet: [result("long", "violet horizon", "long-entry-5")],
       alder: [result("long", "alder silver", "long-entry-6")],
+      "x^2": [result("long", "x^2", "long-entry-9")],
+      "\\frac{a}{b}": [result("long", "\\frac{a}{b}", "long-entry-9")],
+      $12: [result("long", "$12", "long-entry-9")],
+      "今天 很好": [result("long", "今天 很好", "long-entry-9")],
       longtitle: [
         {
           id: "longtitle",
@@ -92,6 +97,7 @@ async function setup(page: Page) {
     // True while the held search waits to be released.
     (window as any).searchWaiting = () => !!held.release;
     (window as any).prepared = 0;
+    (window as any).failSearch = false;
     (window as any).cancels = [];
     (window as any).skeletonSeen = false;
     new MutationObserver(() => {
@@ -119,6 +125,8 @@ async function setup(page: Page) {
       if (name === "searchConversations") {
         if (input.query === held.query)
           await new Promise<void>((resolve) => (held.release = resolve));
+        if ((window as any).failSearch)
+          throw new Error("Synthetic search error");
         const key = Object.keys(results).find((word) =>
           input.query.toLowerCase().startsWith(word),
         );
@@ -591,3 +599,104 @@ test("the highlight stays while reading around and clears on the next key press 
   await page.keyboard.press("Escape");
   await expect.poll(() => highlighted(page)).toBeUndefined();
 });
+
+test("reopening and returning to the same query waits for fresh results", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  const input = dialog.getByRole("combobox");
+  const skeleton = dialog.locator('[data-slot="search-skeleton"]');
+  await input.fill("rubbing");
+  await expect(dialog.getByRole("option")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page.evaluate(() => (window as any).holdSearch("rubbing"));
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(skeleton).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).searchWaiting()))
+    .toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).releaseSearch()))
+    .toBe(true);
+  await expect(skeleton).toHaveCount(0);
+  await input.fill("other");
+  await expect(skeleton).toBeVisible();
+  await page.evaluate(() => (window as any).holdSearch("rubbing"));
+  await input.fill("rubbing");
+  await expect(skeleton).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).releaseSearch()))
+    .toBe(true);
+  await expect(skeleton).toHaveCount(0);
+});
+
+test("retrying a failed query shows loading instead of its previous error", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => ((window as any).failSearch = true));
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  await dialog.getByRole("combobox").fill("rubbing");
+  await expect(dialog.getByRole("status")).toContainText("Couldn’t search");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page.evaluate(() => {
+    (window as any).failSearch = false;
+    (window as any).holdSearch("rubbing");
+  });
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(dialog.locator('[data-slot="search-skeleton"]')).toBeVisible();
+  await expect(dialog.getByText(/Couldn’t search/)).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).releaseSearch()))
+    .toBe(true);
+  await expect(dialog.getByRole("option")).toHaveCount(1);
+});
+
+for (const query of ["x^2", String.raw`\frac{a}{b}`]) {
+  test(`reveals the whole formula for LaTeX source: ${query}`, async ({
+    page,
+  }) => {
+    await setup(page);
+    await page.keyboard.press("ControlOrMeta+k");
+    const dialog = page.getByRole("dialog", { name: "Search conversations" });
+    await dialog.getByRole("combobox").fill(query);
+    await expect(dialog.getByRole("option")).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    const formula = page.locator(".katex[data-search-match]");
+    await expect(formula).toHaveCount(1);
+    await expect(formula).toBeInViewport();
+    await expect(
+      formula.locator('annotation[encoding="application/x-tex"]'),
+    ).toHaveText(query);
+    await page.mouse.wheel(0, 30);
+    await expect(formula).toHaveCount(1);
+    await page.keyboard.press("ArrowDown");
+    await expect(formula).toHaveCount(0);
+    expect(
+      await page.evaluate(() => CSS.highlights.has("worklens-search")),
+    ).toBe(false);
+  });
+}
+
+for (const query of ["$12", "今天 很好"]) {
+  test(`reveals rendered Markdown text: ${query}`, async ({ page }) => {
+    await setup(page);
+    await page.keyboard.press("ControlOrMeta+k");
+    const dialog = page.getByRole("dialog", { name: "Search conversations" });
+    await dialog.getByRole("combobox").fill(query);
+    await expect(dialog.getByRole("option")).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(() => highlighted(page))
+      .toEqual({ role: "assistant", text: query, visible: true });
+  });
+}

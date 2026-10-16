@@ -5,8 +5,8 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { expect, test } from "vitest";
-import { preprocessMarkdownMath } from "../src/renderer/src/lib/markdown-math";
-import { remarkCjkAutolinks } from "../src/renderer/src/lib/remark-cjk-autolinks";
+import { preprocessMarkdownMath } from "../src/shared/markdown-math";
+import { remarkCjkAutolinks } from "../src/shared/remark-cjk-autolinks";
 
 function render(text: string) {
   return renderToStaticMarkup(

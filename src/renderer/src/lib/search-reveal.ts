@@ -10,6 +10,9 @@ let stopDismissing: (() => void) | undefined;
 
 export function clearSearchHighlight() {
   CSS.highlights?.delete(HIGHLIGHT);
+  document
+    .querySelectorAll("[data-search-match]")
+    .forEach((element) => element.removeAttribute("data-search-match"));
   stopDismissing?.();
   stopDismissing = undefined;
 }
@@ -36,17 +39,24 @@ function dismissOnNextAction() {
 export function findRenderedMatches(message: Element, query: string) {
   const needle = foldSearchText(query.trim());
   if (!needle) return [];
-  const nodes: { node: Text; start: number }[] = [];
+  const nodes: (
+    | { node: Text; start: number; length: number }
+    | { formula: Element; start: number; length: number }
+  )[] = [];
+  const formulas = new Set<Element>();
   let text = "";
   let previous: Element | null | undefined;
   const walker = document.createTreeWalker(message, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const parent = node.parentElement;
-    if (!parent || parent.closest(skipped) || !parent.checkVisibility())
-      continue;
+    if (!parent) continue;
+    const formula = parent.closest(".katex");
+    const visible = formula ?? parent;
+    if (visible.closest(skipped) || !visible.checkVisibility()) continue;
+    if (formula && formulas.has(formula)) continue;
     // Break between blocks as the search's plain text does: a space between
     // cells of a row, a line break otherwise.
-    const block = parent.closest(blocks);
+    const block = visible.closest(blocks);
     if (previous !== undefined && block !== previous)
       text +=
         block?.matches(cell) &&
@@ -55,14 +65,34 @@ export function findRenderedMatches(message: Element, query: string) {
           ? " "
           : "\n";
     previous = block;
-    nodes.push({ node: node as Text, start: text.length });
-    text += (node as Text).data;
+    if (formula) {
+      const source = formula.querySelector(
+        'annotation[encoding="application/x-tex"]',
+      )?.textContent;
+      formulas.add(formula);
+      if (!source) continue;
+      nodes.push({ formula, start: text.length, length: source.length });
+      text += source;
+    } else {
+      nodes.push({
+        node: node as Text,
+        start: text.length,
+        length: (node as Text).length,
+      });
+      text += (node as Text).data;
+    }
   }
-  const locate = (offset: number, end: boolean) => {
-    const found = nodes.findLast(({ node, start }) =>
-      end ? start < offset : start <= offset && offset < start + node.length,
+  const locate = (offset: number, end: boolean): [Node, number] => {
+    const found = nodes.findLast(({ length, start }) =>
+      end ? start < offset : start <= offset && offset < start + length,
     )!;
-    return [found.node, offset - found.start] as const;
+    // Any match within LaTeX maps to the entire rendered formula.
+    if ("formula" in found) {
+      const parent = found.formula.parentNode!;
+      const index = [...parent.childNodes].indexOf(found.formula);
+      return [parent, index + (end ? 1 : 0)];
+    }
+    return [found.node, offset - found.start];
   };
   const folded = foldSearchText(text);
   const ranges: Range[] = [];
@@ -152,6 +182,9 @@ export function revealSearchMatch(
   if (!(range ?? prompt) || !view) return false;
   if (range && typeof Highlight === "function") {
     CSS.highlights?.set(HIGHLIGHT, new Highlight(range));
+    for (const formula of thread.querySelectorAll(".katex"))
+      if (range.intersectsNode(formula))
+        formula.setAttribute("data-search-match", "");
     dismissOnNextAction();
   }
   const place = () => {
