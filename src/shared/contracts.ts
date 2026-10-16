@@ -416,6 +416,8 @@ export interface Requests {
     input: { query: string };
     output: ConversationSearchResult[];
   };
+  /** Indexes conversations ahead of a search; gives way to any search. */
+  prepareSearch: { input: Record<string, never>; output: void };
   delete: { input: { id: string }; output: void };
   send: {
     input: {

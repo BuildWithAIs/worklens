@@ -1,10 +1,11 @@
-import { afterEach, beforeAll, expect, test } from "vitest";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
+import * as conversationSearch from "../src/main/conversation-search";
 import {
   loadMarkdownParser,
   markdownText,
@@ -24,6 +25,7 @@ import type {
 const cleanups: (() => Promise<unknown>)[] = [];
 beforeAll(loadMarkdownParser);
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
@@ -49,7 +51,7 @@ test("builds snippets around the match with collapsed whitespace", () => {
   });
 });
 
-test("reads replies as rendered Markdown", () => {
+test("reads replies as rendered Markdown", async () => {
   expect(
     markdownText("Use **copper** leaf, see [the docs](https://x.test)."),
   ).toBe("Use copper leaf, see the docs.");
@@ -60,10 +62,12 @@ test("reads replies as rendered Markdown", () => {
   ).toBe("Steps\none\ntwo\nconst a = 1;\nA B\nx y\nchart x^2");
   // Prompts are shown as typed, so their markup stays.
   expect(
-    searchableMessages([
-      { id: "u", role: "user", entryId: "t", text: "**raw** prompt" },
-      { id: "a", role: "assistant", text: "**copper** leaf" },
-    ]).map(({ text }) => text),
+    (
+      await searchableMessages([
+        { id: "u", role: "user", entryId: "t", text: "**raw** prompt" },
+        { id: "a", role: "assistant", text: "**copper** leaf" },
+      ])
+    ).map(({ text }) => text),
   ).toEqual(["copper leaf", "**raw** prompt"]);
 });
 
@@ -82,8 +86,34 @@ test("prefilters stored Markdown without missing split phrases", () => {
   expect(prefilterSource("no references")).toBe("no references");
 });
 
-test("indexes replies before prompts by turn, skipping tools and thinking", () => {
-  const messages = searchableMessages([
+test("reuses parsed replies and drops ones no longer in the branch", async () => {
+  const parsed = new Map<string, string>();
+  let parses = 0;
+  const counting = async () => void parses++;
+  const turn = (text: string) => [
+    { id: `u-${text}`, role: "user" as const, entryId: text, text },
+    { id: `a-${text}`, role: "assistant" as const, text: `**${text}** reply` },
+  ];
+  await searchableMessages([...turn("one"), ...turn("two")], counting, parsed);
+  expect(parses).toBe(2);
+  const grown = await searchableMessages(
+    [...turn("one"), ...turn("two"), ...turn("three")],
+    counting,
+    parsed,
+  );
+  expect(parses).toBe(3);
+  expect(grown.map(({ text }) => text).slice(0, 3)).toEqual([
+    "one reply",
+    "two reply",
+    "three reply",
+  ]);
+  await searchableMessages(turn("three"), counting, parsed);
+  expect(parses).toBe(3);
+  expect([...parsed.keys()]).toEqual(["**three** reply"]);
+});
+
+test("indexes replies before prompts by turn, skipping tools and thinking", async () => {
+  const messages = await searchableMessages([
     { id: "u", role: "user", entryId: "turn-1", text: "First prompt" },
     { id: "a", role: "assistant", text: "", thinking: "hidden thought" },
     { id: "t", role: "tool", text: "tool output" },
@@ -206,4 +236,41 @@ test("searches the current branch of loaded and stored conversations", async () 
   await expectations(service);
   // A fresh service reads the conversation from its session file.
   await expectations(await create());
+
+  // Open conversations keep their index until their branch changes.
+  const indexing = vi.spyOn(conversationSearch, "searchableMessages");
+  await service.search("beta");
+  expect(indexing).not.toHaveBeenCalled();
+  await settle(
+    await service.send({
+      requestId: randomUUID(),
+      conversationId: priced.id,
+      text: "Later &euro;7 fee",
+      selection,
+    }),
+  );
+  expect(await service.search("€7")).toMatchObject([{ id: priced.id }]);
+  expect(indexing).toHaveBeenCalledTimes(1);
+
+  // A newer search cancels an older one, which returns nothing.
+  const cold = await create();
+  const [older, newer] = await Promise.all([
+    cold.search("beta"),
+    cold.search("beta"),
+  ]);
+  expect(older).toEqual([]);
+  expect(newer).toMatchObject([{ id: first.id }]);
+
+  // Warming up indexes stored conversations before the first search.
+  const warmed = await create();
+  await warmed.prepareSearch();
+  indexing.mockClear();
+  expect(await warmed.search("€25")).toMatchObject([{ id: priced.id }]);
+  expect(indexing).not.toHaveBeenCalled();
+
+  // A search started during a warm-up is never cancelled by it.
+  const warming = await create();
+  const preparing = warming.prepareSearch();
+  expect(await warming.search("beta")).toMatchObject([{ id: first.id }]);
+  await preparing;
 });

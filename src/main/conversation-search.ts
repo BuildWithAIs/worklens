@@ -62,21 +62,37 @@ export interface SearchableMessage {
   turnId?: string;
 }
 
+/** Awaited between pieces of work: yields to other work and stops when cancelled. */
+export type Checkpoint = () => Promise<void>;
+
 // Only visible prompt and reply text is searched; thinking and tool output are
 // not. Replies come first, as ChatGPT does: titles usually repeat the first
 // prompt, so a reply makes the more informative snippet.
-export function searchableMessages(
+export async function searchableMessages(
   messages: readonly MessageView[],
-): SearchableMessage[] {
+  checkpoint: Checkpoint = async () => {},
+  /** Plain text of replies parsed before, by their Markdown; kept current. */
+  parsed: Map<string, string> = new Map(),
+): Promise<SearchableMessage[]> {
   const replies: SearchableMessage[] = [];
   const prompts: SearchableMessage[] = [];
+  const used = new Set<string>();
   let turnId: string | undefined;
   for (const message of messages) {
     if (message.role === "user") turnId = message.entryId;
     if (message.role !== "user" && message.role !== "assistant") continue;
     // Prompts are shown as typed; replies are rendered Markdown.
-    const text =
-      message.role === "user" ? message.text : markdownText(message.text);
+    let text = message.text;
+    if (message.role === "assistant") {
+      used.add(message.text);
+      const known = parsed.get(message.text);
+      if (known === undefined) {
+        // Stored at once, so work before a cancellation is kept.
+        text = markdownText(message.text);
+        parsed.set(message.text, text);
+        await checkpoint();
+      } else text = known;
+    }
     if (text.trim())
       (message.role === "user" ? prompts : replies).push({
         text,
@@ -84,6 +100,8 @@ export function searchableMessages(
         turnId,
       });
   }
+  for (const markdown of parsed.keys())
+    if (!used.has(markdown)) parsed.delete(markdown);
   return [...replies, ...prompts];
 }
 

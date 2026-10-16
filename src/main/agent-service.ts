@@ -61,6 +61,7 @@ import {
   prefilterSource,
   searchSnippet,
   searchableMessages,
+  type Checkpoint,
   type SearchableMessage,
 } from "./conversation-search";
 import { findSearchMatch, foldSearchText } from "../shared/search-text";
@@ -113,9 +114,18 @@ interface SessionFile {
   searchText?: string;
   /** Current-branch messages, read when a search first needs them. */
   searchable?: SearchableMessage[] | null;
+  /** Plain text of its replies by Markdown; kept when the file changes. */
+  parsed?: Map<string, string>;
 }
+class SearchCancelled extends Error {}
 interface Runtime {
   manager: SessionManager;
+  /** Search index of the current branch, keyed by its leaf and entry count. */
+  search?: {
+    key: string;
+    messages: SearchableMessage[];
+    parsed: Map<string, string>;
+  };
   session?: AgentSession;
   integrationConfiguration?: string;
   active?: ActiveRun;
@@ -560,6 +570,7 @@ export class AgentService {
       files.set(info.path, {
         info,
         ...stamp,
+        parsed: previous?.parsed,
         ...(previous?.mtimeMs === stamp.mtimeMs && previous.size === stamp.size
           ? {
               selection: previous.selection,
@@ -628,31 +639,137 @@ export class AgentService {
       b.updatedAt.localeCompare(a.updatedAt),
     );
   }
-  private searchable(id: string, manager: SessionManager) {
+  // A search cancels the previous search and any warm-up; a warm-up only
+  // gives way, so it never cancels a search whose results are still wanted.
+  private searchGeneration = 0;
+  private warmGeneration = 0;
+  private checkpoint(stale: () => boolean, budgetMs: number): Checkpoint {
+    let started = performance.now();
+    return async () => {
+      if (stale()) throw new SearchCancelled();
+      if (performance.now() - started < budgetMs) return;
+      // Let IPC and streaming replies run between slices of indexing.
+      await new Promise((resolve) => setImmediate(resolve));
+      started = performance.now();
+      if (stale()) throw new SearchCancelled();
+    };
+  }
+  private async searchable(
+    id: string,
+    manager: SessionManager,
+    checkpoint: Checkpoint,
+    parsed: Map<string, string>,
+  ) {
     return searchableMessages(
       projectMessages(
         withRunTiming(manager.getBranch()),
         sessionWorkspace(this.paths.sessions, id),
       ),
+      checkpoint,
+      parsed,
     );
   }
+  // Open conversations keep their index until the branch or entries change.
+  private async runtimeIndex(
+    id: string,
+    runtime: Runtime,
+    checkpoint: Checkpoint,
+  ) {
+    const key = `${runtime.manager.getLeafId()}/${runtime.manager.getEntryCount()}`;
+    if (runtime.search?.key !== key) {
+      // A conversation opened after a search reuses its file's parsed replies.
+      const parsed =
+        runtime.search?.parsed ??
+        new Map(
+          [...this.files.values()].find((file) => file.info.id === id)?.parsed,
+        );
+      const messages = await this.searchable(
+        id,
+        runtime.manager,
+        checkpoint,
+        parsed,
+      );
+      runtime.search = { key, messages, parsed };
+    }
+    return runtime.search.messages;
+  }
+  private async fileIndex(
+    path: string,
+    file: SessionFile,
+    checkpoint: Checkpoint,
+  ) {
+    if (file.searchable === undefined) {
+      let manager: SessionManager;
+      try {
+        manager = SessionManager.open(path, this.paths.sessions);
+      } catch {
+        // list() reports unreadable sessions; search skips them.
+        file.searchable = null;
+        return [];
+      }
+      file.parsed ??= new Map();
+      file.searchable = await this.searchable(
+        file.info.id,
+        manager,
+        checkpoint,
+        file.parsed,
+      );
+    }
+    return file.searchable ?? [];
+  }
+  /** Indexes conversations ahead of a search, giving way to any search. */
+  async prepareSearch() {
+    const warm = ++this.warmGeneration;
+    const search = this.searchGeneration;
+    const checkpoint = this.checkpoint(
+      () => warm !== this.warmGeneration || search !== this.searchGeneration,
+      4,
+    );
+    try {
+      await loadMarkdownParser();
+      await this.listInfos();
+      await checkpoint();
+      for (const [id, runtime] of [...this.sessions])
+        await this.runtimeIndex(id, runtime, checkpoint);
+      for (const [path, file] of [...this.files])
+        if (!this.sessions.has(file.info.id))
+          await this.fileIndex(path, file, checkpoint);
+    } catch (error) {
+      if (!(error instanceof SearchCancelled)) throw error;
+    }
+  }
   // Matches visible prompt and reply text in each conversation's current
-  // branch. Titles rank first, then recent conversations.
+  // branch. Titles rank first, then recent conversations. A newer search
+  // cancels this one, which then returns no results.
   async search(query: string): Promise<ConversationSearchResult[]> {
+    const generation = ++this.searchGeneration;
     const needle = foldSearchText(query.trim());
     if (!needle) return [];
+    const checkpoint = this.checkpoint(
+      () => generation !== this.searchGeneration,
+      10,
+    );
+    try {
+      return await this.find(needle, checkpoint);
+    } catch (error) {
+      if (error instanceof SearchCancelled) return [];
+      throw error;
+    }
+  }
+  private async find(needle: string, checkpoint: Checkpoint) {
     await loadMarkdownParser();
     await this.listInfos();
+    await checkpoint();
     const found: (ConversationSearchResult & { titleMatch: boolean })[] = [];
     const match = (
       id: string,
       rawTitle: string,
       updatedAt: string,
-      messages: () => readonly SearchableMessage[],
+      messages: readonly SearchableMessage[],
     ) => {
       const title = this.redact(rawTitle);
       const titleMatch = findSearchMatch(title, needle) >= 0;
-      for (const message of messages()) {
+      for (const message of messages) {
         if (!message.folded.includes(needle)) continue;
         // Search the redacted text so a match inside a secret is never shown.
         const text = this.redact(message.text);
@@ -670,13 +787,17 @@ export class AgentService {
       }
       if (titleMatch) found.push({ id, title, updatedAt, titleMatch });
     };
-    for (const [id, runtime] of this.sessions) {
+    // Snapshots: conversations can open or close while indexing yields.
+    for (const [id, runtime] of [...this.sessions]) {
       const summary = this.summary(id, runtime);
-      match(id, summary.title, summary.updatedAt, () =>
-        this.searchable(id, runtime.manager),
+      match(
+        id,
+        summary.title,
+        summary.updatedAt,
+        await this.runtimeIndex(id, runtime, checkpoint),
       );
     }
-    for (const [path, file] of this.files) {
+    for (const [path, file] of [...this.files]) {
       const { info } = file;
       if (this.sessions.has(info.id)) continue;
       const title = fileTitle(info);
@@ -686,18 +807,12 @@ export class AgentService {
         findSearchMatch(this.redact(title), needle) < 0
       )
         continue;
-      match(info.id, title, info.modified.toISOString(), () => {
-        if (file.searchable === undefined) {
-          try {
-            const manager = SessionManager.open(path, this.paths.sessions);
-            file.searchable = this.searchable(info.id, manager);
-          } catch {
-            // list() reports unreadable sessions; search skips them.
-            file.searchable = null;
-          }
-        }
-        return file.searchable ?? [];
-      });
+      match(
+        info.id,
+        title,
+        info.modified.toISOString(),
+        await this.fileIndex(path, file, checkpoint),
+      );
     }
     return found
       .sort(

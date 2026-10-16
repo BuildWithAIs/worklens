@@ -62,9 +62,19 @@ async function setup(page: Page) {
     const held: { query?: string; release?: () => void } = {};
     (window as any).holdSearch = (query: string) => (held.query = query);
     // True once the held search was waiting and has been released.
+    (window as any).prepared = 0;
+    (window as any).skeletonSeen = false;
+    new MutationObserver(() => {
+      if (document.querySelector('[data-slot="search-skeleton"]'))
+        (window as any).skeletonSeen = true;
+    }).observe(document, { childList: true, subtree: true });
     (window as any).releaseSearch = () => !!held.release?.() || !!held.release;
     window.worklens.invoke = (async (name: string, input: any) => {
       if (name === "open") return structuredClone(views[input.id]);
+      if (name === "prepareSearch") {
+        (window as any).prepared += 1;
+        return;
+      }
       if (name === "searchConversations") {
         if (input.query === held.query)
           await new Promise<void>((resolve) => (held.release = resolve));
@@ -195,31 +205,35 @@ test("search button sits beside the sidebar toggle in both sidebar states", asyn
   ).toBeLessThanOrEqual(1);
 });
 
-test("Enter waits for the current query instead of opening older results", async ({
+test("a slow query shows placeholders and Enter waits for its results", async ({
   page,
 }) => {
   await setup(page);
   await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.getByRole("dialog", { name: "Search conversations" });
   const input = dialog.getByRole("combobox", { name: "Search conversations" });
+  const skeleton = dialog.locator('[data-slot="search-skeleton"]');
+  // Opening the dialog starts indexing ahead of the query.
+  await expect
+    .poll(() => page.evaluate(() => (window as any).prepared))
+    .toBe(1);
+
+  // A fast search never flashes placeholders.
   await input.fill("rubbing");
   await expect(
     dialog.getByRole("option", { name: /Body language/ }),
   ).toHaveAttribute("aria-selected", "true");
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => (window as any).skeletonSeen)).toBe(false);
 
   await page.evaluate(() => (window as any).holdSearch("zebra"));
   await input.fill("zebra");
   await input.press("Enter");
   await expect(dialog.getByRole("status")).toHaveText("Searching…");
-  await expect(dialog.getByRole("listbox")).toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
   await expect(dialog.getByRole("option", { selected: true })).toHaveCount(0);
-  // Disabled for assistive technology; a pointer click must not open it either.
-  await dialog
-    .getByRole("option", { name: /Body language/ })
-    .click({ force: true });
+  // Once slow, placeholders replace the previous query's results.
+  await expect(skeleton.locator(".conversation-search-option")).toHaveCount(3);
+  await expect(dialog.getByRole("listbox")).toBeHidden();
   await expect(dialog).toBeVisible();
   await expect(page.locator('[data-slot="chat-title"]')).toHaveAttribute(
     "aria-label",
@@ -230,6 +244,7 @@ test("Enter waits for the current query instead of opening older results", async
   await expect
     .poll(() => page.evaluate(() => (window as any).releaseSearch()))
     .toBe(true);
+  await expect(skeleton).toHaveCount(0);
   await expect(dialog.getByRole("status")).toHaveCount(0);
   await expect(
     dialog.getByRole("option", { name: /Long chat/ }),

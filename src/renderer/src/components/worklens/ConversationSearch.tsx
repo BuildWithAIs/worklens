@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { languageTag, useAppTranslation, type AppLanguage } from "@/i18n";
 import {
   findSearchMatch,
@@ -19,6 +20,9 @@ import type {
 
 const api = window.worklens;
 const RECENT_LIMIT = 8;
+// After the input changes, wait this long for results before showing
+// placeholders, so fast and cached searches never flash them.
+const SKELETON_DELAY = 250;
 
 export type SearchSelection = {
   id: string;
@@ -89,6 +93,10 @@ export function ConversationSearch({
   const trimmed = query.trim();
 
   useEffect(() => {
+    // Index conversations while the query is typed; a search takes over.
+    if (open) api.invoke("prepareSearch", {}).catch(() => {});
+  }, [open]);
+  useEffect(() => {
     if (!open || !trimmed) return;
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -116,6 +124,15 @@ export function ConversationSearch({
   // Results of an earlier query stay visible but can't be chosen.
   const stale = searching && results?.query !== trimmed;
   const pending = stale && failed !== trimmed;
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    if (!trimmed) return;
+    const timer = setTimeout(() => setSlow(true), SKELETON_DELAY);
+    return () => clearTimeout(timer);
+  }, [trimmed]);
+  // Placeholders replace results of the previous query once it is slow.
+  const skeleton = pending && slow;
   const selected = Math.min(active, Math.max(0, items.length - 1));
   const optionId = (index: number) => `${listId}-option-${index}`;
 
@@ -190,7 +207,7 @@ export function ConversationSearch({
             }}
           />
           {pending && (
-            <span role="status" className="text-xs text-muted-foreground">
+            <span role="status" className="sr-only">
               {t("search.searching")}
             </span>
           )}
@@ -232,13 +249,27 @@ export function ConversationSearch({
               {status}
             </p>
           )}
+          {skeleton && (
+            <div aria-hidden="true" data-slot="search-skeleton">
+              {[0, 1, 2].map((row) => (
+                <div key={row} className="conversation-search-option">
+                  <Skeleton className="mt-0.5 size-4 shrink-0 rounded-full" />
+                  <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+                    <Skeleton className="h-3.5 w-2/5" />
+                    <Skeleton className="h-3 w-4/5" />
+                  </div>
+                  <Skeleton className="mt-0.5 h-3 w-12 shrink-0" />
+                </div>
+              ))}
+            </div>
+          )}
           <div
             id={listId}
             role="listbox"
             aria-label={searching ? t("search.results") : t("app.recents")}
             aria-busy={pending}
             aria-disabled={stale || undefined}
-            className={stale ? "opacity-50" : undefined}
+            hidden={skeleton}
           >
             {items.map((item, index) => (
               <div
