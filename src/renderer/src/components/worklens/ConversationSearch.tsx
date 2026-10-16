@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { languageTag, useAppTranslation, type AppLanguage } from "@/i18n";
+import { cn } from "@/lib/utils";
 import {
   findSearchMatch,
   foldSearchText,
@@ -253,12 +254,18 @@ export function ConversationSearch({
               {t("app.recents")}
             </div>
           )}
-          {status && (
+          {(status || (pending && !skeleton && !items.length)) && (
             <p
-              role="status"
-              className="px-3 py-8 text-center text-sm text-muted-foreground"
+              role={status ? "status" : undefined}
+              aria-hidden={!status || undefined}
+              className={cn(
+                "px-3 py-8 text-center text-sm text-muted-foreground",
+                !status && "invisible",
+              )}
             >
-              {status}
+              {/* Reserve the empty-state layout, including wrapped lines,
+                  while waiting for results or the delayed placeholders. */}
+              {status ?? t("search.noConversationsMatch")}
             </p>
           )}
           {skeleton && (

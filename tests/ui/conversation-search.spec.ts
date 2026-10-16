@@ -261,6 +261,55 @@ test("a slow query shows placeholders and Enter waits for its results", async ({
   );
 });
 
+test("pending searches reserve the empty-state layout before placeholders appear", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  const input = dialog.getByRole("combobox");
+  const results = dialog.getByRole("listbox").locator("..");
+  const skeleton = dialog.locator('[data-slot="search-skeleton"]');
+  const empty = dialog.getByText(
+    "No conversations match your search. Try different words.",
+  );
+  await page.clock.install({ time: new Date("2031-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2031-01-01T00:00:01Z"));
+
+  // The first query has no earlier results to keep the result area open.
+  await input.fill("quiet meadow");
+  const firstPending = (await results.boundingBox())!;
+  const top = (await dialog.boundingBox())!.y;
+  await expect(empty).not.toBeVisible();
+  await expect(skeleton).toHaveCount(0);
+  await expect(dialog.getByRole("status")).toHaveText("Searching…");
+  await page.clock.runFor(150);
+  await expect(empty).toBeVisible();
+  const baseline = (await results.boundingBox())!;
+  expect(firstPending.height).toBe(baseline.height);
+
+  // An empty previous result must not collapse while the next query waits.
+  await page.setViewportSize({ width: 390, height: 900 });
+  const narrowBaseline = (await results.boundingBox())!.height;
+  await page.evaluate(() => (window as any).holdSearch("slow meadow"));
+  await input.fill("slow meadow");
+  expect((await results.boundingBox())!.height).toBe(narrowBaseline);
+  await expect(empty).not.toBeVisible();
+  await page.clock.runFor(249);
+  await expect(skeleton).toHaveCount(0);
+  expect((await results.boundingBox())!.height).toBe(narrowBaseline);
+  await page.clock.runFor(1);
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton.locator(".conversation-search-option")).toHaveCount(3);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).releaseSearch()))
+    .toBe(true);
+  await expect(empty).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
+  expect((await results.boundingBox())!.height).toBe(narrowBaseline);
+  expect((await dialog.boundingBox())!.y).toBe(top);
+});
+
 test("reveals a match deep in a long paragraph and falls back for a collapsed prompt", async ({
   page,
 }) => {
