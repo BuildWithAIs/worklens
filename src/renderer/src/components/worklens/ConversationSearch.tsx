@@ -1,4 +1,12 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { MessageCircle, Search, X } from "lucide-react";
 import {
   Dialog,
@@ -20,9 +28,11 @@ import type {
 
 const api = window.worklens;
 const RECENT_LIMIT = 8;
-// After the input changes, wait this long for results before showing
-// placeholders, so fast and cached searches never flash them.
-const SKELETON_DELAY = 250;
+// While loading, the result area is at least this many rows tall.
+const LOADING_ROWS = 4;
+// Placeholder rows drawn: enough to fill the tallest result area, which
+// clips the rest.
+const SKELETON_ROWS = 9;
 
 export type SearchSelection = {
   id: string;
@@ -131,20 +141,76 @@ export function ConversationSearch({
   const items: (ConversationSearchResult & { query?: string })[] = searching
     ? (results?.items ?? []).map((item) => ({ ...item, query: results?.query }))
     : recents.slice(0, RECENT_LIMIT);
-  // Results of an earlier query stay visible but can't be chosen.
+  // Results of an earlier query can't be chosen.
   const stale = searching && results?.query !== trimmed;
   const pending = stale && failed !== trimmed;
-  const [slow, setSlow] = useState(false);
-  // Restarts whenever a pending query is shown again: a new query or a
-  // reopened dialog.
-  useEffect(() => {
-    setSlow(false);
-    if (!open || !trimmed) return;
-    const timer = setTimeout(() => setSlow(true), SKELETON_DELAY);
-    return () => clearTimeout(timer);
-  }, [open, trimmed]);
-  // Placeholders replace results of the previous query once it is slow.
-  const skeleton = pending && slow;
+  // As in Claude, placeholders show as soon as the query changes and stay
+  // until its results arrive.
+  const skeleton = pending;
+  const loading = useRef(false);
+  loading.current = skeleton;
+
+  // The result area eases to its content's height, up to the room the
+  // dialog has. While loading it only grows: to at least LOADING_ROWS
+  // placeholder rows, or keeping a taller height, so it shrinks only when
+  // results arrive.
+  const fitting = useRef<() => void>(undefined);
+  const refit = useRef<() => void>(undefined);
+  const resultArea = useRef<HTMLElement>(undefined);
+  const fitResults = useCallback((content: HTMLDivElement | null) => {
+    fitting.current?.();
+    fitting.current = refit.current = resultArea.current = undefined;
+    const area = content?.parentElement;
+    const dialog = area?.closest<HTMLElement>('[data-slot="dialog-content"]');
+    if (!content || !area || !dialog) return;
+    resultArea.current = area;
+    const fit = () => {
+      const padding = getComputedStyle(area);
+      const paddings =
+        parseFloat(padding.paddingTop) + parseFloat(padding.paddingBottom);
+      // Exact heights: a rounded-down one leaves a sliver to scroll.
+      const natural = Math.ceil(
+        content.getBoundingClientRect().height + paddings,
+      );
+      const room = Math.floor(
+        parseFloat(getComputedStyle(dialog).maxHeight) -
+          (dialog.getBoundingClientRect().height -
+            area.getBoundingClientRect().height),
+      );
+      let target = natural;
+      if (loading.current) {
+        const row = content.querySelector(".conversation-search-option");
+        const rows = Math.ceil(
+          (row?.getBoundingClientRect().height ?? 0) * LOADING_ROWS + paddings,
+        );
+        target = Math.max(parseFloat(area.style.height) || 0, rows);
+      }
+      area.style.height = `${Math.min(target, room)}px`;
+      // Scroll only when results outgrow the dialog, so no scrollbar shows
+      // while the height eases or placeholders fill it.
+      area.style.overflowY =
+        !loading.current && natural > room ? "auto" : "hidden";
+    };
+    fit();
+    refit.current = fit;
+    // Only after the first fit, so the dialog doesn't grow as it opens.
+    const frame = requestAnimationFrame(() => (area.dataset.animate = "true"));
+    const observer = new ResizeObserver(fit);
+    observer.observe(content);
+    window.addEventListener("resize", fit);
+    fitting.current = () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, []);
+  useLayoutEffect(() => refit.current?.(), [skeleton]);
+  // New content starts at the top: placeholders, a new query's results and
+  // the recents. Moving the selection scrolls on its own.
+  const shown = skeleton ? "loading" : searching ? results?.query : "recents";
+  useLayoutEffect(() => {
+    if (resultArea.current) resultArea.current.scrollTop = 0;
+  }, [shown, results]);
   const selected = Math.min(active, Math.max(0, items.length - 1));
   const optionId = (index: number) => `${listId}-option-${index}`;
 
@@ -173,7 +239,7 @@ export function ConversationSearch({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="conversation-search gap-0 overflow-hidden rounded-[14px] p-0 shadow-[0_24px_64px_-16px_rgb(0_0_0/0.28)] ring-foreground/8"
+        className="conversation-search gap-0 overflow-hidden rounded-[14px] p-0"
         overlayClassName="conversation-search-backdrop"
         showCloseButton={false}
         initialFocus={input}
@@ -247,77 +313,90 @@ export function ConversationSearch({
             <X />
           </DialogClose>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-1.5 pb-4">
-          {!searching && items.length > 0 && (
-            <div className="px-3 pt-2 pb-1 text-xs text-muted-foreground">
-              {t("app.recents")}
-            </div>
-          )}
-          {status && (
-            <p
-              role="status"
-              className="px-3 py-8 text-center text-sm text-muted-foreground"
-            >
-              {status}
-            </p>
-          )}
-          {skeleton && (
-            <div aria-hidden="true" data-slot="search-skeleton">
-              {[0, 1, 2].map((row) => (
-                <div key={row} className="conversation-search-option">
-                  <Skeleton className="mt-0.5 size-4 shrink-0 rounded-full" />
-                  <div className="min-w-0 flex-1 space-y-2 pt-0.5">
-                    <Skeleton className="h-3.5 w-2/5" />
-                    <Skeleton className="h-3 w-4/5" />
-                  </div>
-                  <Skeleton className="mt-0.5 h-3 w-12 shrink-0" />
-                </div>
-              ))}
-            </div>
-          )}
-          <div
-            id={listId}
-            role="listbox"
-            aria-label={searching ? t("search.results") : t("app.recents")}
-            aria-busy={pending}
-            aria-disabled={stale || undefined}
-            hidden={skeleton}
-          >
-            {items.map((item, index) => (
-              <div
-                key={item.id}
-                id={optionId(index)}
-                role="option"
-                aria-selected={!stale && index === selected}
-                className="conversation-search-option"
-                onMouseMove={() => setActive(index)}
-                onClick={() => choose(item)}
-              >
-                <MessageCircle
-                  aria-hidden="true"
-                  className="mt-0.5 size-4 shrink-0"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate">
-                    {item.query ? (
-                      <Highlighted text={item.title} query={item.query} />
-                    ) : (
-                      item.title
-                    )}
-                  </div>
-                  {item.snippet && (
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {item.snippet.before}
-                      <mark>{item.snippet.match}</mark>
-                      {item.snippet.after}
-                    </div>
+        <div className="conversation-search-results min-h-0 overflow-x-hidden overflow-y-auto px-1.5 py-2.5">
+          <div ref={fitResults}>
+            {!searching && items.length > 0 && (
+              <div className="px-3 pt-2 pb-1 text-xs text-muted-foreground">
+                {t("app.recents")}
+              </div>
+            )}
+            <div>
+              {skeleton && (
+                <div aria-hidden="true" data-slot="search-skeleton">
+                  {Array.from({ length: SKELETON_ROWS }, (_, row) => row).map(
+                    (row) => (
+                      // Sized like a result row: a title line and a snippet line.
+                      <div key={row} className="conversation-search-option">
+                        <Skeleton className="mt-0.5 size-4 shrink-0 rounded-full" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex h-5 items-center">
+                            <Skeleton className="h-3.5 w-2/5" />
+                          </div>
+                          <div className="mt-0.5 flex h-4 items-center">
+                            <Skeleton className="h-3 w-4/5" />
+                          </div>
+                        </div>
+                        <div className="flex h-5 shrink-0 items-center">
+                          <Skeleton className="h-3 w-12" />
+                        </div>
+                      </div>
+                    ),
                   )}
                 </div>
-                <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">
-                  {updatedLabel(item.updatedAt, language, t)}
-                </span>
+              )}
+              {status && (
+                <p
+                  role="status"
+                  className="px-3 py-8 text-center text-sm text-muted-foreground"
+                >
+                  {status}
+                </p>
+              )}
+              <div
+                id={listId}
+                role="listbox"
+                aria-label={searching ? t("search.results") : t("app.recents")}
+                aria-busy={pending}
+                aria-disabled={stale || undefined}
+                hidden={skeleton}
+              >
+                {items.map((item, index) => (
+                  <div
+                    key={item.id}
+                    id={optionId(index)}
+                    role="option"
+                    aria-selected={!stale && index === selected}
+                    className="conversation-search-option"
+                    onMouseMove={() => setActive(index)}
+                    onClick={() => choose(item)}
+                  >
+                    <MessageCircle
+                      aria-hidden="true"
+                      className="mt-0.5 size-4 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate">
+                        {item.query ? (
+                          <Highlighted text={item.title} query={item.query} />
+                        ) : (
+                          item.title
+                        )}
+                      </div>
+                      {item.snippet && (
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {item.snippet.before}
+                          <mark>{item.snippet.match}</mark>
+                          {item.snippet.after}
+                        </div>
+                      )}
+                    </div>
+                    <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">
+                      {updatedLabel(item.updatedAt, language, t)}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
         </div>
         <div

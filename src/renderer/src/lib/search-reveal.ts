@@ -5,8 +5,30 @@ const skipped = "button, [aria-hidden='true'], .sr-only";
 const blocks = "p, li, h1, h2, h3, h4, h5, h6, pre, blockquote, td, th, dt, dd";
 const cell = "td, th";
 
+const modifiers = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
+let stopDismissing: (() => void) | undefined;
+
 export function clearSearchHighlight() {
   CSS.highlights?.delete(HIGHLIGHT);
+  stopDismissing?.();
+  stopDismissing = undefined;
+}
+
+// The highlight shows where a search jumped. The next key press or click
+// anywhere means the reader moved on; scrolling doesn't, since they may read
+// around the match. Attached after the jump, so the Enter or click that
+// opened the result can't clear it.
+function dismissOnNextAction() {
+  const dismiss = (event: Event) => {
+    if (event instanceof KeyboardEvent && modifiers.has(event.key)) return;
+    clearSearchHighlight();
+  };
+  window.addEventListener("keydown", dismiss, true);
+  window.addEventListener("pointerdown", dismiss, true);
+  stopDismissing = () => {
+    window.removeEventListener("keydown", dismiss, true);
+    window.removeEventListener("pointerdown", dismiss, true);
+  };
 }
 
 // Rendered Markdown splits text across elements, so match across the text
@@ -128,8 +150,10 @@ export function revealSearchMatch(
   }
   const view = scroller(thread);
   if (!(range ?? prompt) || !view) return false;
-  if (range && typeof Highlight === "function")
+  if (range && typeof Highlight === "function") {
     CSS.highlights?.set(HIGHLIGHT, new Highlight(range));
+    dismissOnNextAction();
+  }
   const place = () => {
     if (!range) {
       prompt?.scrollIntoView({ block: "start", behavior: "instant" });
