@@ -67,13 +67,13 @@ test("scrolling keeps a keyboard-focused path hint but closes a hovered one", as
   const hint = page
     .locator('[data-slot="tooltip-content"][data-open]')
     .filter({ hasText: full });
-  // Scrolling as focus would when it moves the path into view.
+  // A small scroll that keeps the path in view, as when focus moves it in.
   const scroll = () =>
     page.locator(".settings-scroll").evaluate(
       (element) =>
         new Promise((resolve) => {
           element.addEventListener("scroll", resolve, { once: true });
-          element.scrollTop = element.scrollTop > 0 ? 0 : 120;
+          element.scrollTop += element.scrollTop >= 20 ? -20 : 20;
         }),
     );
 
@@ -83,6 +83,7 @@ test("scrolling keeps a keyboard-focused path hint but closes a hovered one", as
   await expect(hint).toHaveCount(1);
   await scroll();
   await page.waitForTimeout(100);
+  await expect(path).toBeInViewport();
   await expect(hint).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(hint).toHaveCount(0);
@@ -93,6 +94,29 @@ test("scrolling keeps a keyboard-focused path hint but closes a hovered one", as
   await expect(hint).toHaveCount(1);
   await scroll();
   await expect(hint).toHaveCount(0);
+
+  // Scrolled out of sight, a focused hint closes too, so a single Escape
+  // closes Settings instead of an invisible hint.
+  await page.mouse.move(0, 0);
+  await page.keyboard.press("Tab");
+  await path.focus();
+  await expect(hint).toHaveCount(1);
+  await page.locator(".settings-scroll").evaluate(
+    (element, target) =>
+      new Promise((resolve) => {
+        element.addEventListener("scroll", resolve, { once: true });
+        const below =
+          target.getBoundingClientRect().top -
+          element.getBoundingClientRect().top;
+        element.scrollTop =
+          below > element.clientHeight / 2 ? 0 : element.scrollHeight;
+      }),
+    await path.elementHandle(),
+  );
+  await expect(path).not.toBeInViewport();
+  await expect(hint).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".settings-scroll")).toBeHidden();
 });
 
 test("settings and chat model workflow", async ({ page }, testInfo) => {

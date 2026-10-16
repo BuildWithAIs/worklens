@@ -18,6 +18,34 @@ function TooltipProvider({
   );
 }
 
+// Whether no part of the element shows within the window and the boxes
+// that clip it, as Base UI's anchorHidden reports after the next frame.
+function outOfView(element: Element) {
+  let { top, right, bottom, left } = element.getBoundingClientRect();
+  const clip = (box: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  }) => {
+    top = Math.max(top, box.top);
+    right = Math.min(right, box.right);
+    bottom = Math.min(bottom, box.bottom);
+    left = Math.max(left, box.left);
+  };
+  for (
+    let parent = element.parentElement;
+    parent;
+    parent = parent.parentElement
+  ) {
+    const { overflowX, overflowY } = getComputedStyle(parent);
+    if (overflowX !== "visible" || overflowY !== "visible")
+      clip(parent.getBoundingClientRect());
+  }
+  clip({ top: 0, right: innerWidth, bottom: innerHeight, left: 0 });
+  return bottom <= top || right <= left;
+}
+
 function Tooltip({
   actionsRef,
   onOpenChange,
@@ -32,8 +60,11 @@ function Tooltip({
     const close = () => (actionsRef ?? localActions).current?.close();
     const closeOnScroll = () => {
       // Focusing a trigger can scroll it into view; that hint follows its
-      // trigger and stays until focus moves on.
-      if (focusedTrigger.current?.contains(document.activeElement)) return;
+      // trigger and stays until focus moves on or the trigger scrolls out of
+      // sight, where it would still take the next Escape.
+      const trigger = focusedTrigger.current;
+      if (trigger?.contains(document.activeElement) && !outOfView(trigger))
+        return;
       close();
     };
     const dismiss = (event: KeyboardEvent) => {
