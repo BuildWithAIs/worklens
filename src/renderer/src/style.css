@@ -356,6 +356,14 @@ kbd {
   width: min(672px, calc(100vw - 48px));
   max-width: none;
 }
+/* As in Claude, no outline: the backdrop sets the dialog apart. A dark
+   dialog on a dark backdrop keeps a faint edge. */
+.conversation-search[data-slot="dialog-content"] {
+  box-shadow: none;
+}
+:root[data-theme="dark"] .conversation-search[data-slot="dialog-content"] {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+}
 /* A deeper backdrop than other dialogs: the palette covers the whole window,
    sidebar included. */
 .conversation-search-backdrop {
@@ -363,6 +371,15 @@ kbd {
 }
 /* As in claude.ai: titles are muted so the matched text stands out, and the
    selected row turns fully dark. */
+/* Replaced content starts at the top, so the browser must not keep an
+   anchor from the content it replaced. */
+.conversation-search-results {
+  overflow-anchor: none;
+}
+/* Height changes as results arrive ease instead of jumping. */
+.conversation-search-results[data-animate] {
+  transition: height 180ms ease-out;
+}
 .conversation-search-option {
   display: flex;
   align-items: flex-start;

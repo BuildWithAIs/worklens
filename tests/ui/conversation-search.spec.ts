@@ -57,11 +57,40 @@ async function setup(page: Page) {
       zebra: [result("long", "zebra crossing", "long-entry-3")],
       violet: [result("long", "violet horizon", "long-entry-5")],
       alder: [result("long", "alder silver", "long-entry-6")],
+      longtitle: [
+        {
+          id: "longtitle",
+          title: `A very long conversation title ${"that keeps going ".repeat(20)}`,
+          updatedAt: views.current.updatedAt,
+          snippet: { before: "…", match: "longtitle", after: "" },
+          messageId: "longtitle-entry",
+        },
+      ],
+      ...Object.fromEntries(
+        [
+          ["trio", 3],
+          ["many", 6],
+          ["lots", 30],
+        ].map(([word, count]) => [
+          word,
+          Array.from({ length: count as number }, (_, i) => ({
+            id: `${word}-${i}`,
+            title: `${word} ${i}`,
+            updatedAt: views.current.updatedAt,
+            snippet: { before: "…", match: String(word), after: " in a reply" },
+            messageId: `${word}-entry`,
+          })),
+        ]),
+      ),
     };
     // A query whose search waits until the test releases it.
     const held: { query?: string; release?: () => void } = {};
-    (window as any).holdSearch = (query: string) => (held.query = query);
-    // True once the held search was waiting and has been released.
+    (window as any).holdSearch = (query: string) => {
+      held.query = query;
+      held.release = undefined;
+    };
+    // True while the held search waits to be released.
+    (window as any).searchWaiting = () => !!held.release;
     (window as any).prepared = 0;
     (window as any).cancels = [];
     (window as any).skeletonSeen = false;
@@ -69,7 +98,14 @@ async function setup(page: Page) {
       if (document.querySelector('[data-slot="search-skeleton"]'))
         (window as any).skeletonSeen = true;
     }).observe(document, { childList: true, subtree: true });
-    (window as any).releaseSearch = () => !!held.release?.() || !!held.release;
+    // Releases the held search once it waits; true when it did.
+    (window as any).releaseSearch = () => {
+      const release = held.release;
+      if (!release) return false;
+      held.query = held.release = undefined;
+      release();
+      return true;
+    };
     window.worklens.invoke = (async (name: string, input: any) => {
       if (name === "open") return structuredClone(views[input.id]);
       if (name === "prepareSearch") {
@@ -210,7 +246,7 @@ test("search button sits beside the sidebar toggle in both sidebar states", asyn
   ).toBeLessThanOrEqual(1);
 });
 
-test("a slow query shows placeholders and Enter waits for its results", async ({
+test("placeholders show as soon as the query changes and Enter waits for its results", async ({
   page,
 }) => {
   await setup(page);
@@ -223,21 +259,20 @@ test("a slow query shows placeholders and Enter waits for its results", async ({
     .poll(() => page.evaluate(() => (window as any).prepared))
     .toBe(1);
 
-  // A fast search never flashes placeholders.
+  // Even a fast search shows placeholders until its results arrive.
   await input.fill("rubbing");
   await expect(
     dialog.getByRole("option", { name: /Body language/ }),
   ).toHaveAttribute("aria-selected", "true");
-  await page.waitForTimeout(400);
-  expect(await page.evaluate(() => (window as any).skeletonSeen)).toBe(false);
+  expect(await page.evaluate(() => (window as any).skeletonSeen)).toBe(true);
 
   await page.evaluate(() => (window as any).holdSearch("zebra"));
   await input.fill("zebra");
   await input.press("Enter");
   await expect(dialog.getByRole("status")).toHaveText("Searching…");
   await expect(dialog.getByRole("option", { selected: true })).toHaveCount(0);
-  // Once slow, placeholders replace the previous query's results.
-  await expect(skeleton.locator(".conversation-search-option")).toHaveCount(3);
+  // Placeholders replace the previous query's results at once.
+  await expect(skeleton).toBeVisible();
   await expect(dialog.getByRole("listbox")).toBeHidden();
   await expect(dialog).toBeVisible();
   await expect(page.locator('[data-slot="chat-title"]')).toHaveAttribute(
@@ -261,53 +296,170 @@ test("a slow query shows placeholders and Enter waits for its results", async ({
   );
 });
 
-test("pending searches reserve the empty-state layout before placeholders appear", async ({
+test("the result area only grows while loading, then fits what arrives", async ({
   page,
 }) => {
   await setup(page);
   await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.getByRole("dialog", { name: "Search conversations" });
   const input = dialog.getByRole("combobox");
-  const results = dialog.getByRole("listbox").locator("..");
+  const area = dialog.locator(".conversation-search-results");
   const skeleton = dialog.locator('[data-slot="search-skeleton"]');
+  const options = dialog.getByRole("option");
   const empty = dialog.getByText(
     "No conversations match your search. Try different words.",
   );
-  await page.clock.install({ time: new Date("2031-01-01T00:00:00Z") });
-  await page.clock.pauseAt(new Date("2031-01-01T00:00:01Z"));
-
-  // The first query has no earlier results to keep the result area open.
-  await input.fill("quiet meadow");
-  const firstPending = (await results.boundingBox())!;
+  const height = async () => (await area.boundingBox())!.height;
   const top = (await dialog.boundingBox())!.y;
-  await expect(empty).not.toBeVisible();
-  await expect(skeleton).toHaveCount(0);
-  await expect(dialog.getByRole("status")).toHaveText("Searching…");
-  await page.clock.runFor(150);
-  await expect(empty).toBeVisible();
-  const baseline = (await results.boundingBox())!;
-  expect(firstPending.height).toBe(baseline.height);
+  const held = async (query: string) => {
+    await page.evaluate((query) => (window as any).holdSearch(query), query);
+    await input.fill(query);
+    await expect(skeleton).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).searchWaiting()))
+      .toBe(true);
+  };
+  const release = () =>
+    expect
+      .poll(() => page.evaluate(() => (window as any).releaseSearch()))
+      .toBe(true);
+  // The area's vertical padding.
+  const padding = await area.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  });
+  const row = async () =>
+    (await skeleton
+      .locator(".conversation-search-option")
+      .first()
+      .boundingBox())!.height;
 
-  // An empty previous result must not collapse while the next query waits.
-  await page.setViewportSize({ width: 390, height: 900 });
-  const narrowBaseline = (await results.boundingBox())!.height;
-  await page.evaluate(() => (window as any).holdSearch("slow meadow"));
-  await input.fill("slow meadow");
-  expect((await results.boundingBox())!.height).toBe(narrowBaseline);
-  await expect(empty).not.toBeVisible();
-  await page.clock.runFor(249);
-  await expect(skeleton).toHaveCount(0);
-  expect((await results.boundingBox())!.height).toBe(narrowBaseline);
-  await page.clock.runFor(1);
+  // Loading from the recents keeps their height or grows to four rows.
+  const recents = await height();
+  await held("quiet meadow");
+  const loading = Math.max(recents, 4 * (await row()) + padding);
+  await expect.poll(height).toBeCloseTo(loading, 0);
+
+  // No matches: it shrinks to the message, centered between the edges.
+  await release();
+  await expect(empty).toBeVisible();
+  await expect.poll(height).toBeLessThan(loading);
+  const gaps = await empty.evaluate((text) => {
+    const box = text.getBoundingClientRect();
+    const outer = text.closest(".conversation-search-results")!;
+    const edges = outer.getBoundingClientRect();
+    return [box.top - edges.top, edges.bottom - box.bottom];
+  });
+  expect(Math.abs(gaps[0] - gaps[1])).toBeLessThanOrEqual(1);
+
+  // Loading from a shorter area grows to four rows; more results grow more.
+  await held("many");
+  await expect.poll(height).toBeCloseTo(4 * (await row()) + padding, 0);
+  await release();
+  await expect(options).toHaveCount(6);
+  const six = await height();
+  expect(six).toBeGreaterThan(4 * 50);
+
+  // Loading never shrinks; one result then fits exactly, with no blank
+  // space below and nothing to scroll.
+  await held("rubbing");
+  expect(await height()).toBe(six);
+  await release();
+  await expect(options).toHaveCount(1);
+  const one = (await options.first().boundingBox())!.height;
+  await expect.poll(height).toBeCloseTo(one + padding, 0);
+  expect(
+    await area.evaluate((element) => [
+      getComputedStyle(element).overflowY,
+      element.scrollHeight <= element.clientHeight,
+    ]),
+  ).toEqual(["hidden", true]);
+  expect((await dialog.boundingBox())!.y).toBe(top);
+
+  // The height eases only when motion is allowed.
+  const transition = () =>
+    area.evaluate((element) => getComputedStyle(element).transitionDuration);
+  await expect.poll(transition).toBe("0s");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect.poll(transition).toBe("0.18s");
+});
+
+test("new content starts at the top, and only long lists scroll", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  const input = dialog.getByRole("combobox");
+  const area = dialog.locator(".conversation-search-results");
+  const skeleton = dialog.locator('[data-slot="search-skeleton"]');
+  const options = dialog.getByRole("option");
+  const scrolled = () => area.evaluate((element) => element.scrollTop);
+  const toBottom = () =>
+    area.evaluate((element) => (element.scrollTop = element.scrollHeight));
+
+  await input.fill("lots");
+  await expect(options).toHaveCount(30);
+  expect(
+    await area.evaluate((element) => getComputedStyle(element).overflowY),
+  ).toBe("auto");
+  await toBottom();
+  expect(await scrolled()).toBeGreaterThan(0);
+
+  // Placeholders for the next query start at the top, uncut.
+  await page.evaluate(() => (window as any).holdSearch("many"));
+  await input.fill("many");
   await expect(skeleton).toBeVisible();
-  await expect(skeleton.locator(".conversation-search-option")).toHaveCount(3);
+  expect(await scrolled()).toBe(0);
+  const first = (await skeleton
+    .locator(".conversation-search-option")
+    .first()
+    .boundingBox())!;
+  expect(first.y).toBeGreaterThanOrEqual((await area.boundingBox())!.y);
+  // Its results start at the top too.
   await expect
     .poll(() => page.evaluate(() => (window as any).releaseSearch()))
     .toBe(true);
-  await expect(empty).toBeVisible();
-  await expect(skeleton).toHaveCount(0);
-  expect((await results.boundingBox())!.height).toBe(narrowBaseline);
-  expect((await dialog.boundingBox())!.y).toBe(top);
+  await expect(options).toHaveCount(6);
+  expect(await scrolled()).toBe(0);
+
+  // Back from a scrolled list, the recents start at the top.
+  await input.fill("lots");
+  await expect(options).toHaveCount(30);
+  await toBottom();
+  await input.fill("");
+  await expect(options).toHaveCount(3);
+  expect(await scrolled()).toBe(0);
+});
+
+test("long titles truncate without a horizontal scrollbar, and the outline follows the theme", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  const area = dialog.locator(".conversation-search-results");
+  await dialog.getByRole("combobox").fill("longtitle");
+  const option = dialog.getByRole("option");
+  await expect(option).toHaveCount(1);
+  const title = option.locator(".truncate").first();
+  expect(
+    await title.evaluate(
+      (element) => element.scrollWidth > element.clientWidth,
+    ),
+  ).toBe(true);
+  expect(
+    await area.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+
+  // Light: no outline, the backdrop sets it apart. Dark: a faint edge.
+  const shadow = () =>
+    dialog.evaluate((element) => getComputedStyle(element).boxShadow);
+  expect(await shadow()).toBe("none");
+  await page.evaluate(() => (document.documentElement.dataset.theme = "dark"));
+  await expect.poll(shadow).toContain("inset");
 });
 
 test("reveals a match deep in a long paragraph and falls back for a collapsed prompt", async ({
@@ -356,7 +508,7 @@ test("reveals a phrase that spans two table cells", async ({ page }) => {
     .toEqual({ role: "assistant", text: "aldersilver", visible: true });
 });
 
-test("clearing or closing stops the pending search and reopening restarts the placeholder delay", async ({
+test("clearing or closing stops the pending search, and reopening shows its placeholders", async ({
   page,
 }) => {
   await setup(page);
@@ -370,11 +522,15 @@ test("clearing or closing stops the pending search and reopening restarts the pl
   const input = dialog.getByRole("combobox", { name: "Search conversations" });
   const skeleton = dialog.locator('[data-slot="search-skeleton"]');
 
+  const waiting = () =>
+    expect
+      .poll(() => page.evaluate(() => (window as any).searchWaiting()))
+      .toBe(true);
+
   // Clearing stops the search in progress but keeps the warm-up.
   await page.evaluate(() => (window as any).holdSearch("zebra"));
   await input.fill("zebra");
-  // Placeholders show only after the request went out.
-  await expect(skeleton).toBeVisible();
+  await waiting();
   await input.fill("");
   await expect.poll(cancels).toEqual([{ warmUp: false }]);
   await release();
@@ -382,7 +538,7 @@ test("clearing or closing stops the pending search and reopening restarts the pl
   // Closing while a search waits stops it and the warm-up.
   await page.evaluate(() => (window as any).holdSearch("violet"));
   await input.fill("violet");
-  await expect(skeleton).toBeVisible();
+  await waiting();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect.poll(async () => (await cancels()).length).toBe(3);
@@ -390,10 +546,10 @@ test("clearing or closing stops the pending search and reopening restarts the pl
     expect.arrayContaining([{ warmUp: false }, { warmUp: true }]),
   );
 
-  // Reopening the same pending query waits again before placeholders.
+  // Reopening the same pending query shows its placeholders right away.
+  await page.evaluate(() => (window as any).holdSearch("violet"));
   await page.keyboard.press("ControlOrMeta+k");
   await expect(input).toHaveValue("violet");
-  await expect(skeleton).toHaveCount(0);
   await expect(skeleton).toBeVisible();
   await release();
   await expect(skeleton).toHaveCount(0);
