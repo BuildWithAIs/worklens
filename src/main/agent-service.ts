@@ -56,6 +56,7 @@ import type { JevConsent } from "./connectors/jev/consent";
 import type { McpService } from "./mcp-service";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import {
+  loadMarkdownParser,
   mayContain,
   prefilterSource,
   searchSnippet,
@@ -640,6 +641,7 @@ export class AgentService {
   async search(query: string): Promise<ConversationSearchResult[]> {
     const needle = foldSearchText(query.trim());
     if (!needle) return [];
+    await loadMarkdownParser();
     await this.listInfos();
     const found: (ConversationSearchResult & { titleMatch: boolean })[] = [];
     const match = (

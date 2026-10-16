@@ -1,16 +1,38 @@
 import type { Nodes } from "mdast";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import remarkParse from "remark-parse";
-import { unified } from "unified";
 import type {
   ConversationSearchSnippet,
   MessageView,
 } from "../shared/contracts";
 import { foldSearchText } from "../shared/search-text";
 
-// The renderer's Markdown syntax, so replies are searched as they are read.
-const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+let parser: { parse(markdown: string): Nodes } | undefined;
+let loading: Promise<void> | undefined;
+
+/**
+ * Loads the renderer's Markdown syntax, so replies are searched as they are
+ * read. Loaded on the first search rather than at startup.
+ */
+export function loadMarkdownParser() {
+  loading ??= Promise.all([
+    import("unified"),
+    import("remark-parse"),
+    import("remark-gfm"),
+    import("remark-math"),
+  ]).then(
+    ([{ unified }, remarkParse, remarkGfm, remarkMath]) => {
+      parser = unified()
+        .use(remarkParse.default)
+        .use(remarkGfm.default)
+        .use(remarkMath.default);
+    },
+    (error) => {
+      loading = undefined;
+      throw error;
+    },
+  );
+  return loading;
+}
+
 const lines = new Set(["root", "blockquote", "list", "listItem", "table"]);
 
 function plainText(node: Nodes): string {
@@ -29,6 +51,7 @@ function plainText(node: Nodes): string {
 
 /** The text a reader sees in rendered Markdown, with blocks on their own lines. */
 export function markdownText(markdown: string) {
+  if (!parser) throw new Error("Call loadMarkdownParser() first");
   return plainText(parser.parse(markdown));
 }
 

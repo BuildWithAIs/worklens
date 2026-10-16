@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeAll, expect, test } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
 import {
+  loadMarkdownParser,
   markdownText,
   mayContain,
   prefilterSource,
@@ -21,6 +22,7 @@ import type {
 } from "../src/shared/contracts";
 
 const cleanups: (() => Promise<unknown>)[] = [];
+beforeAll(loadMarkdownParser);
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
