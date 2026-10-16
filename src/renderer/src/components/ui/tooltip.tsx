@@ -18,6 +18,34 @@ function TooltipProvider({
   );
 }
 
+// Whether no part of the element shows within the window and the boxes
+// that clip it, as Base UI's anchorHidden reports after the next frame.
+function outOfView(element: Element) {
+  let { top, right, bottom, left } = element.getBoundingClientRect();
+  const clip = (box: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  }) => {
+    top = Math.max(top, box.top);
+    right = Math.min(right, box.right);
+    bottom = Math.min(bottom, box.bottom);
+    left = Math.max(left, box.left);
+  };
+  for (
+    let parent = element.parentElement;
+    parent;
+    parent = parent.parentElement
+  ) {
+    const { overflowX, overflowY } = getComputedStyle(parent);
+    if (overflowX !== "visible" || overflowY !== "visible")
+      clip(parent.getBoundingClientRect());
+  }
+  clip({ top: 0, right: innerWidth, bottom: innerHeight, left: 0 });
+  return bottom <= top || right <= left;
+}
+
 function Tooltip({
   actionsRef,
   onOpenChange,
@@ -25,9 +53,20 @@ function Tooltip({
 }: TooltipPrimitive.Root.Props) {
   const localActions = useRef<TooltipPrimitive.Root.Actions | null>(null);
   const [visible, setVisible] = useState(false);
+  // The trigger when keyboard focus opened the hint.
+  const focusedTrigger = useRef<Element | undefined>(undefined);
   useEffect(() => {
     if (!visible) return;
     const close = () => (actionsRef ?? localActions).current?.close();
+    const closeOnScroll = () => {
+      // Focusing a trigger can scroll it into view; that hint follows its
+      // trigger and stays until focus moves on or the trigger scrolls out of
+      // sight, where it would still take the next Escape.
+      const trigger = focusedTrigger.current;
+      if (trigger?.contains(document.activeElement) && !outOfView(trigger))
+        return;
+      close();
+    };
     const dismiss = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       // Dismiss the hint first without closing the Settings dialog underneath.
@@ -35,10 +74,10 @@ function Tooltip({
       event.stopPropagation();
       close();
     };
-    window.addEventListener("scroll", close, true);
+    window.addEventListener("scroll", closeOnScroll, true);
     window.addEventListener("keydown", dismiss, true);
     return () => {
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", closeOnScroll, true);
       window.removeEventListener("keydown", dismiss, true);
     };
   }, [visible, actionsRef]);
@@ -48,6 +87,10 @@ function Tooltip({
       {...props}
       actionsRef={actionsRef ?? localActions}
       onOpenChange={(open, details) => {
+        focusedTrigger.current =
+          open && details.reason === "trigger-focus"
+            ? details.trigger
+            : undefined;
         onOpenChange?.(open, details);
         setVisible(open);
       }}
