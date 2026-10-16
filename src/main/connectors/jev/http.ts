@@ -56,7 +56,14 @@ export class JevHttp {
           await response.body?.cancel();
           if (attempt >= 2 || wait > 10_000)
             throw new Error("Jev is busy. Try again later.");
-          await delay(wait, undefined, { signal: combined });
+          const retryAt = Date.now() + wait;
+          // Timers can wake just before the gate's wall-clock deadline. Finish
+          // the wait rather than treating the remaining cooldown as a failure.
+          do {
+            await delay(Math.max(0, retryAt - Date.now()), undefined, {
+              signal: combined,
+            });
+          } while (Date.now() < retryAt);
           continue;
         }
         if (!response.ok) {
