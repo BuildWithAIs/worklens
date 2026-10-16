@@ -228,6 +228,20 @@ export interface Conversation {
   statusDetail?: string;
   revision?: number;
 }
+export interface ConversationSearchSnippet {
+  before: string;
+  match: string;
+  after: string;
+}
+export interface ConversationSearchResult {
+  id: string;
+  title: string;
+  updatedAt: string;
+  /** First match in the current branch; absent when only the title matches. */
+  snippet?: ConversationSearchSnippet;
+  /** The user message starting the matching turn, for when the match is collapsed. */
+  messageId?: string;
+}
 export interface ConversationView extends Conversation {
   branchId?: string;
   messages: MessageView[];
@@ -398,6 +412,10 @@ export interface Requests {
   /** Reads a conversation without making it the last opened one. */
   view: { input: { id: string }; output: ConversationView };
   rename: { input: { id: string; title: string }; output: void };
+  searchConversations: {
+    input: { query: string };
+    output: ConversationSearchResult[];
+  };
   delete: { input: { id: string }; output: void };
   send: {
     input: {

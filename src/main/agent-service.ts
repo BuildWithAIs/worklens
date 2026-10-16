@@ -55,6 +55,12 @@ import type { SkillsService } from "./skills";
 import type { JevConsent } from "./connectors/jev/consent";
 import type { McpService } from "./mcp-service";
 import { withRunTiming, projectMessages, textContent } from "./projection";
+import {
+  searchSnippet,
+  searchableMessages,
+  type SearchableMessage,
+} from "./conversation-search";
+import { findSearchMatch, foldSearchText } from "../shared/search-text";
 import { shareUnchanged } from "./structural-sharing";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import {
@@ -77,6 +83,7 @@ import type {
   Requests,
   ChatEvent,
   Conversation,
+  ConversationSearchResult,
   ConversationView,
   MessageView,
   Phase,
@@ -91,12 +98,18 @@ interface ActiveRun {
   done?: Promise<void>;
   sequence: number;
 }
+const fileTitle = (info: SessionInfo) =>
+  info.name || info.firstMessage?.slice(0, 48) || "未命名会话";
 interface SessionFile {
   info: SessionInfo;
   mtimeMs: number;
   size: number;
   /** null: the session has no model; undefined: not read yet. */
   selection?: Selection | null;
+  /** Folded text of every branch, a superset of the current branch. */
+  searchText?: string;
+  /** Current-branch messages, read when a search first needs them. */
+  searchable?: SearchableMessage[] | null;
 }
 interface Runtime {
   manager: SessionManager;
@@ -544,10 +557,13 @@ export class AgentService {
       files.set(info.path, {
         info,
         ...stamp,
-        selection:
-          previous?.mtimeMs === stamp.mtimeMs && previous.size === stamp.size
-            ? previous.selection
-            : undefined,
+        ...(previous?.mtimeMs === stamp.mtimeMs && previous.size === stamp.size
+          ? {
+              selection: previous.selection,
+              searchText: previous.searchText,
+              searchable: previous.searchable,
+            }
+          : {}),
       });
     }
     this.files = files;
@@ -590,7 +606,7 @@ export class AgentService {
         }
         result.set(info.id, {
           id: info.id,
-          title: info.name || info.firstMessage?.slice(0, 48) || "未命名会话",
+          title: fileTitle(info),
           updatedAt: info.modified.toISOString(),
           phase: "idle",
           selection: file?.selection ?? undefined,
@@ -608,6 +624,85 @@ export class AgentService {
     return [...result.values()].sort((a, b) =>
       b.updatedAt.localeCompare(a.updatedAt),
     );
+  }
+  private searchable(id: string, manager: SessionManager) {
+    return searchableMessages(
+      projectMessages(
+        withRunTiming(manager.getBranch()),
+        sessionWorkspace(this.paths.sessions, id),
+      ),
+    );
+  }
+  // Matches visible prompt and reply text in each conversation's current
+  // branch. Titles rank first, then recent conversations.
+  async search(query: string): Promise<ConversationSearchResult[]> {
+    const needle = foldSearchText(query.trim());
+    if (!needle) return [];
+    await this.listInfos();
+    const found: (ConversationSearchResult & { titleMatch: boolean })[] = [];
+    const match = (
+      id: string,
+      rawTitle: string,
+      updatedAt: string,
+      messages: () => readonly SearchableMessage[],
+    ) => {
+      const title = this.redact(rawTitle);
+      const titleMatch = findSearchMatch(title, needle) >= 0;
+      for (const message of messages()) {
+        if (!message.folded.includes(needle)) continue;
+        // Search the redacted text so a match inside a secret is never shown.
+        const text = this.redact(message.text);
+        const index = findSearchMatch(text, needle);
+        if (index < 0) continue;
+        found.push({
+          id,
+          title,
+          updatedAt,
+          titleMatch,
+          snippet: searchSnippet(text, index, needle.length),
+          messageId: message.turnId,
+        });
+        return;
+      }
+      if (titleMatch) found.push({ id, title, updatedAt, titleMatch });
+    };
+    for (const [id, runtime] of this.sessions) {
+      const summary = this.summary(id, runtime);
+      match(id, summary.title, summary.updatedAt, () =>
+        this.searchable(id, runtime.manager),
+      );
+    }
+    for (const [path, file] of this.files) {
+      const { info } = file;
+      if (this.sessions.has(info.id)) continue;
+      const title = fileTitle(info);
+      file.searchText ??= foldSearchText(info.allMessagesText);
+      if (
+        !file.searchText.includes(needle) &&
+        findSearchMatch(this.redact(title), needle) < 0
+      )
+        continue;
+      match(info.id, title, info.modified.toISOString(), () => {
+        if (file.searchable === undefined) {
+          try {
+            const manager = SessionManager.open(path, this.paths.sessions);
+            file.searchable = this.searchable(info.id, manager);
+          } catch {
+            // list() reports unreadable sessions; search skips them.
+            file.searchable = null;
+          }
+        }
+        return file.searchable ?? [];
+      });
+    }
+    return found
+      .sort(
+        (a, b) =>
+          Number(b.titleMatch) - Number(a.titleMatch) ||
+          b.updatedAt.localeCompare(a.updatedAt),
+      )
+      .slice(0, 50)
+      .map(({ titleMatch: _titleMatch, ...result }) => result);
   }
   private async get(id: string): Promise<Runtime> {
     const cached = this.sessions.get(id);

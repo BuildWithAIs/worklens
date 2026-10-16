@@ -186,6 +186,7 @@ export const schemas = {
   open: z.object({ id }).strict(),
   view: z.object({ id }).strict(),
   rename: z.object({ id, title: z.string().trim().min(1).max(120) }).strict(),
+  searchConversations: z.object({ query: z.string().max(200) }).strict(),
   delete: z.object({ id }).strict(),
   send: z
     .object({

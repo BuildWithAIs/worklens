@@ -613,6 +613,16 @@ const zhCN = {
   },
   search: {
     clearSearch: "清除搜索",
+    searchConversations: "搜索会话",
+    search: "搜索",
+    clear: "清除",
+    results: "搜索结果",
+    noConversationsMatch: "没有匹配的会话。请换个关键词试试。",
+    couldntSearch: "无法搜索会话，请重试。",
+    today: "今天",
+    yesterday: "昨天",
+    navigate: "选择",
+    open: "打开",
   },
   settings: {
     toolExecution: "工具执行",

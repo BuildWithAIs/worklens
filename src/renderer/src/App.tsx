@@ -33,6 +33,7 @@ import {
 } from "react";
 import {
   Plus,
+  Search,
   MoreHorizontal,
   Settings as SettingsIcon,
   X,
@@ -51,6 +52,11 @@ import { useAppTranslation } from "@/i18n";
 import { UsagePopover } from "@/components/worklens/UsagePopover";
 import { newerGlobalUsage } from "../../shared/usage";
 import { AgentThread } from "@/components/worklens/AgentThread";
+import {
+  ConversationSearch,
+  type SearchSelection,
+} from "@/components/worklens/ConversationSearch";
+import { clearSearchHighlight, revealSearchMatch } from "@/lib/search-reveal";
 import { ThreadLoadingIndicator } from "@/components/assistant-ui/elements/thread.aui";
 import type { ChatImage } from "../../shared/chat-images";
 import type {
@@ -116,6 +122,8 @@ export function App() {
     failed: boolean;
   }>();
   const [page, setPage] = useState<"chat" | "settings">("chat");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [reveal, setReveal] = useState<SearchSelection & { query: string }>();
   const pinSaving = useRef(false);
   const [pinPending, setPinPending] = useState(false);
   const [unread, setUnread] = useState<Set<string>>(() => new Set());
@@ -135,6 +143,27 @@ export function App() {
         return next;
       });
   }, [current, page, historyLoad, readyConversation]);
+  // Reveal a search match once the conversation's full history has rendered.
+  const revealReady =
+    !!reveal &&
+    page === "chat" &&
+    !historyLoad &&
+    current === reveal.id &&
+    readyConversation === reveal.id;
+  useEffect(() => {
+    if (!revealReady || !reveal) return;
+    const frame = requestAnimationFrame(() => {
+      const thread = document.querySelector('[data-slot="aui_message-group"]');
+      if (thread) revealSearchMatch(thread, reveal.query, reveal.messageId);
+      setReveal(undefined);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [revealReady, reveal]);
+  useEffect(() => {
+    // Navigating elsewhere before the result loaded cancels the reveal.
+    if (reveal && !historyLoad && current !== reveal.id) setReveal(undefined);
+  }, [reveal, historyLoad, current]);
+  useEffect(() => () => clearSearchHighlight(), [current]);
   const markHistoryReady = useCallback(
     () => setReadyConversation(current),
     [current],
@@ -599,6 +628,10 @@ export function App() {
         event.preventDefault();
         newConversation();
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
       if (event.key === "Escape") {
         setDialog(undefined);
       }
@@ -646,6 +679,18 @@ export function App() {
           : undefined
       }
     >
+      <Hint content={`${t("search.search")} (${isMac ? "⌘K" : "Ctrl K"})`}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="sidebar-search-button"
+          aria-label={t("search.searchConversations")}
+          aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"}
+          onClick={() => setSearchOpen(true)}
+        >
+          <Search aria-hidden="true" strokeWidth={1.7} />
+        </Button>
+      </Hint>
       <Hint
         content={
           sidebarCollapsed ? t("app.expandSidebar") : t("app.collapseSidebar")
@@ -958,6 +1003,18 @@ export function App() {
           </div>
         </>
       </main>
+      <ConversationSearch
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        recents={data.conversations}
+        onSelect={(selection) => {
+          setSearchOpen(false);
+          clearSearchHighlight();
+          const { query } = selection;
+          setReveal(query ? { ...selection, query } : undefined);
+          void open(selection.id);
+        }}
+      />
       <Dialog
         open={page === "settings" && !(showRecovery && data.recoveries.length)}
         onOpenChange={(open) => {

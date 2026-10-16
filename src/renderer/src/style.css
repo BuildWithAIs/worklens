@@ -343,6 +343,54 @@ kbd {
 .new-chat:focus-visible kbd {
   opacity: 1;
 }
+/* Like claude.ai, the height fits the results while the top edge stays put:
+   it is placed as if centered at full height (on tall windows the top stops
+   at 25vh). */
+.conversation-search[data-slot="dialog-content"] {
+  --search-height: min(calc(100vh - 4rem), 530px);
+  display: flex;
+  flex-direction: column;
+  max-height: var(--search-height);
+  top: max(2rem, min(25vh, calc((100vh - var(--search-height)) / 2)));
+  --tw-translate-y: 0;
+  width: min(672px, calc(100vw - 48px));
+  max-width: none;
+}
+/* A deeper backdrop than other dialogs: the palette covers the whole window,
+   sidebar included. */
+.conversation-search-backdrop {
+  background: color-mix(in srgb, var(--overlay), #000 18%);
+}
+/* As in claude.ai: titles are muted so the matched text stands out, and the
+   selected row turns fully dark. */
+.conversation-search-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.conversation-search-option[aria-selected="true"] {
+  background: var(--selection-fill);
+  color: var(--text);
+}
+.conversation-search mark {
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+.conversation-search kbd {
+  font-family: inherit;
+  padding: 0 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+::highlight(worklens-search) {
+  background-color: color-mix(in srgb, #facc15 45%, transparent);
+  color: inherit;
+}
 .section-label {
   font-size: 13px;
   font-weight: 400;
@@ -1451,8 +1499,9 @@ kbd {
 :root[data-native-vibrancy="true"] .sidebar::before {
   content: "";
   position: absolute;
-  /* Leave the right-aligned toggle and an 8px gutter outside native dragging. */
-  inset: 0 56px auto 144px;
+  /* Leave the right-aligned search and toggle buttons and an 8px gutter
+     outside native dragging. */
+  inset: 0 92px auto 144px;
   height: 48px;
   -webkit-app-region: drag;
 }
@@ -1524,7 +1573,8 @@ kbd {
     transition: none;
   }
 }
-.sidebar-toggle {
+.sidebar-toggle,
+.sidebar-search-button {
   position: absolute;
   top: 28px;
   left: calc(var(--sidebar-width) - 48px);
@@ -1538,17 +1588,26 @@ kbd {
   color: var(--faint);
   -webkit-app-region: no-drag;
 }
+/* Search sits left of the toggle, and right of it once the sidebar folds. */
+.sidebar-search-button {
+  left: calc(var(--sidebar-width) - 84px);
+}
 .app-shell[data-sidebar-collapsed="true"] .sidebar-toggle {
   left: 16px;
   top: 16px;
 }
+.app-shell[data-sidebar-collapsed="true"] .sidebar-search-button {
+  left: 52px;
+  top: 16px;
+}
 .app-shell[data-sidebar-collapsed="true"] .chat-header {
-  padding-left: 64px;
+  padding-left: 100px;
 }
 :root[data-native-vibrancy="true"] .sidebar-toggle,
+:root[data-native-vibrancy="true"] .sidebar-search-button,
 :root[data-native-vibrancy="true"]
   .app-shell[data-sidebar-collapsed="true"]
-  .sidebar-toggle {
+  :is(.sidebar-toggle, .sidebar-search-button) {
   top: 13px;
 }
 :root[data-native-vibrancy="true"]
@@ -1558,14 +1617,21 @@ kbd {
 }
 :root[data-native-vibrancy="true"]
   .app-shell[data-sidebar-collapsed="true"]
+  .sidebar-search-button {
+  left: 132px;
+}
+:root[data-native-vibrancy="true"]
+  .app-shell[data-sidebar-collapsed="true"]
   .chat-header {
-  padding-left: 152px;
+  padding-left: 188px;
 }
 
-.sidebar-toggle svg {
+.sidebar-toggle svg,
+.sidebar-search-button svg {
   width: 18px;
   height: 18px;
 }
+.sidebar-search-button:hover,
 .sidebar-toggle:hover {
   background: var(--selection-fill);
 }
