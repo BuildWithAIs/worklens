@@ -64,10 +64,23 @@ export function searchableMessages(
   return [...replies, ...prompts];
 }
 
+const reference =
+  /&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g;
+
+/**
+ * Stored Markdown for the prefilter, followed by what its character
+ * references render as: `&euro;` shows as €, a character the source lacks.
+ */
+export function prefilterSource(markdown: string) {
+  const references = new Set(markdown.match(reference));
+  if (!references.size) return markdown;
+  return [markdown, ...[...references].map(markdownText)].join("\n");
+}
+
 /**
  * Whether stored Markdown may contain the needle once rendered. Markup can
- * split a phrase, so only require each of its characters; rendered text never
- * has characters its source lacks.
+ * split a phrase, so only require each of its characters; rendered text has
+ * no characters missing from its `prefilterSource`.
  */
 export function mayContain(foldedSource: string, needle: string) {
   return [...new Set(needle.replace(/\s/g, ""))].every((character) =>

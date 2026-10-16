@@ -35,6 +35,11 @@ async function setup(page: Page) {
     // much taller than the window with the match at its end.
     long.messages[6].text = `${"Background line.\n".repeat(60)}zebra crossing`;
     long.messages[11].text = `${"Lorem ipsum dolor sit amet. ".repeat(400)}violet horizon.`;
+    // A table whose row reads "alder silver" across two cells, and a later,
+    // visible reply with the words of the collapsed prompt.
+    long.messages[13].text =
+      "| Wood | Metal |\n| --- | --- |\n| alder | silver |";
+    long.messages[17].text = "The zebra crossing is on the corner.";
     const views: Record<string, any> = {
       current: turns("current", "Current chat"),
       target: turns("target", "Body language", 3),
@@ -51,6 +56,7 @@ async function setup(page: Page) {
       rubbing: [result("target", "rubbing fingers", "target-entry-3")],
       zebra: [result("long", "zebra crossing", "long-entry-3")],
       violet: [result("long", "violet horizon", "long-entry-5")],
+      alder: [result("long", "alder silver", "long-entry-6")],
     };
     // A query whose search waits until the test releases it.
     const held: { query?: string; release?: () => void } = {};
@@ -257,10 +263,26 @@ test("reveals a match deep in a long paragraph and falls back for a collapsed pr
     .toEqual({ role: "assistant", text: "violet horizon", visible: true });
 
   // A match past a collapsed prompt's cut is not visible, so the turn's
-  // prompt is shown instead and nothing is highlighted.
+  // prompt is shown instead and nothing is highlighted, not even the same
+  // words in a later turn.
   await open("zebra crossing");
   const prompt = page.locator('[data-message-id="long-entry-3"]');
   await expect(prompt).toBeInViewport();
   await expect.poll(() => highlighted(page)).toBeUndefined();
   await expect(prompt.getByRole("button", { name: "Show more" })).toBeVisible();
+});
+
+test("reveals a phrase that spans two table cells", async ({ page }) => {
+  await setup(page);
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  await dialog.getByRole("combobox").fill("alder silver");
+  await expect(
+    dialog.getByRole("option", { name: /Long chat/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Enter");
+  // The range runs from one cell to the next, so its text has no space.
+  await expect
+    .poll(() => highlighted(page))
+    .toEqual({ role: "assistant", text: "aldersilver", visible: true });
 });

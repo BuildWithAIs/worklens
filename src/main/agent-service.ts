@@ -57,6 +57,7 @@ import type { McpService } from "./mcp-service";
 import { withRunTiming, projectMessages, textContent } from "./projection";
 import {
   mayContain,
+  prefilterSource,
   searchSnippet,
   searchableMessages,
   type SearchableMessage,
@@ -677,7 +678,7 @@ export class AgentService {
       const { info } = file;
       if (this.sessions.has(info.id)) continue;
       const title = fileTitle(info);
-      file.searchText ??= foldSearchText(info.allMessagesText);
+      file.searchText ??= foldSearchText(prefilterSource(info.allMessagesText));
       if (
         !mayContain(file.searchText, needle) &&
         findSearchMatch(this.redact(title), needle) < 0

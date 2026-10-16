@@ -8,6 +8,7 @@ import { AgentService } from "../src/main/agent-service";
 import {
   markdownText,
   mayContain,
+  prefilterSource,
   searchSnippet,
   searchableMessages,
 } from "../src/main/conversation-search";
@@ -71,6 +72,12 @@ test("prefilters stored Markdown without missing split phrases", () => {
   expect(mayContain(source, foldSearchText("Copper leaf"))).toBe(true);
   expect(mayContain(source, "这篇文章的")).toBe(true);
   expect(mayContain(source, "zinc")).toBe(false);
+  // A character reference renders as a character the source lacks.
+  const priced = "Costs &euro;25 or &#x20AC;3, `&amp;` stays";
+  expect(markdownText(priced)).toBe("Costs €25 or €3, &amp; stays");
+  expect(mayContain(foldSearchText(priced), "€25")).toBe(false);
+  expect(mayContain(foldSearchText(prefilterSource(priced)), "€25")).toBe(true);
+  expect(prefilterSource("no references")).toBe("no references");
 });
 
 test("indexes replies before prompts by turn, skipping tools and thinking", () => {
@@ -159,6 +166,14 @@ test("searches the current branch of loaded and stored conversations", async () 
   );
   const revised = edited.messages.find((m) => m.role === "user")!;
   await service.rename(first.id, "Weekly report");
+  // The reply echoes the reference, which renders as €25.
+  const priced = await settle(
+    await service.send({
+      requestId: randomUUID(),
+      text: "Costs &euro;25 per month",
+      selection,
+    }),
+  );
 
   const expectations = async (instance: AgentService) => {
     expect(await instance.search("alpha")).toEqual([]);
@@ -182,6 +197,9 @@ test("searches the current branch of loaded and stored conversations", async () 
       { id: first.id, title: "Weekly report", updatedAt: expect.any(String) },
     ]);
     expect(await instance.search("   ")).toEqual([]);
+    expect(await instance.search("€25")).toMatchObject([
+      { id: priced.id, snippet: { match: "€25" } },
+    ]);
   };
   await expectations(service);
   // A fresh service reads the conversation from its session file.

@@ -2,6 +2,8 @@ import { foldSearchText } from "../../../shared/search-text";
 
 const HIGHLIGHT = "worklens-search";
 const skipped = "button, [aria-hidden='true'], .sr-only";
+const blocks = "p, li, h1, h2, h3, h4, h5, h6, pre, blockquote, td, th, dt, dd";
+const cell = "td, th";
 
 export function clearSearchHighlight() {
   CSS.highlights?.delete(HIGHLIGHT);
@@ -14,11 +16,23 @@ export function findRenderedMatches(message: Element, query: string) {
   if (!needle) return [];
   const nodes: { node: Text; start: number }[] = [];
   let text = "";
+  let previous: Element | null | undefined;
   const walker = document.createTreeWalker(message, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const parent = node.parentElement;
     if (!parent || parent.closest(skipped) || !parent.checkVisibility())
       continue;
+    // Break between blocks as the search's plain text does: a space between
+    // cells of a row, a line break otherwise.
+    const block = parent.closest(blocks);
+    if (previous !== undefined && block !== previous)
+      text +=
+        block?.matches(cell) &&
+        previous?.matches(cell) &&
+        block.parentElement === previous.parentElement
+          ? " "
+          : "\n";
+    previous = block;
     nodes.push({ node: node as Text, start: text.length });
     text += (node as Text).data;
   }
@@ -77,9 +91,9 @@ function scroller(element: Element) {
 }
 
 /**
- * Scrolls the first visible rendered match into view and highlights it. When
- * the match is collapsed (a long prompt or a process disclosure), scrolls to
- * the turn's prompt instead.
+ * Scrolls the first visible rendered match in the snippet's turn into view
+ * and highlights it. When the match there is collapsed (a long prompt or a
+ * process disclosure), scrolls to the turn's prompt instead.
  */
 export function revealSearchMatch(
   thread: Element,
@@ -87,11 +101,24 @@ export function revealSearchMatch(
   messageId?: string,
 ) {
   clearSearchHighlight();
+  const prompt = messageId
+    ? thread.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)
+    : null;
+  // Only the snippet's turn: its prompt and the replies before the next one.
+  // A later turn with the same words is a different match.
+  let turn = [...thread.querySelectorAll("[data-role]")];
+  const start = prompt ? turn.indexOf(prompt) : -1;
+  if (start >= 0) {
+    const end = turn.findIndex(
+      (message, index) =>
+        index > start && message.getAttribute("data-role") === "user",
+    );
+    turn = turn.slice(start, end < 0 ? undefined : end);
+  }
   // Replies first, matching the snippet chosen by the search.
-  const messages = [
-    ...thread.querySelectorAll('[data-role="assistant"]'),
-    ...thread.querySelectorAll('[data-role="user"]'),
-  ];
+  const role = (name: string) =>
+    turn.filter((message) => message.getAttribute("data-role") === name);
+  const messages = [...role("assistant"), ...role("user")];
   let range: Range | undefined;
   for (const message of messages) {
     range = findRenderedMatches(message, query).find(
@@ -99,9 +126,6 @@ export function revealSearchMatch(
     );
     if (range) break;
   }
-  const prompt = messageId
-    ? thread.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)
-    : null;
   const view = scroller(thread);
   if (!(range ?? prompt) || !view) return false;
   if (range && typeof Highlight === "function")
