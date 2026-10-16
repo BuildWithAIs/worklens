@@ -664,6 +664,18 @@ const en = {
   },
   search: {
     clearSearch: "Clear search",
+    searchConversations: "Search conversations",
+    search: "Search",
+    clear: "Clear",
+    searching: "Searching…",
+    results: "Search results",
+    noConversationsMatch:
+      "No conversations match your search. Try different words.",
+    couldntSearch: "Couldn’t search conversations. Try again.",
+    today: "Today",
+    yesterday: "Yesterday",
+    navigate: "Navigate",
+    open: "Open",
   },
   settings: {
     toolExecution: "Tool execution",
