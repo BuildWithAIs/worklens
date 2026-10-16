@@ -349,3 +349,40 @@ test("clearing or closing stops the pending search and reopening restarts the pl
   await release();
   await expect(skeleton).toHaveCount(0);
 });
+
+test("the highlight stays while reading around and clears on the next key press or click", async ({
+  page,
+}) => {
+  await setup(page);
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  const reveal = async () => {
+    await page.keyboard.press("ControlOrMeta+k");
+    await dialog.getByRole("combobox").fill("Rubbing fingers");
+    await expect(
+      dialog.getByRole("option", { name: /Body language/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    // The Enter that opens the result must not clear the new highlight.
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => highlighted(page)).toBeDefined();
+  };
+
+  await reveal();
+  // Reading around the match keeps it.
+  await page.mouse.move(700, 400);
+  await page.mouse.wheel(0, 300);
+  await page.keyboard.press("Shift");
+  await page.waitForTimeout(150);
+  expect(await highlighted(page)).toBeDefined();
+  // The next key press clears it.
+  await page.keyboard.press("a");
+  await expect.poll(() => highlighted(page)).toBeUndefined();
+
+  await reveal();
+  await page.mouse.click(700, 300);
+  await expect.poll(() => highlighted(page)).toBeUndefined();
+
+  await reveal();
+  await page.keyboard.press("Escape");
+  await expect.poll(() => highlighted(page)).toBeUndefined();
+});
