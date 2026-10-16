@@ -42,6 +42,59 @@ test("local paths stay compact and expose their full value on keyboard focus", a
   await page.screenshot({ path: info.outputPath("local-data-compact.png") });
 });
 
+test("scrolling keeps a keyboard-focused path hint but closes a hovered one", async ({
+  page,
+}) => {
+  await mockWorklens(page);
+  await page.addInitScript(() => {
+    const invoke = window.worklens.invoke;
+    window.worklens.invoke = async (method, input) => {
+      const result = await invoke(method, input);
+      if (method === "bootstrap")
+        result.paths.runtime =
+          "/Users/example/Library/Application Support/WorkLens/long-directory-name/runtime";
+      return result;
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const path = page
+    .getByRole("listitem")
+    .filter({ hasText: "Runtime directory" })
+    .locator(".settings-path");
+  const full = await path.textContent();
+  const hint = page
+    .locator('[data-slot="tooltip-content"][data-open]')
+    .filter({ hasText: full });
+  // Scrolling as focus would when it moves the path into view.
+  const scroll = () =>
+    page.locator(".settings-scroll").evaluate(
+      (element) =>
+        new Promise((resolve) => {
+          element.addEventListener("scroll", resolve, { once: true });
+          element.scrollTop = element.scrollTop > 0 ? 0 : 120;
+        }),
+    );
+
+  await page.keyboard.press("Tab");
+  await page.mouse.move(0, 0);
+  await path.focus();
+  await expect(hint).toHaveCount(1);
+  await scroll();
+  await page.waitForTimeout(100);
+  await expect(hint).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(hint).toHaveCount(0);
+  await expect(page.locator(".settings-scroll")).toBeVisible();
+
+  await path.evaluate((element) => element.blur());
+  await path.hover();
+  await expect(hint).toHaveCount(1);
+  await scroll();
+  await expect(hint).toHaveCount(0);
+});
+
 test("settings and chat model workflow", async ({ page }, testInfo) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));

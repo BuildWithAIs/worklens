@@ -64,6 +64,9 @@ test("sidebar collapses, preserves its preference and keeps the toggle reachable
   await page.reload();
   await expect(sidebar).toBeHidden();
   await expect(toggle).toBeVisible();
+  // The composer takes focus once history loads; wait for that so it cannot
+  // steal focus from the toggle before Enter.
+  await expect(page.locator(".aui-composer-input")).toBeFocused();
   await toggle.focus();
   await page.keyboard.press("Enter");
   await expect(sidebar).toBeVisible();
