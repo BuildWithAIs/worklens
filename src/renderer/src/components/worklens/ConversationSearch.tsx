@@ -95,12 +95,16 @@ export function ConversationSearch({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{
     query: string;
+    requestId: number;
     items: ConversationSearchResult[];
   }>();
-  /** The query whose search failed. */
-  const [failed, setFailed] = useState<string>();
+  const [failed, setFailed] = useState<number>();
   const [active, setActive] = useState(0);
   const trimmed = query.trim();
+  // A reopening or a return to an earlier query is a new request too.
+  const [request, setRequest] = useState({ open, query: trimmed, id: 0 });
+  if (request.open !== open || request.query !== trimmed)
+    setRequest({ open, query: trimmed, id: request.id + 1 });
 
   useEffect(() => {
     if (!open) return;
@@ -121,10 +125,10 @@ export function ConversationSearch({
         .then((items) => {
           if (cancelled) return;
           setFailed(undefined);
-          setResults({ query: trimmed, items });
+          setResults({ query: trimmed, requestId: request.id, items });
         })
         .catch(() => {
-          if (!cancelled) setFailed(trimmed);
+          if (!cancelled) setFailed(request.id);
         })
         .finally(() => (inFlight = false));
     }, 150);
@@ -135,15 +139,15 @@ export function ConversationSearch({
       if (inFlight)
         api.invoke("cancelSearch", { warmUp: false }).catch(() => {});
     };
-  }, [open, trimmed]);
+  }, [open, trimmed, request.id]);
 
   const searching = !!trimmed;
   const items: (ConversationSearchResult & { query?: string })[] = searching
     ? (results?.items ?? []).map((item) => ({ ...item, query: results?.query }))
     : recents.slice(0, RECENT_LIMIT);
   // Results of an earlier query can't be chosen.
-  const stale = searching && results?.query !== trimmed;
-  const pending = stale && failed !== trimmed;
+  const stale = searching && results?.requestId !== request.id;
+  const pending = stale && failed !== request.id;
   // As in Claude, placeholders show as soon as the query changes and stay
   // until its results arrive.
   const skeleton = pending;
@@ -231,7 +235,7 @@ export function ConversationSearch({
     });
 
   let status: ReactNode;
-  if (searching && failed === trimmed) status = t("search.couldntSearch");
+  if (searching && failed === request.id) status = t("search.couldntSearch");
   else if (searching && !stale && !items.length)
     status = t("search.noConversationsMatch");
   else if (!searching && !items.length) status = t("app.noConversationsYet");

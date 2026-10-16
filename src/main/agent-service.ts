@@ -58,13 +58,15 @@ import { withRunTiming, projectMessages, textContent } from "./projection";
 import {
   loadMarkdownParser,
   mayContain,
-  prefilterSource,
+  indexSearchText,
   searchSnippet,
   searchableMessages,
   type Checkpoint,
   type SearchableMessage,
 } from "./conversation-search";
 import { findSearchMatch, foldSearchText } from "../shared/search-text";
+import { SearchCache, type SearchIndex } from "./search-cache";
+import { searchParser } from "./search-parser";
 import { shareUnchanged } from "./structural-sharing";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
 import {
@@ -110,22 +112,10 @@ interface SessionFile {
   size: number;
   /** null: the session has no model; undefined: not read yet. */
   selection?: Selection | null;
-  /** Folded text of every branch, a superset of the current branch. */
-  searchText?: string;
-  /** Current-branch messages, read when a search first needs them. */
-  searchable?: SearchableMessage[] | null;
-  /** Plain text of its replies by Markdown; kept when the file changes. */
-  parsed?: Map<string, string>;
 }
 class SearchCancelled extends Error {}
 interface Runtime {
   manager: SessionManager;
-  /** Search index of the current branch, keyed by its leaf and entry count. */
-  search?: {
-    key: string;
-    messages: SearchableMessage[];
-    parsed: Map<string, string>;
-  };
   session?: AgentSession;
   integrationConfiguration?: string;
   active?: ActiveRun;
@@ -364,11 +354,16 @@ export class AgentService {
         }
       : undefined;
   }
+  private basicSummary(runtime: Runtime) {
+    return {
+      title: runtime.manager.getSessionName() ?? "新会话",
+      updatedAt: runtime.updated,
+    };
+  }
   private summary(id: string, runtime: Runtime): Conversation {
     return {
       id,
-      title: runtime.manager.getSessionName() ?? "新会话",
-      updatedAt: runtime.updated,
+      ...this.basicSummary(runtime),
       phase: runtime.phase,
       selection: this.selection(runtime),
       runId: runtime.active?.id,
@@ -532,6 +527,7 @@ export class AgentService {
   // Session files keyed by path. Pi parses every file to list sessions; the
   // model selection needs another full read, so it is kept until the file changes.
   private files = new Map<string, SessionFile>();
+  private searchCache = new SearchCache();
   private listed?: SessionInfo[];
   private async fileStats() {
     const names = await readdir(this.paths.sessions).catch(() => []);
@@ -570,16 +566,16 @@ export class AgentService {
       files.set(info.path, {
         info,
         ...stamp,
-        parsed: previous?.parsed,
         ...(previous?.mtimeMs === stamp.mtimeMs && previous.size === stamp.size
           ? {
               selection: previous.selection,
-              searchText: previous.searchText,
-              searchable: previous.searchable,
             }
           : {}),
       });
     }
+    for (const file of this.files.values())
+      if (!files.has(file.info.path) && !this.sessions.has(file.info.id))
+        this.searchCache.delete(file.info.id);
     this.files = files;
     // Files Pi could not read are not in `files`; list again until they are.
     this.listed = files.size === stats.size ? found : undefined;
@@ -681,55 +677,66 @@ export class AgentService {
       parsed,
     );
   }
-  // Open conversations keep their index until the branch or entries change.
+  // Oversized indexes keep bounded parse results; rebuild the full message
+  // list so cache capacity never limits which messages can be searched.
   private async runtimeIndex(
     id: string,
     runtime: Runtime,
     checkpoint: Checkpoint,
   ) {
     const key = `${runtime.manager.getLeafId()}/${runtime.manager.getEntryCount()}`;
-    if (runtime.search?.key !== key) {
-      // A conversation opened after a search reuses its file's parsed replies.
-      const parsed =
-        runtime.search?.parsed ??
-        new Map(
-          [...this.files.values()].find((file) => file.info.id === id)?.parsed,
-        );
+    let index = this.searchCache.get(id);
+    if (index?.key !== key || index.messages === undefined) {
+      // Work on a copy so cancellation cannot grow a retained cache entry.
+      const parsed = new Map(index?.parsed);
       const messages = await this.searchable(
         id,
         runtime.manager,
         checkpoint,
         parsed,
       );
-      runtime.search = { key, messages, parsed };
+      index = { key, messages, parsed };
+      this.searchCache.set(id, index);
     }
-    return runtime.search.messages;
+    return index.messages ?? [];
+  }
+  private fileSearchIndex(file: SessionFile): SearchIndex {
+    const key = `file/${file.mtimeMs}/${file.size}`;
+    const previous = this.searchCache.get(file.info.id);
+    return previous?.key === key
+      ? previous
+      : { key, parsed: new Map(previous?.parsed) };
   }
   private async fileIndex(
     path: string,
     file: SessionFile,
     checkpoint: Checkpoint,
+    index = this.fileSearchIndex(file),
   ) {
-    if (file.searchable === undefined) {
+    if (index.messages === undefined) {
       let manager: SessionManager;
       try {
         manager = SessionManager.open(path, this.paths.sessions);
       } catch {
         // list() reports unreadable sessions; search skips them.
-        file.searchable = null;
+        index.messages = null;
+        this.searchCache.set(file.info.id, index);
         return [];
       }
       await checkpoint();
-      file.parsed ??= new Map();
-      file.searchable = await this.searchable(
+      const parsed = new Map(index.parsed);
+      const messages = await this.searchable(
         file.info.id,
         manager,
         checkpoint,
-        file.parsed,
+        parsed,
       );
+      index = { ...index, messages, parsed };
     }
-    return file.searchable ?? [];
+    this.searchCache.set(file.info.id, index);
+    return index.messages ?? [];
   }
+
   /** Indexes conversations ahead of a search, giving way to any search. */
   async prepareSearch() {
     const warm = ++this.warmGeneration;
@@ -746,9 +753,12 @@ export class AgentService {
         await this.runtimeIndex(id, runtime, checkpoint);
         await checkpoint();
       }
+      // Warm recent closed conversations; older ones are indexed on demand.
+      let remaining = 8;
       for (const [path, file] of [...this.files]) {
-        if (!this.sessions.has(file.info.id))
-          await this.fileIndex(path, file, checkpoint);
+        if (this.sessions.has(file.info.id)) continue;
+        if (remaining-- <= 0) break;
+        await this.fileIndex(path, file, checkpoint);
         await checkpoint();
       }
     } catch (error) {
@@ -810,7 +820,7 @@ export class AgentService {
     // Snapshots: conversations can open or close while indexing yields.
     for (const [id, runtime] of [...this.sessions]) {
       await checkpoint();
-      const summary = this.summary(id, runtime);
+      const summary = this.basicSummary(runtime);
       await match(
         id,
         summary.title,
@@ -823,9 +833,13 @@ export class AgentService {
       const { info } = file;
       if (this.sessions.has(info.id)) continue;
       const title = fileTitle(info);
-      file.searchText ??= foldSearchText(prefilterSource(info.allMessagesText));
+      const index = this.fileSearchIndex(file);
+      index.source ??= (
+        await indexSearchText(info.allMessagesText, "source", checkpoint)
+      ).folded;
+      this.searchCache.set(info.id, index);
       if (
-        !mayContain(file.searchText, needle) &&
+        !mayContain(index.source, needle) &&
         findSearchMatch(this.redact(title), needle) < 0
       )
         continue;
@@ -833,7 +847,7 @@ export class AgentService {
         info.id,
         title,
         info.modified.toISOString(),
-        await this.fileIndex(path, file, checkpoint),
+        await this.fileIndex(path, file, checkpoint, index),
       );
     }
     return found
@@ -1769,6 +1783,7 @@ export class AgentService {
       );
       if (sessionFile) await unlink(sessionFile);
       this.sessions.delete(id);
+      this.searchCache.delete(id);
       this.usage.remove(id);
     });
   }
@@ -1782,6 +1797,9 @@ export class AgentService {
   }
   async shutdown() {
     this.stopping = true;
+    this.cancelSearch(true);
+    this.searchCache.clear();
+    searchParser.close();
     await this.cancelAll();
     await Promise.allSettled(
       [...this.sessions.values()].map((runtime) =>

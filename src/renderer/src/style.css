@@ -408,6 +408,11 @@ kbd {
   background-color: color-mix(in srgb, #facc15 45%, transparent);
   color: inherit;
 }
+.katex[data-search-match] {
+  border-radius: 3px;
+  background-color: color-mix(in srgb, #facc15 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, #facc15 45%, transparent);
+}
 .section-label {
   font-size: 13px;
   font-weight: 400;

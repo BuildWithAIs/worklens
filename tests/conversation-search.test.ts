@@ -3,8 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
+import { SearchCache } from "../src/main/search-cache";
+import * as searchMarkdown from "../src/main/search-markdown";
 import * as conversationSearch from "../src/main/conversation-search";
 const realSearchable = conversationSearch.searchableMessages;
 import {
@@ -85,6 +87,21 @@ test("prefilters stored Markdown without missing split phrases", () => {
   expect(mayContain(foldSearchText(priced), "€25")).toBe(false);
   expect(mayContain(foldSearchText(prefilterSource(priced)), "€25")).toBe(true);
   expect(prefilterSource("no references")).toBe("no references");
+});
+
+test("shares currency, CJK links and math preprocessing with the renderer, keeping code literal", () => {
+  expect(markdownText("Cost $12 and $24. Formula $x^2$.")).toBe(
+    "Cost $12 and $24. Formula x^2.",
+  );
+  expect(markdownText("www.example.com（**今天** 很好）")).toBe(
+    "www.example.com（今天 很好）",
+  );
+  expect(markdownText(String.raw`Use \(\frac{a}{b}\) here.`)).toBe(
+    String.raw`Use \frac{a}{b} here.`,
+  );
+  expect(
+    markdownText("`**literal** $12 and $24`\n\n```tex\n\\frac{a}{b}\n```"),
+  ).toBe("**literal** $12 and $24\n\\frac{a}{b}");
 });
 
 test("reuses parsed replies, checks in after every message and drops stale ones", async () => {
@@ -202,7 +219,7 @@ test("searches the current branch of loaded and stored conversations", async () 
   const priced = await settle(
     await service.send({
       requestId: randomUUID(),
-      text: "Costs &euro;25 per month",
+      text: String.raw`Costs &euro;25 per month, or $12 and $24. www.example.com（**今天** 很好） Formula \(\frac{a}{b}\).`,
       selection,
     }),
   );
@@ -232,6 +249,10 @@ test("searches the current branch of loaded and stored conversations", async () 
     expect(await instance.search("€25")).toMatchObject([
       { id: priced.id, snippet: { match: "€25" } },
     ]);
+    for (const query of ["$12", "今天 很好", String.raw`\frac{a}{b}`])
+      expect(await instance.search(query)).toMatchObject([
+        { id: priced.id, snippet: { match: query } },
+      ]);
   };
   await expectations(service);
   // A fresh service reads the conversation from its session file.
@@ -322,4 +343,163 @@ test("searches the current branch of loaded and stored conversations", async () 
   const [[rebuilt]] = indexing.mock.calls;
   expect(rebuilt.length).toBeGreaterThan(0);
   expect(checks).toBe(rebuilt.length);
+});
+
+async function storedSearchFixture(replies: string[]) {
+  const root = await mkdtemp(join(tmpdir(), "worklens-search-cache-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const paths = {
+    runtime: join(root, "runtime"),
+    sessions: join(root, "sessions"),
+    userData: join(root, "app"),
+  };
+  const add = (title: string, messages: string[], timestamp = Date.now()) => {
+    const manager = SessionManager.create(root, paths.sessions);
+    for (const text of messages) {
+      manager.appendMessage({
+        role: "user",
+        content: "Explain this example",
+        timestamp,
+      });
+      manager.appendMessage({
+        role: "assistant",
+        content: [{ type: "text", text }],
+        api: "openai-completions",
+        provider: "worklens-test",
+        model: "fixture",
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: "stop",
+        timestamp,
+      });
+    }
+    manager.appendSessionInfo(title);
+    return manager.getSessionId();
+  };
+  const id = add("Stored search fixture", replies);
+  const runtime = await ModelRuntime.create({
+    modelsPath: null,
+    authPath: join(root, "auth.json"),
+    allowModelNetwork: false,
+  });
+  const create = async () => {
+    const service = new AgentService(
+      runtime,
+      paths,
+      () => {},
+      (text) => text,
+    );
+    await service.initialize();
+    cleanups.push(() => service.shutdown());
+    return service;
+  };
+  return { id, create, add };
+}
+
+test("AgentService uses the default source-test worker for a long stored reply", async () => {
+  const { id, create } = await storedSearchFixture([
+    "A **long** reply with $12 and $24. ".repeat(400),
+  ]);
+  const service = await create();
+  expect(await service.search("$12")).toMatchObject([
+    { id, snippet: { match: "$12" } },
+  ]);
+  await service.open(id);
+  expect(await service.search("long reply")).toMatchObject([
+    { id, snippet: { match: "long reply" } },
+  ]);
+});
+
+test("oversized open and stored indexes reuse parsed replies without hiding uncached matches", async () => {
+  const replies = Array.from(
+    { length: 5 },
+    (_, i) => `token-${i} **${"body ".repeat(70)}**`,
+  );
+  const { id, create } = await storedSearchFixture(replies);
+  const parsing = vi.spyOn(searchMarkdown, "parseSearchMarkdown");
+  for (const opened of [false, true]) {
+    const service = await create();
+    const cache = new SearchCache(12000);
+    Object.assign(service, { searchCache: cache });
+    if (opened) await service.open(id);
+    parsing.mockClear();
+    expect(await service.search("token-0")).toMatchObject([
+      { id, snippet: { match: "token-0" } },
+    ]);
+    const firstReads = parsing.mock.calls.length;
+    const retained = cache.get(id)!;
+    expect(retained.messages).toBeUndefined();
+    expect(retained.parsed.size).toBeGreaterThan(0);
+    if (!opened) expect(retained.source!.length).toBeLessThan(50);
+    parsing.mockClear();
+    expect(await service.search("token-0")).toMatchObject([{ id }]);
+    expect(parsing.mock.calls.length).toBeLessThan(firstReads);
+    for (let i = 0; i < replies.length; i++)
+      expect(await service.search(`token-${i}`)).toMatchObject([
+        { id, snippet: { match: `token-${i}` } },
+      ]);
+    expect(cache.bytes).toBeLessThanOrEqual(cache.limit);
+  }
+});
+
+test("mixed small and oversized conversations retain parse reuse across repeated searches", async () => {
+  const fixture = await storedSearchFixture(["shared small-one"]);
+  const timestamp = Date.now() - 10000;
+  const small2 = fixture.add("Small two", ["shared small-two"], timestamp);
+  const big = fixture.add(
+    "Large fixture",
+    Array.from(
+      { length: 12 },
+      (_, i) => `shared big-${i} **${"body ".repeat(70)}**`,
+    ),
+    timestamp - 1000,
+  );
+  const small3 = fixture.add(
+    "Small three",
+    ["shared small-three"],
+    timestamp - 2000,
+  );
+  const ids = [fixture.id, small2, big, small3];
+  const parsing = vi.spyOn(searchMarkdown, "parseSearchMarkdown");
+  for (const opened of [false, true]) {
+    const service = await fixture.create();
+    const cache = new SearchCache(10000);
+    Object.assign(service, { searchCache: cache });
+    if (opened) for (const id of ids) await service.open(id);
+    parsing.mockClear();
+    expect((await service.search("shared")).map((item) => item.id)).toEqual(
+      ids,
+    );
+    const firstReads = parsing.mock.calls.length;
+    expect(cache.get(big)?.messages).toBeUndefined();
+    expect(cache.get(big)?.parsed.size).toBeGreaterThan(0);
+    for (const id of [fixture.id, small2, small3])
+      expect(cache.get(id)?.messages).toBeDefined();
+    for (let round = 0; round < 2; round++) {
+      parsing.mockClear();
+      expect((await service.search("shared")).map((item) => item.id)).toEqual(
+        ids,
+      );
+      expect(parsing.mock.calls.length).toBeGreaterThan(0);
+      expect(parsing.mock.calls.length).toBeLessThan(firstReads);
+      expect(
+        parsing.mock.calls.every(([text]) => text.startsWith("shared big-")),
+      ).toBe(true);
+      expect(cache.get(big)?.parsed.size).toBeGreaterThan(0);
+      expect(cache.bytes).toBeLessThanOrEqual(cache.limit);
+    }
+    for (const query of ["big-0", "big-11", "small-one"])
+      expect(await service.search(query)).toMatchObject([
+        {
+          id: query.startsWith("big") ? big : fixture.id,
+          snippet: { match: query },
+        },
+      ]);
+  }
 });
