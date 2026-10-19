@@ -32,10 +32,54 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
+// The fold before native lowercasing, one character at a time.
+function foldEach(text: string) {
+  let result = "";
+  for (const character of text) {
+    const folded = character.toLowerCase();
+    result += folded.length === character.length ? folded : character;
+  }
+  return result;
+}
+
 test("folds case without moving offsets", () => {
   expect(foldSearchText("Hello 搓手指 İ")).toHaveLength(
     "Hello 搓手指 İ".length,
   );
+  // Every character folds as it did one at a time, alone or among others,
+  // including Σ at the end of a word.
+  const all = Array.from({ length: 0x110000 }, (_, code) =>
+    code >= 0xd800 && code <= 0xdfff ? "" : String.fromCodePoint(code),
+  );
+  for (const character of all)
+    expect(foldSearchText(character)).toBe(foldEach(character));
+  const text = all.join("");
+  expect(foldSearchText(text)).toBe(foldEach(text));
+  expect(foldSearchText(`${text}ΟΔΟΣ`)).toBe(foldEach(`${text}ΟΔΟΣ`));
+  expect(foldSearchText("ΟΔΟΣ ΙΣ")).toBe("οδοσ ισ");
+  expect(foldSearchText("ΣİΣ ΟΣİ")).toBe(foldEach("ΣİΣ ΟΣİ"));
+  // Long text folds at native speed, so a matched message can't hold the
+  // main process; Greek and Turkish text, with Σ and İ throughout, too.
+  // Compared on the same machine, best of three, so a slow or busy runner
+  // doesn't fail it: the fold before was no faster than one at a time.
+  const fastest = (fold: (text: string) => string, text: string) => {
+    let best = Infinity;
+    for (let run = 0; run < 3; run++) {
+      const started = performance.now();
+      fold(text);
+      best = Math.min(best, performance.now() - started);
+    }
+    return best;
+  };
+  for (const long of [
+    "Some Words 搓手指. ".repeat(200_000),
+    "ΟΔΟΣ İstanbul σας. ".repeat(200_000),
+  ]) {
+    expect(foldSearchText(long)).toBe(foldEach(long));
+    expect(fastest(foldSearchText, long) * 3).toBeLessThan(
+      fastest(foldEach, long),
+    );
+  }
   expect(findSearchMatch("Say HELLO", foldSearchText("hello"))).toBe(4);
   expect(findSearchMatch("分析搓手指心理", "搓手指")).toBe(2);
   expect(findSearchMatch("anything", "")).toBe(-1);

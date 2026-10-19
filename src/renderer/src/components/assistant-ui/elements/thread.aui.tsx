@@ -790,7 +790,8 @@ const UserMessageText: FC<TextMessagePartProps> = ({ text }) => {
             : undefined
         }
       >
-        <div ref={contentRef} className="whitespace-pre-wrap">
+        {/* Conversation search indexes the prompt as typed. */}
+        <div ref={contentRef} className="whitespace-pre-wrap" data-search-text>
           {text}
         </div>
       </div>
