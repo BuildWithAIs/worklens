@@ -1,6 +1,20 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 
+// Disclosure labels keep their size while pressed; the release toggles them.
+async function clickWithoutPressScale(page, trigger) {
+  await trigger.hover();
+  await page.mouse.down();
+  const scale = await trigger.evaluate(async (el) => {
+    await Promise.all(
+      el.getAnimations().map((animation) => animation.finished),
+    );
+    return getComputedStyle(el).scale;
+  });
+  await page.mouse.up();
+  expect(scale).toBe("none");
+}
+
 test("new chat composer stays in place while typing and clearing", async ({
   page,
 }, testInfo) => {
@@ -237,7 +251,7 @@ test("compact tool activity, history actions and fluid message width", async ({
   await expect(
     page.getByText("Checking another source.", { exact: true }),
   ).toHaveCount(0);
-  await groups.first().click();
+  await clickWithoutPressScale(page, groups.first());
   await expect(
     page.getByText("Checking another source.", { exact: true }),
   ).toBeVisible();
@@ -266,7 +280,10 @@ test("compact tool activity, history actions and fluid message width", async ({
     });
   expect(toolGeometry.arrowGap).toBeCloseTo(8, 0);
   expect(toolGeometry.height).toBe(32);
-  await page.locator('[data-slot="tool-fallback-trigger"]').first().click();
+  await clickWithoutPressScale(
+    page,
+    page.locator('[data-slot="tool-fallback-trigger"]').first(),
+  );
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const argsBlock = page.locator('[data-slot="tool-fallback-args"]').first();
   await argsBlock.getByRole("button", { name: "Copy", exact: true }).click();
