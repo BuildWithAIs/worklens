@@ -1,7 +1,9 @@
 import { foldSearchText } from "../../../shared/search-text";
 
 const HIGHLIGHT = "worklens-search";
-const skipped = "button, [aria-hidden='true'], .sr-only";
+// Controls and labels a message shows beside its text, such as a code
+// block's language.
+const skipped = "button, [aria-hidden='true'], .sr-only, .aui-code-header-root";
 const blocks = "p, li, h1, h2, h3, h4, h5, h6, pre, blockquote, td, th, dt, dd";
 const cell = "td, th";
 
@@ -167,13 +169,16 @@ export function revealSearchMatch(
     );
     turn = turn.slice(start, end < 0 ? undefined : end);
   }
-  // Replies first, matching the snippet chosen by the search.
+  // Replies first, matching the snippet chosen by the search. Only the text
+  // the search indexes: not thinking, tools, summaries or message controls.
   const role = (name: string) =>
     turn.filter((message) => message.getAttribute("data-role") === name);
-  const messages = [...role("assistant"), ...role("user")];
+  const texts = [...role("assistant"), ...role("user")].flatMap((message) => [
+    ...message.querySelectorAll("[data-search-text]"),
+  ]);
   let range: Range | undefined;
-  for (const message of messages) {
-    range = findRenderedMatches(message, query).find(
+  for (const text of texts) {
+    range = findRenderedMatches(text, query).find(
       (candidate) => !clipped(candidate, thread),
     );
     if (range) break;

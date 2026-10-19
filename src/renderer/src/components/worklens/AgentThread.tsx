@@ -175,6 +175,10 @@ function toolResult(message: MessageView) {
   };
 }
 
+// Marks reply text, which conversation search indexes and reveals matches
+// in, wherever it shows; thinking and summaries are not indexed.
+const searchedText = { worklens: { searchText: true } };
+
 function convertMessage(view: ConversationView | undefined) {
   return (message: MessageView, index: number): ThreadMessageLike => {
     if (message.role === "user") {
@@ -239,7 +243,12 @@ function convertMessage(view: ConversationView | undefined) {
     } else {
       if (message.thinking)
         content.push({ type: "reasoning", text: message.thinking });
-      if (message.text) content.push({ type: "text", text: message.text });
+      if (message.text)
+        content.push({
+          type: "text",
+          text: message.text,
+          providerMetadata: searchedText,
+        });
     }
     return {
       id: message.id,
@@ -598,7 +607,11 @@ export function AgentThread({
           if (part.type === "text" && !running && position < lastTool) {
             // Display-only reasoning part keeps narration inside the standard
             // process disclosure. The source text and message are untouched.
-            activity.push({ type: "reasoning", text: part.text });
+            activity.push({
+              type: "reasoning",
+              text: part.text,
+              providerMetadata: part.providerMetadata,
+            });
           } else if (part.type === "tool-call" || part.type === "reasoning") {
             activity.push(part);
           } else {
@@ -731,7 +744,13 @@ export function AgentThread({
           displayed.push({
             id: `${segment.message.id}-text`,
             role: "assistant",
-            content: [{ type: "text", text: segment.message.text }],
+            content: [
+              {
+                type: "text",
+                text: segment.message.text,
+                providerMetadata: searchedText,
+              },
+            ],
             status: lastSegment ? status : { type: "complete", reason: "stop" },
             metadata: {
               custom: {

@@ -41,10 +41,75 @@ async function setup(page: Page) {
       "| Wood | Metal |\n| --- | --- |\n| alder | silver |";
     long.messages[17].text = "The zebra crossing is on the corner.";
     long.messages[19].text = String.raw`Cost $12 and $24. www.example.com（**今天** 很好） Formula $x^2$ and \(\frac{a}{b}\).`;
+    // Text beside the indexed prompts and replies: thinking, a summary, a
+    // code block's language and narration moved into the process disclosure.
+    const mixed = {
+      id: "mixed",
+      title: "Mixed chat",
+      phase: "completed",
+      updatedAt: new Date().toISOString(),
+      messages: [
+        {
+          id: "m-0",
+          entryId: "mixed-entry-0",
+          role: "user",
+          text: "Is it ready?",
+        },
+        {
+          id: "m-1",
+          role: "assistant",
+          thinking: "The copper kettle might be cold.",
+          text: "Yes, the copper kettle is ready.",
+        },
+        {
+          id: "m-2",
+          entryId: "mixed-entry-1",
+          role: "user",
+          text: "Plan the walnut desk",
+        },
+        { id: "m-3", role: "assistant", text: "Sure." },
+        { id: "m-4", role: "summary", text: "The user wants a walnut desk." },
+        { id: "m-5", entryId: "mixed-entry-2", role: "user", text: "Run it?" },
+        {
+          id: "m-6",
+          role: "assistant",
+          text: "```python\nprint(1)\n```\n\nRun it with python.",
+        },
+        {
+          id: "m-7",
+          entryId: "mixed-entry-3",
+          role: "user",
+          text: "Check the pipes",
+        },
+        {
+          id: "m-8",
+          role: "assistant",
+          text: "Checking the brass pipe first.",
+        },
+        {
+          id: "m-9",
+          role: "tool",
+          toolId: "m-9",
+          toolName: "bash",
+          args: JSON.stringify({ command: "ls" }),
+          text: "ok",
+          status: "success",
+        },
+        { id: "m-10", role: "assistant", text: "All pipes are fine." },
+        { id: "m-11", entryId: "mixed-entry-4", role: "user", text: "Same?" },
+        {
+          id: "m-12",
+          role: "assistant",
+          thinking: "The oak table is ready.",
+          text: "The oak table is ready.",
+        },
+      ],
+    };
     const views: Record<string, any> = {
       current: turns("current", "Current chat"),
       target: turns("target", "Body language", 3),
       long,
+      mixed,
     };
     const result = (id: string, match: string, messageId: string) => ({
       id,
@@ -55,6 +120,11 @@ async function setup(page: Page) {
     });
     const results: Record<string, unknown[]> = {
       rubbing: [result("target", "rubbing fingers", "target-entry-3")],
+      copper: [result("mixed", "copper", "mixed-entry-0")],
+      walnut: [result("mixed", "walnut", "mixed-entry-1")],
+      python: [result("mixed", "python", "mixed-entry-2")],
+      brass: [result("mixed", "brass", "mixed-entry-3")],
+      oak: [result("mixed", "oak", "mixed-entry-4")],
       zebra: [result("long", "zebra crossing", "long-entry-3")],
       violet: [result("long", "violet horizon", "long-entry-5")],
       alder: [result("long", "alder silver", "long-entry-6")],
@@ -146,6 +216,26 @@ async function setup(page: Page) {
   ).toBeVisible();
 }
 
+// The text block holding the highlight.
+const highlightedBlock = (page: Page) =>
+  page.evaluate(() => {
+    const highlight = CSS.highlights.get("worklens-search");
+    const range = highlight && ([...highlight][0] as Range);
+    const parent = range?.startContainer.parentElement;
+    return parent?.closest("p, [data-search-text]")?.textContent ?? undefined;
+  });
+
+// Whether the highlight is inside a process disclosure, with the thinking.
+const highlightInDisclosure = (page: Page) =>
+  page.evaluate(() => {
+    const highlight = CSS.highlights.get("worklens-search");
+    const range = highlight && ([...highlight][0] as Range);
+    const parent = range?.startContainer.parentElement;
+    return parent
+      ? !!parent.closest('[data-slot="reasoning-root"]')
+      : undefined;
+  });
+
 const highlighted = (page: Page) =>
   page.evaluate(() => {
     const highlight = CSS.highlights.get("worklens-search");
@@ -169,7 +259,7 @@ test("searches conversations, opens a result and reveals the match", async ({
   const dialog = page.getByRole("dialog", { name: "Search conversations" });
   const input = dialog.getByRole("combobox", { name: "Search conversations" });
   await expect(input).toBeFocused();
-  await expect(dialog.getByRole("option")).toHaveCount(3);
+  await expect(dialog.getByRole("option")).toHaveCount(4);
   await expect(input).toHaveAttribute("placeholder", "Search");
   // Placed as if centered at its full 530px height, then fits its results;
   // on tall windows the top stops at 25vh.
@@ -436,7 +526,7 @@ test("new content starts at the top, and only long lists scroll", async ({
   await expect(options).toHaveCount(30);
   await toBottom();
   await input.fill("");
-  await expect(options).toHaveCount(3);
+  await expect(options).toHaveCount(4);
   expect(await scrolled()).toBe(0);
 });
 
@@ -700,3 +790,63 @@ for (const query of ["$12", "今天 很好"]) {
       .toEqual({ role: "assistant", text: query, visible: true });
   });
 }
+
+test("reveals only the prompt and reply text the search indexes", async ({
+  page,
+}) => {
+  await setup(page);
+  const dialog = page.getByRole("dialog", { name: "Search conversations" });
+  const open = async (query: string) => {
+    await page.keyboard.press("ControlOrMeta+k");
+    await dialog.getByRole("combobox").fill(query);
+    await expect(
+      dialog.getByRole("option", { name: /Mixed chat/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+  };
+  await page.getByRole("button", { name: "Mixed chat", exact: true }).click();
+  await expect(
+    page.getByText("Yes, the copper kettle is ready."),
+  ).toBeVisible();
+
+  // Expanded thinking with the same words comes first, but isn't indexed.
+  const thoughts = page.getByRole("button", { name: "Thoughts" });
+  await thoughts.first().click();
+  await expect(
+    page.getByText("The copper kettle might be cold."),
+  ).toBeVisible();
+  await open("copper");
+  await expect
+    .poll(() => highlightedBlock(page))
+    .toBe("Yes, the copper kettle is ready.");
+
+  // A summary after the reply isn't indexed: the snippet came from the prompt.
+  await open("walnut");
+  await expect
+    .poll(() => highlighted(page))
+    .toMatchObject({ role: "user", text: "walnut" });
+
+  // A code block's language label isn't part of the reply text.
+  await open("python");
+  await expect.poll(() => highlightedBlock(page)).toBe("Run it with python.");
+
+  // Narration moved into the process disclosure is indexed reply text: it is
+  // revealed once the disclosure is expanded.
+  await thoughts.nth(1).click();
+  await expect(page.getByText("Checking the brass pipe first.")).toBeVisible();
+  await open("brass");
+  await expect
+    .poll(() => highlightedBlock(page))
+    .toBe("Checking the brass pipe first.");
+  expect(await highlightInDisclosure(page)).toBe(true);
+
+  // Thinking that reads exactly like the reply is still thinking.
+  await thoughts.last().click();
+  await expect(page.getByText("The oak table is ready.")).toHaveCount(2);
+  await open("oak");
+  await expect
+    .poll(() => highlightedBlock(page))
+    .toBe("The oak table is ready.");
+  expect(await highlightInDisclosure(page)).toBe(false);
+});

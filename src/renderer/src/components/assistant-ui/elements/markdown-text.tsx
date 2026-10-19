@@ -77,10 +77,21 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
   return ref.current;
 };
 
+const searchTextProps = {
+  "data-search-text": "",
+} as ComponentPropsWithoutRef<"div">;
+
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
   const assistant = useAuiState((s) => s.message.role === "assistant");
   const running = useAuiState((s) => s.thread.isRunning);
   const { text } = useMessagePartText();
+  // Reply text, marked where it was converted, is where conversation search
+  // reveals matches; thinking and summaries are not indexed.
+  const searchable = useAuiState(
+    (s) =>
+      (s.part.type === "text" || s.part.type === "reasoning") &&
+      s.part.providerMetadata?.worklens?.searchText === true,
+  );
   const workspace = useArtifactWorkspace();
   const conversationId = workspace?.conversationId;
   const outputs = JSON.stringify(workspace?.outputPaths ?? []);
@@ -171,6 +182,7 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
         ],
       ]}
       preprocess={preprocessMarkdownMath}
+      containerProps={searchable ? searchTextProps : undefined}
       className={cn(
         "aui-md font-normal antialiased",
         compact ? "text-sm leading-6" : "text-[14px] leading-[1.7]",
