@@ -59,16 +59,26 @@ test("folds case without moving offsets", () => {
   expect(foldSearchText("ΟΔΟΣ ΙΣ")).toBe("οδοσ ισ");
   expect(foldSearchText("ΣİΣ ΟΣİ")).toBe(foldEach("ΣİΣ ΟΣİ"));
   // Long text folds at native speed, so a matched message can't hold the
-  // main process.
-  // Greek and Turkish text, with Σ and İ throughout, too.
+  // main process; Greek and Turkish text, with Σ and İ throughout, too.
+  // Compared on the same machine, best of three, so a slow or busy runner
+  // doesn't fail it: the fold before was no faster than one at a time.
+  const fastest = (fold: (text: string) => string, text: string) => {
+    let best = Infinity;
+    for (let run = 0; run < 3; run++) {
+      const started = performance.now();
+      fold(text);
+      best = Math.min(best, performance.now() - started);
+    }
+    return best;
+  };
   for (const long of [
     "Some Words 搓手指. ".repeat(200_000),
     "ΟΔΟΣ İstanbul σας. ".repeat(200_000),
   ]) {
-    const started = performance.now();
-    const folded = foldSearchText(long);
-    expect(performance.now() - started).toBeLessThan(50);
-    expect(folded).toBe(foldEach(long));
+    expect(foldSearchText(long)).toBe(foldEach(long));
+    expect(fastest(foldSearchText, long) * 3).toBeLessThan(
+      fastest(foldEach, long),
+    );
   }
   expect(findSearchMatch("Say HELLO", foldSearchText("hello"))).toBe(4);
   expect(findSearchMatch("分析搓手指心理", "搓手指")).toBe(2);
