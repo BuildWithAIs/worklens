@@ -6,9 +6,10 @@ import {
 } from "@/lib/conversation-title";
 import { BackgroundEffect } from "@/components/worklens/BackgroundEffect";
 import { BrandMark } from "@/components/worklens/BrandMark";
-import { HistoryTitle } from "@/components/worklens/HistoryTitle";
+import { ConversationNavigation } from "@/components/worklens/ConversationNavigation";
+import { useLatestCallback } from "@/hooks/use-latest-callback";
 import { Input } from "@/components/ui/input";
-import { Hint, OverflowHint } from "@/components/ui/tooltip";
+import { Hint } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -16,31 +17,20 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import {
   lazy,
   startTransition,
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import {
   Plus,
   Search,
-  MoreHorizontal,
   Settings as SettingsIcon,
   X,
-  Trash2,
-  Pencil,
-  Pin,
-  PinOff,
   LoaderCircle,
 } from "lucide-react";
 import type { SettingsSection } from "@/components/worklens/SettingsPage";
@@ -58,7 +48,7 @@ import {
 } from "@/components/worklens/ConversationSearch";
 import { clearSearchHighlight, revealSearchMatch } from "@/lib/search-reveal";
 import { ThreadLoadingIndicator } from "@/components/assistant-ui/elements/thread.aui";
-import type { ChatImage } from "../../shared/chat-images";
+import type { ChatImage, EditedChatImage } from "../../shared/chat-images";
 import type {
   Bootstrap,
   GlobalUsage,
@@ -407,42 +397,47 @@ export function App() {
     preference.addEventListener("change", apply);
     return () => preference.removeEventListener("change", apply);
   }, [data?.settings.theme]);
-  async function open(id: string, defaults = data?.settings.defaults) {
-    if (id === current) {
-      if (!historyLoad && page === "chat") return;
-      navigation.current++;
-      setHistoryLoad(undefined);
-      setPage("chat");
-      return;
-    }
-    if (id === historyLoad?.id && !historyLoad.failed && page === "chat")
-      return;
-    const visit = ++navigation.current;
-    visibleConversation.current = undefined;
-    setReadyConversation(undefined);
-    setPage("chat");
-    setHistoryLoad({ id, failed: false });
-    setHistoryStartedAt(performance.now());
-    try {
-      await afterPaint();
-      if (visit !== navigation.current) return;
-      const view = await api.invoke("open", { id });
-      if (visit !== navigation.current) return;
-      // History can render in the background; selection already painted above.
-      startTransition(() => {
-        acceptView(view);
-        setCurrent(id);
-        setSelection(view.selection ?? defaults);
-        setText("");
-        setDraftImages([]);
+  const open = useLatestCallback(
+    async (
+      id: string,
+      defaults: Selection | undefined = data?.settings.defaults,
+    ) => {
+      if (id === current) {
+        if (!historyLoad && page === "chat") return;
+        navigation.current++;
         setHistoryLoad(undefined);
-      });
-    } catch {
-      if (visit !== navigation.current) return;
-      setHistoryLoad({ id, failed: true });
-    }
-  }
-  function newConversation() {
+        setPage("chat");
+        return;
+      }
+      if (id === historyLoad?.id && !historyLoad.failed && page === "chat")
+        return;
+      const visit = ++navigation.current;
+      visibleConversation.current = undefined;
+      setReadyConversation(undefined);
+      setPage("chat");
+      setHistoryLoad({ id, failed: false });
+      setHistoryStartedAt(performance.now());
+      try {
+        await afterPaint();
+        if (visit !== navigation.current) return;
+        const view = await api.invoke("open", { id });
+        if (visit !== navigation.current) return;
+        // History can render in the background; selection already painted above.
+        startTransition(() => {
+          acceptView(view);
+          setCurrent(id);
+          setSelection(view.selection ?? defaults);
+          setText("");
+          setDraftImages([]);
+          setHistoryLoad(undefined);
+        });
+      } catch {
+        if (visit !== navigation.current) return;
+        setHistoryLoad({ id, failed: true });
+      }
+    },
+  );
+  const newConversation = useLatestCallback(() => {
     navigation.current++;
     if (historyLoad && !current) {
       setHistoryLoad(undefined);
@@ -458,7 +453,7 @@ export function App() {
     setText("");
     setDraftImages([]);
     setPage("chat");
-  }
+  });
   async function deleteConversation(id: string) {
     if (deletionPending.current) return;
     deletionPending.current = true;
@@ -494,7 +489,7 @@ export function App() {
       setDeleting(false);
     }
   }
-  async function togglePin(id: string) {
+  const togglePin = useLatestCallback(async (id: string) => {
     if (!data || pinSaving.current) return;
     pinSaving.current = true;
     setPinPending(true);
@@ -516,7 +511,7 @@ export function App() {
       pinSaving.current = false;
       setPinPending(false);
     }
-  }
+  });
   async function settings(patch: Partial<Settings>) {
     // Show a theme at once instead of after the save round trip; restore the
     // previous one if saving fails.
@@ -541,47 +536,49 @@ export function App() {
       previous ? { ...previous, settings: result } : previous,
     );
   }
-  async function sendText(nextText: string, images: ChatImage[] = []) {
-    if (!selection || (!nextText.trim() && !images.length) || sending || busy)
-      throw new Error("消息不能为空");
-    const submissionKey = current ?? draftId;
-    if (submissionLocks.current.has(submissionKey))
-      throw new Error("当前会话正在运行，请先停止");
-    submissionLocks.current.add(submissionKey);
-    setPendingSends((previous) => new Set(previous).add(submissionKey));
-    const visit = navigation.current;
-    setNotice(undefined);
-    try {
-      const view = await api.invoke("send", {
-        conversationId: current,
-        requestId: crypto.randomUUID(),
-        text: nextText,
-        images,
-        selection,
-      });
-      acceptView(view);
-      if (visit === navigation.current) {
-        setCurrent(view.id);
-        setText("");
-        setDraftImages([]);
-        // The prompt is already accepted. A settings failure must not restore
-        // it as an unsent draft and invite a duplicate submission.
-        void settings({ lastConversation: view.id }).catch((error) =>
-          notifyError(String(error)),
-        );
+  const sendText = useLatestCallback(
+    async (nextText: string, images: ChatImage[] = []) => {
+      if (!selection || (!nextText.trim() && !images.length) || sending || busy)
+        throw new Error("消息不能为空");
+      const submissionKey = current ?? draftId;
+      if (submissionLocks.current.has(submissionKey))
+        throw new Error("当前会话正在运行，请先停止");
+      submissionLocks.current.add(submissionKey);
+      setPendingSends((previous) => new Set(previous).add(submissionKey));
+      const visit = navigation.current;
+      setNotice(undefined);
+      try {
+        const view = await api.invoke("send", {
+          conversationId: current,
+          requestId: crypto.randomUUID(),
+          text: nextText,
+          images,
+          selection,
+        });
+        acceptView(view);
+        if (visit === navigation.current) {
+          setCurrent(view.id);
+          setText("");
+          setDraftImages([]);
+          // The prompt is already accepted. A settings failure must not restore
+          // it as an unsent draft and invite a duplicate submission.
+          void settings({ lastConversation: view.id }).catch((error) =>
+            notifyError(String(error)),
+          );
+        }
+      } catch (error) {
+        notifyError(String(error));
+        throw error;
+      } finally {
+        submissionLocks.current.delete(submissionKey);
+        setPendingSends((previous) => {
+          const next = new Set(previous);
+          next.delete(submissionKey);
+          return next;
+        });
       }
-    } catch (error) {
-      notifyError(String(error));
-      throw error;
-    } finally {
-      submissionLocks.current.delete(submissionKey);
-      setPendingSends((previous) => {
-        const next = new Set(previous);
-        next.delete(submissionKey);
-        return next;
-      });
-    }
-  }
+    },
+  );
   async function mutateMessage(action: () => Promise<ConversationView>) {
     if (!current || busy || submissionLocks.current.has(current))
       throw new Error("当前会话正在运行，请先停止");
@@ -599,7 +596,7 @@ export function App() {
       });
     }
   }
-  async function changeModel(next: Selection) {
+  const changeModel = useLatestCallback(async (next: Selection) => {
     setSelection(next);
     void settings({ defaults: next }).catch(() => {});
     if (!current) return;
@@ -609,8 +606,8 @@ export function App() {
     } catch (error) {
       notifyError(String(error));
     }
-  }
-  async function cancelCurrent() {
+  });
+  const cancelCurrent = useLatestCallback(async () => {
     if (!currentView?.runId) return;
     try {
       await api.invoke("cancel", {
@@ -620,7 +617,66 @@ export function App() {
     } catch (nextError) {
       notifyError(String(nextError));
     }
-  }
+  });
+  const editMessage = useLatestCallback(
+    async (messageId: string, text: string, images: EditedChatImage[]) => {
+      if (!current || !selection || !currentView?.branchId)
+        throw new Error("MESSAGE_VERSION_MISSING");
+      const input = {
+        conversationId: current,
+        messageId,
+        expectedBranchId: currentView.branchId,
+        requestId: crypto.randomUUID(),
+        text,
+        images,
+        selection,
+      };
+      await mutateMessage(() => api.invoke("editMessage", input));
+    },
+  );
+  const selectMessageVersion = useLatestCallback(
+    async (messageId: string, targetId: string) => {
+      if (!current || !currentView?.branchId)
+        throw new Error("MESSAGE_VERSION_MISSING");
+      const input = {
+        conversationId: current,
+        messageId,
+        targetId,
+        expectedBranchId: currentView.branchId,
+      };
+      await mutateMessage(() => api.invoke("selectMessageVersion", input));
+    },
+  );
+  const draftLoaded = useCallback(() => {
+    setText("");
+    setDraftImages([]);
+  }, []);
+  const recoveredEditLoaded = useCallback(
+    () => setRecoveredEdit(undefined),
+    [],
+  );
+  const openProviderSettings = useCallback(() => {
+    setSettingsSection("providers");
+    setPage("settings");
+  }, []);
+  const manageModels = useLatestCallback(() => {
+    setPage("settings");
+    setSettingsSection(
+      data?.providers.some((p) => p.configured) ? "models" : "providers",
+    );
+  });
+  // The composer uses settings and providers; streaming history and usage are
+  // independent. Keep that boundary stable so background runs cannot render it.
+  const modelMenu = useMemo(
+    () =>
+      data && {
+        data: { settings: data.settings, providers: data.providers },
+        selection,
+        onChange: changeModel,
+        onManage: manageModels,
+      },
+    [data?.settings, data?.providers, selection, changeModel, manageModels],
+  );
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (deletionPending.current) return;
@@ -656,19 +712,6 @@ export function App() {
   const availableModel = data.providers
     .find((p) => p.id === selection?.provider)
     ?.models.find((m) => m.id === selection?.model);
-  const pinnedIds = new Set(data.settings.pinnedConversationIds ?? []);
-  const groups = [
-    {
-      key: "pinned",
-      label: t("app.pinned"),
-      conversations: data.conversations.filter((c) => pinnedIds.has(c.id)),
-    },
-    {
-      key: "recents",
-      label: t("app.recents"),
-      conversations: data.conversations.filter((c) => !pinnedIds.has(c.id)),
-    },
-  ];
   return (
     <div
       className="app-shell"
@@ -744,122 +787,16 @@ export function App() {
           {t("app.newChat")}
           <kbd aria-hidden="true">{isMac ? "⌘ N" : "Ctrl N"}</kbd>
         </Button>
-        <nav aria-label={t("app.conversations")} className="conversation-list">
-          {groups
-            .filter(
-              (group) =>
-                group.key === "recents" || group.conversations.length > 0,
-            )
-            .map((group) => (
-              <section
-                key={group.key}
-                className="conversation-group"
-                aria-label={group.label}
-              >
-                <div className="section-label">{group.label}</div>
-                {group.key === "recents" && !data.conversations.length && (
-                  <p className="sidebar-empty">{t("app.noConversationsYet")}</p>
-                )}
-                {group.conversations.map((conversation) => (
-                  <div
-                    key={conversation.id}
-                    className={`conversation-item ${selectedConversation === conversation.id ? "selected" : ""}`}
-                  >
-                    <OverflowHint content={conversation.title}>
-                      <Button
-                        variant="ghost"
-                        aria-current={
-                          selectedConversation === conversation.id
-                            ? "page"
-                            : undefined
-                        }
-                        aria-label={conversation.title}
-                        className="conversation-open"
-                        onClick={() => void open(conversation.id)}
-                      >
-                        <span className="conversation-title">
-                          <HistoryTitle title={conversation.title} />
-                        </span>
-                      </Button>
-                    </OverflowHint>
-                    {active(conversation.phase) && (
-                      <span
-                        className="history-loading-ring"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {unread.has(conversation.id) &&
-                      !active(conversation.phase) && (
-                        <span
-                          className="conversation-unread"
-                          role="img"
-                          aria-label={t("app.unreadReply")}
-                        />
-                      )}
-                    <div className="conversation-actions">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={t("app.conversationOptions", {
-                                title: conversation.title,
-                              })}
-                            />
-                          }
-                        >
-                          <MoreHorizontal size={16} />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" side="right">
-                          <DropdownMenuGroup>
-                            <DropdownMenuItem
-                              disabled={pinPending}
-                              onClick={() => void togglePin(conversation.id)}
-                            >
-                              {pinnedIds.has(conversation.id) ? (
-                                <PinOff />
-                              ) : (
-                                <Pin />
-                              )}
-                              {pinnedIds.has(conversation.id)
-                                ? t("app.unpin")
-                                : t("app.pin")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setDialog({
-                                  type: "rename",
-                                  id: conversation.id,
-                                  title: conversation.title,
-                                })
-                              }
-                            >
-                              <Pencil />
-                              {t("app.rename")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() =>
-                                setDialog({
-                                  type: "delete",
-                                  id: conversation.id,
-                                  title: conversation.title,
-                                })
-                              }
-                            >
-                              <Trash2 />
-                              {t("common.delete")}
-                            </DropdownMenuItem>
-                          </DropdownMenuGroup>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                ))}
-              </section>
-            ))}
-        </nav>
+        <ConversationNavigation
+          conversations={data.conversations}
+          pinnedConversationIds={data.settings.pinnedConversationIds}
+          selected={selectedConversation}
+          unread={unread}
+          pinPending={pinPending}
+          onOpen={open}
+          onPin={togglePin}
+          onDialog={setDialog}
+        />
         <div className="sidebar-bottom">
           <Button
             variant="ghost"
@@ -942,63 +879,20 @@ export function App() {
               draftImages={draftImages}
               supportsImages={!!availableModel?.image}
               onError={notifyError}
-              onDraftLoaded={() => {
-                setText("");
-                setDraftImages([]);
-              }}
+              onDraftLoaded={draftLoaded}
               recoveredEdit={
                 recoveredEdit?.conversationId === current
                   ? recoveredEdit
                   : undefined
               }
-              onRecoveredEditLoaded={() => setRecoveredEdit(undefined)}
+              onRecoveredEditLoaded={recoveredEditLoaded}
               onSend={sendText}
-              onEdit={async (messageId, text, images) => {
-                if (!current || !selection || !currentView?.branchId)
-                  throw new Error("MESSAGE_VERSION_MISSING");
-                const input = {
-                  conversationId: current,
-                  messageId,
-                  expectedBranchId: currentView.branchId,
-                  requestId: crypto.randomUUID(),
-                  text,
-                  images,
-                  selection,
-                };
-                await mutateMessage(() => api.invoke("editMessage", input));
-              }}
-              onSelectVersion={async (messageId, targetId) => {
-                if (!current || !currentView?.branchId)
-                  throw new Error("MESSAGE_VERSION_MISSING");
-                const input = {
-                  conversationId: current,
-                  messageId,
-                  targetId,
-                  expectedBranchId: currentView.branchId,
-                };
-                await mutateMessage(() =>
-                  api.invoke("selectMessageVersion", input),
-                );
-              }}
+              onEdit={editMessage}
+              onSelectVersion={selectMessageVersion}
               onCancel={cancelCurrent}
-              onOpenProviderSettings={() => {
-                setSettingsSection("providers");
-                setPage("settings");
-              }}
+              onOpenProviderSettings={openProviderSettings}
               onNewConversation={newConversation}
-              modelMenu={{
-                data,
-                selection,
-                onChange: changeModel,
-                onManage: () => {
-                  setPage("settings");
-                  setSettingsSection(
-                    data.providers.some((p) => p.configured)
-                      ? "models"
-                      : "providers",
-                  );
-                },
-              }}
+              modelMenu={modelMenu}
             />
           </div>
         </>

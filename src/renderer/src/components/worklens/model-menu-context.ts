@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 import type { Bootstrap, Selection } from "../../../../shared/contracts";
 
 export type ModelMenuProps = {
-  data: Bootstrap;
+  data: Pick<Bootstrap, "settings" | "providers">;
   selection?: Selection;
   onChange: (value: Selection) => void;
   onManage: () => void;

@@ -40,7 +40,7 @@ export function ModelMenu({
   onManage,
   openRequest,
 }: {
-  data: Bootstrap;
+  data: Pick<Bootstrap, "settings" | "providers">;
   value?: Selection;
   disabled?: boolean;
   onChange: (value: Selection) => void;
