@@ -19,23 +19,44 @@
   font-weight: 400;
   cursor: pointer;
 }
-.usage-trigger:hover {
-  background: var(--soft);
-  color: var(--text);
-}
-/* The open popover already marks the state; a filled trigger beside it
-   only adds weight, so the chevron flips instead. */
+/* A fill would cover the meter's own grey track, so the trigger stays
+   unfilled. Hover and the open popover darken the text and the track
+   instead; the chevron also flips while open. */
+.usage-trigger,
+.usage-trigger:hover,
 .usage-trigger[aria-expanded="true"] {
   background: transparent;
+  color: var(--muted);
+}
+.usage-trigger:is(:hover, [aria-expanded="true"]) {
   color: var(--text);
 }
 .usage-trigger > svg:last-child {
-  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  color: var(--faint);
+}
+.usage-trigger:is(:hover, [aria-expanded="true"]) > svg:last-child {
+  color: var(--text);
+}
+.usage-trigger:is(:hover, [aria-expanded="true"]) .usage-context-track {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+.usage-trigger,
+.usage-trigger .usage-context-track {
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+.usage-trigger > svg:last-child {
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 120ms ease;
 }
 .usage-trigger[aria-expanded="true"] > svg:last-child {
   transform: rotate(180deg);
 }
 @media (prefers-reduced-motion: reduce) {
+  .usage-trigger,
+  .usage-trigger .usage-context-track,
   .usage-trigger > svg:last-child {
     transition: none;
   }

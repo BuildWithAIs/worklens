@@ -877,3 +877,65 @@ test("the usage button opens the popover on the first click", async ({
     ).toBeVisible();
   }
 });
+
+for (const dark of [false, true]) {
+  for (const reducedMotion of ["reduce", "no-preference"]) {
+    test(`the usage button darkens its text and meter on hover and while open (${dark ? "dark" : "light"}, ${reducedMotion})`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion });
+      await fixture(page, { dark });
+      const trigger = page.locator(".usage-trigger");
+      const style = () =>
+        trigger.evaluate(async (el) => {
+          // Wait for real CSS transitions instead of assuming the renderer's
+          // default reduced-motion setting or using a fixed delay.
+          await Promise.all(
+            el
+              .getAnimations({ subtree: true })
+              .filter((animation) => animation instanceof CSSTransition)
+              .map((animation) => animation.finished.catch(() => {})),
+          );
+          return {
+            background: getComputedStyle(el).backgroundColor,
+            text: getComputedStyle(el.querySelector(":scope > span")).color,
+            track: getComputedStyle(el.querySelector(".usage-context-track"))
+              .backgroundColor,
+            chevron: getComputedStyle(el.querySelector("svg:last-child")).color,
+          };
+        });
+      await page.mouse.move(10, 500);
+      const rest = await style();
+      await trigger.hover();
+      const hover = await style();
+      await trigger.click();
+      await expect(page.locator(".usage-popover")).toBeVisible();
+      // The open state alone keeps the cue, without the pointer on the button.
+      await page.mouse.move(10, 500);
+      const open = await style();
+      // A fill would cover the meter's grey track and make the bar look broken.
+      for (const state of [rest, hover, open])
+        expect(state.background).toBe("rgba(0, 0, 0, 0)");
+      for (const part of ["text", "track", "chevron"]) {
+        expect(hover[part]).not.toBe(rest[part]);
+        expect(open[part]).toBe(hover[part]);
+      }
+      await page.keyboard.press("Escape");
+      await expect(page.locator(".usage-popover")).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveCSS("outline-style", "solid");
+      expect(await style()).toEqual(rest);
+      await trigger.press("Enter");
+      await expect(trigger).toHaveAttribute("aria-expanded", "true");
+      expect(await style()).toEqual(open);
+      if (reducedMotion === "reduce") {
+        for (const element of [
+          trigger,
+          trigger.locator(".usage-context-track"),
+          trigger.locator("svg:last-child"),
+        ])
+          await expect(element).toHaveCSS("transition-duration", "0s");
+      }
+    });
+  }
+}

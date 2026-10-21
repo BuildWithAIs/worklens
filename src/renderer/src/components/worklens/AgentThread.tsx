@@ -34,6 +34,7 @@ import { activityIcon } from "@/lib/activity-icon";
 import { useAppTranslation } from "@/i18n";
 import { formatDuration } from "@/lib/duration";
 import {
+  memo,
   useEffect,
   useMemo,
   useRef,
@@ -496,7 +497,7 @@ const threadComponents = {
   MessageError: RunErrorCard,
 };
 
-export function AgentThread({
+export const AgentThread = memo(function AgentThread({
   suspended = false,
   onHistoryReady,
   historyStartedAt,
@@ -1079,6 +1080,6 @@ export function AgentThread({
       </AssistantRuntimeProvider>
     </MessageEditingContext.Provider>
   );
-}
+});
 import { SkillComposerInput } from "./skills/SkillComposerInput";
 import { createImageLoader } from "@/lib/image-loader";
