@@ -1,3 +1,4 @@
+import type { PermissionEvent, PermissionRequests } from "./permissions";
 import type {
   ChatImage,
   ChatImageRef,
@@ -315,7 +316,7 @@ export interface ConversationFile {
   content?: string;
 }
 
-export interface Requests {
+export interface Requests extends PermissionRequests {
   mcpSave: { input: { config: string }; output: McpSnapshot };
   mcpTest: { input: { name: string }; output: { tools: number } };
   mcpLogin: { input: { name: string; loginId: string }; output: void };
@@ -539,6 +540,7 @@ export interface WorkLensAPI {
   ): Promise<Requests[K]["output"]>;
   onChat(listener: (event: ChatEvent) => void): () => void;
   onAuth(listener: (event: AuthStep) => void): () => void;
+  onPermission(listener: (event: PermissionEvent) => void): () => void;
 }
 declare global {
   interface Window {

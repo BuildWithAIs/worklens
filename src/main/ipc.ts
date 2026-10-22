@@ -1,3 +1,5 @@
+import type { ApprovalService } from "./permissions/approval-service";
+import { permissionHandlers } from "./permissions/ipc";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dialog, nativeTheme, shell, type BrowserWindow } from "electron";
@@ -38,6 +40,8 @@ export interface RequestContext {
   artifacts: LocalArtifacts;
   connectors: ReturnType<typeof createConnectors>;
   runtime: ModelRuntime;
+  permissions: ApprovalService;
+  permissionReviewer: () => object | undefined;
 }
 type AppRequest = Exclude<keyof Requests, ConnectorRequest>;
 export type RequestHandlers = {
@@ -69,6 +73,7 @@ export function requestHandlers(context: RequestContext): RequestHandlers {
     connectors,
   } = context;
   return {
+    ...permissionHandlers(context.permissions, context.permissionReviewer),
     mcpSave: (input) => mcp.save(input.config),
     mcpTest: (input) => mcp.test(input.name, paths.runtime, context.runtime),
     mcpLogin: (input) => mcp.login(input.name, input.loginId),

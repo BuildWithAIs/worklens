@@ -7,6 +7,14 @@ if (process.platform === "darwin") {
   });
 }
 const api: WorkLensAPI = {
+  onPermission: (listener) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      value: Parameters<typeof listener>[0],
+    ) => listener(value);
+    ipcRenderer.on("worklens:permission", handler);
+    return () => ipcRenderer.removeListener("worklens:permission", handler);
+  },
   invoke: async (method, input) => {
     const result = await ipcRenderer.invoke("worklens:request", method, input);
     if (!result.ok) throw new Error(result.error);

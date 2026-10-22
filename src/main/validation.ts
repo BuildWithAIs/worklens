@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { permissionSchemas } from "./permissions/validation";
 import { connectorSchemas } from "./connectors/ipc";
 import { chatImageSourceSchema, chatImagesSchema } from "./chat-images";
 import { CHAT_IMAGE_LIMITS } from "../shared/chat-images";
@@ -39,6 +40,7 @@ export const selection = z
   })
   .strict();
 export const schemas = {
+  ...permissionSchemas,
   mcpSave: z.object({ config: z.string().max(256000) }).strict(),
   mcpTest: z
     .object({ name: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/) })

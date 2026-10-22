@@ -1,3 +1,4 @@
+import type { ApprovalService } from "./permissions/approval-service";
 import { editParent, messageVersions, versionLeaf } from "./message-versions";
 import { readHtmlPreview, htmlActionFile } from "./html-preview";
 import {
@@ -216,6 +217,7 @@ export class AgentService {
     private jevConsent?: JevConsent,
     private mcp?: McpService,
     private codemodeEnabled: () => boolean = () => true,
+    private permissions?: Pick<ApprovalService, "beginTask" | "endTask">,
   ) {}
   async initialize() {
     await Promise.all([
@@ -1490,6 +1492,7 @@ export class AgentService {
           sequence: 0,
         };
         runtime.active = active;
+        this.permissions?.beginTask(id, active.id);
         runtime.history = undefined;
         runtime.phase = "generating";
         runtime.error = undefined;
@@ -1514,6 +1517,7 @@ export class AgentService {
             editOf: edit?.messageId,
           });
         } catch (error) {
+          this.permissions?.endTask(id, active.id);
           runtime.active = undefined;
           runtime.phase = "failed";
           throw error;
@@ -1550,6 +1554,7 @@ export class AgentService {
           );
           this.refreshUsage(runtime);
         } catch (error) {
+          this.permissions?.endTask(id, active.id);
           runtime.active = undefined;
           runtime.phase = "failed";
           if (edit) await this.restoreBranch(runtime, previousLeaf);
@@ -1661,6 +1666,7 @@ export class AgentService {
                 await this.restoreBranch(runtime, previousLeaf);
                 this.refreshUsage(runtime);
               }
+              this.permissions?.endTask(id, active.id);
               this.publish(id, runtime, "run_end", true);
             } catch {
               this.diagnostics.push("会话状态更新未完成，已保留恢复记录。");
@@ -1668,6 +1674,7 @@ export class AgentService {
             } finally {
               if (runtime.timer) clearTimeout(runtime.timer);
               runtime.timer = undefined;
+              this.permissions?.endTask(id, active.id);
               runtime.active = undefined;
               runtime.history = undefined;
             }
@@ -1708,6 +1715,7 @@ export class AgentService {
     const active = runtime?.active;
     if (!runtime || !active || active.id !== runId) return;
     active.cancelled = true;
+    this.permissions?.endTask(id, active.id);
     runtime.phase = "stopping";
     this.publish(id, runtime, "run_stopping", true);
     await runtime.session?.abort();

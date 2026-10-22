@@ -1,3 +1,7 @@
+import { assertRequestSource } from "./ipc-source";
+import { ApprovalService } from "./permissions/approval-service";
+import { PermissionStore } from "./permissions/store";
+import { AuditService } from "./permissions/audit-service";
 import {
   app,
   BrowserWindow,
@@ -59,6 +63,8 @@ export let agents: AgentService | undefined;
 let providers: ProviderService | undefined;
 let mcp: McpService | undefined;
 let quitting = false;
+let permissions: ApprovalService | undefined;
+let permissionReviewer: object | undefined;
 const chatUpdates = new ChatUpdates();
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -148,6 +154,19 @@ else {
         if (window && !window.isDestroyed())
           window.webContents.send("worklens:chat", chatUpdates.encode(event));
       };
+      const permissionService = new ApprovalService(
+        new PermissionStore(
+          join(paths.userData, "permissions", "rules.json"),
+          safeStorage,
+        ),
+        new AuditService(
+          join(paths.userData, "permissions", "audit.json"),
+          safeStorage,
+        ),
+        { redact, emit: (event) => broadcast("worklens:permission", event) },
+      );
+      await permissionService.initialize();
+      permissions = permissionService;
       const agentService = new AgentService(
         runtime,
         paths,
@@ -159,6 +178,7 @@ else {
         connectors.jevConsent,
         mcpService,
         () => state.value.codemodeEnabled !== false,
+        permissionService,
       );
       agents = agentService;
       await agentService.initialize();
@@ -187,17 +207,14 @@ else {
         artifacts,
         connectors,
         runtime,
+        permissions: permissionService,
+        permissionReviewer: () => permissionReviewer,
       });
       ipcMain.handle(
         "worklens:request",
         async (event, method: keyof Requests, raw: unknown) => {
           try {
-            if (
-              !window ||
-              event.sender !== window.webContents ||
-              event.senderFrame !== window.webContents.mainFrame
-            )
-              throw new Error("不受信任的调用来源");
+            assertRequestSource(window, event);
             if (!Object.hasOwn(schemas, method)) throw new Error("未知请求");
             const input = schemas[method].parse(raw) as never;
             const value = isConnectorRequest(method)
@@ -256,6 +273,22 @@ else {
         });
         // Keep web UI geometry aligned with the unscaled native window controls.
         const contents = window.webContents;
+        const bindPermissionReviewer = (ready: boolean) => {
+          if (window?.webContents !== contents) return;
+          permissionReviewer = ready
+            ? Object.freeze({ webContentsId: contents.id })
+            : undefined;
+          permissionService.attachReviewer(permissionReviewer);
+        };
+        bindPermissionReviewer(true);
+        // A document reload/crash must not finish an old asynchronous approval.
+        // Detach until the next main-document navigation commits.
+        contents.on("did-start-navigation", (details) => {
+          if (details.isMainFrame && !details.isSameDocument)
+            bindPermissionReviewer(false);
+        });
+        contents.on("did-navigate", () => bindPermissionReviewer(true));
+        contents.on("render-process-gone", () => bindPermissionReviewer(false));
         contents.on("dom-ready", () => contents.setZoomFactor(1));
         // A reloaded renderer has no messages to apply incremental updates to.
         contents.on("did-start-loading", () => chatUpdates.reset());
@@ -325,7 +358,11 @@ else {
         let closing = false;
         let readyToClose = false;
         ownedWindow.on("closed", () => {
-          if (window === ownedWindow) window = undefined;
+          if (window === ownedWindow) {
+            window = undefined;
+            permissionReviewer = undefined;
+            permissionService.attachReviewer(undefined);
+          }
         });
         ownedWindow.on("close", (event) => {
           // before-quit already awaits AgentService.shutdown. Deferring this
@@ -366,9 +403,10 @@ else {
     event.preventDefault();
     quitting = true;
     providers?.shutdown();
-    void Promise.allSettled([agents?.shutdown(), mcp?.shutdown()]).finally(() =>
-      app.quit(),
-    );
+    permissions?.close();
+    void Promise.allSettled([agents?.shutdown(), mcp?.shutdown()])
+      .then(() => permissions?.flushAudit().catch(() => {}))
+      .finally(() => app.quit());
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
