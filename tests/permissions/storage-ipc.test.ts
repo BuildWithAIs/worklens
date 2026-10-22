@@ -75,7 +75,9 @@ describe("permission persistence and failure recovery", () => {
       "PERMISSION_STALE",
     );
     expect(await readFile(path, "utf8")).not.toContain(rule.path);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    // Windows does not expose POSIX owner/group permission bits through mode.
+    if (process.platform !== "win32")
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
     const reloaded = new PermissionStore(path, encryption);
     await reloaded.load();
     expect(reloaded.value.rules).toEqual([rule]);
