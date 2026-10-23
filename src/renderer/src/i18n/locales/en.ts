@@ -606,7 +606,6 @@ const en = {
     preview: "Preview",
     code: "Code",
     closePreview: "Close preview",
-    staticHTMLPreview: "Static HTML preview",
     chromeOpenError:
       "Couldn’t open Chrome. Check that it is installed and the HTML file is available.",
     fileMissingError: "Couldn’t locate the HTML file.",

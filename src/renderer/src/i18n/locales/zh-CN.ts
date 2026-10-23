@@ -559,7 +559,6 @@ const zhCN = {
     preview: "预览",
     code: "代码",
     closePreview: "关闭预览",
-    staticHTMLPreview: "静态 HTML 预览",
     chromeOpenError: "无法打开 Chrome，请确认已安装浏览器且 HTML 文件可用。",
     fileMissingError: "无法定位 HTML 文件。",
     artifactActions: "作品操作",
