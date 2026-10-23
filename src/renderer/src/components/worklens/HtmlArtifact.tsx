@@ -468,11 +468,6 @@ export function HtmlArtifactWorkspace({
                 <ArtifactCode code={artifact.code} />
               </div>
             </div>
-            <div className="artifact-preview-note">
-              {mode === "preview"
-                ? t("htmlArtifact.staticHTMLPreview")
-                : "HTML"}
-            </div>
           </section>
         )}
       </div>

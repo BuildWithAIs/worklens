@@ -1924,12 +1924,6 @@ kbd {
   color: var(--faint);
   border-right: 1px solid var(--border);
 }
-.artifact-preview-note {
-  padding: 4px 12px;
-  font-size: 12px;
-  color: var(--faint);
-  border-top: 1px solid var(--border);
-}
 @media (max-width: 1100px) {
   .artifact-workspace[data-preview-open="true"] .artifact-chat {
     display: none;
