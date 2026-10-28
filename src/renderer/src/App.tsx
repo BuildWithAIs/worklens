@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 import {
+  Lightbulb,
   Plus,
   Search,
   Settings as SettingsIcon,
@@ -61,10 +62,23 @@ import type {
 const api = window.worklens;
 const isMac = /Mac/i.test(navigator.platform);
 const retainedViews = 8;
-// Settings load separately from the chat; idle time preloads them.
+// Settings and Insights load separately from the chat; idle time preloads
+// them.
 const loadSettingsPage = () => import("@/components/worklens/SettingsPage");
 const SettingsPage = lazy(() =>
   loadSettingsPage().then((module) => ({ default: module.SettingsPage })),
+);
+let overviewModule:
+  | typeof import("@/components/worklens/overview/OverviewPage")
+  | undefined;
+const loadOverviewPage = () =>
+  import("@/components/worklens/overview/OverviewPage").then(
+    (module) => (overviewModule = module),
+  );
+const LazyOverviewPage = lazy(() =>
+  loadOverviewPage().then((module) => ({
+    default: module.OverviewPage,
+  })),
 );
 const active = (phase?: Phase) =>
   !!phase &&
@@ -76,6 +90,9 @@ const afterPaint = () =>
   });
 
 export function App() {
+  // Once preloaded, Insights renders directly: React holds a newly resolved
+  // Suspense boundary back for about 300ms.
+  const OverviewPage = overviewModule?.OverviewPage ?? LazyOverviewPage;
   const { t, i18n, language } = useAppTranslation();
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("general");
@@ -112,6 +129,8 @@ export function App() {
     failed: boolean;
   }>();
   const [page, setPage] = useState<"chat" | "settings">("chat");
+  // The overview replaces the chat column; settings still open over either.
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [reveal, setReveal] = useState<SearchSelection & { query: string }>();
   const pinSaving = useRef(false);
@@ -121,7 +140,10 @@ export function App() {
   const notifiedRuns = useRef(new Set<string>());
   useEffect(() => {
     const visible =
-      page === "chat" && !historyLoad && readyConversation === current
+      page === "chat" &&
+      !overviewOpen &&
+      !historyLoad &&
+      readyConversation === current
         ? current
         : undefined;
     visibleConversation.current = visible;
@@ -132,7 +154,7 @@ export function App() {
         next.delete(visible);
         return next;
       });
-  }, [current, page, historyLoad, readyConversation]);
+  }, [current, page, overviewOpen, historyLoad, readyConversation]);
   // Reveal a search match once the conversation's full history has rendered.
   const revealReady =
     !!reveal &&
@@ -241,6 +263,14 @@ export function App() {
   const currentView = current ? views[current] : undefined;
   const loadingHistory = historyLoad;
   const selectedConversation = historyLoad?.id ?? current;
+  // Run starts and ends change updatedAt; streaming updates do not.
+  const overviewRevision = useMemo(
+    () =>
+      (data?.conversations ?? [])
+        .map((item) => `${item.id}:${item.updatedAt}`)
+        .join("|"),
+    [data?.conversations],
+  );
   const currentConversation =
     data?.conversations.find((item) => item.id === selectedConversation) ??
     (!historyLoad ? currentView : undefined);
@@ -381,7 +411,10 @@ export function App() {
     };
   }, [refresh, acceptView]);
   useEffect(() => {
-    const idle = requestIdleCallback(() => void loadSettingsPage());
+    const idle = requestIdleCallback(() => {
+      void loadSettingsPage();
+      void loadOverviewPage();
+    });
     return () => cancelIdleCallback(idle);
   }, []);
   useEffect(() => {
@@ -402,6 +435,7 @@ export function App() {
       id: string,
       defaults: Selection | undefined = data?.settings.defaults,
     ) => {
+      setOverviewOpen(false);
       if (id === current) {
         if (!historyLoad && page === "chat") return;
         navigation.current++;
@@ -438,6 +472,7 @@ export function App() {
     },
   );
   const newConversation = useLatestCallback(() => {
+    setOverviewOpen(false);
     navigation.current++;
     if (historyLoad && !current) {
       setHistoryLoad(undefined);
@@ -787,10 +822,19 @@ export function App() {
           {t("app.newChat")}
           <kbd aria-hidden="true">{isMac ? "⌘ N" : "Ctrl N"}</kbd>
         </Button>
+        <Button
+          variant="ghost"
+          className="new-chat sidebar-report-button"
+          aria-current={overviewOpen ? "page" : undefined}
+          onClick={() => setOverviewOpen(true)}
+        >
+          <Lightbulb size={17} />
+          {t("app.overview")}
+        </Button>
         <ConversationNavigation
           conversations={data.conversations}
           pinnedConversationIds={data.settings.pinnedConversationIds}
-          selected={selectedConversation}
+          selected={overviewOpen ? undefined : selectedConversation}
           unread={unread}
           pinPending={pinPending}
           onOpen={open}
@@ -812,7 +856,20 @@ export function App() {
         </div>
       </aside>
       <main className="main-content">
-        <>
+        {overviewOpen && (
+          <Suspense fallback={null}>
+            <OverviewPage
+              settings={data.settings}
+              providers={data.providers}
+              revision={overviewRevision}
+              onOpenConversation={(id) => void open(id)}
+              onNewConversation={newConversation}
+              save={settings}
+              onManageModels={manageModels}
+            />
+          </Suspense>
+        )}
+        <div className={overviewOpen ? "hidden" : "contents"}>
           <header className="chat-header">
             <div>
               {currentConversation && (
@@ -895,7 +952,7 @@ export function App() {
               modelMenu={modelMenu}
             />
           </div>
-        </>
+        </div>
       </main>
       <ConversationSearch
         open={searchOpen}

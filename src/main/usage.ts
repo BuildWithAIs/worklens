@@ -166,33 +166,54 @@ export function subtractUsage(
   return result;
 }
 
-export function getConversationUsage(
+export interface AccountingItem {
+  entry: SessionEntry;
+  usage: TokenUsage;
+  /** Set for assistant replies; summaries and tool usage have no model. */
+  provider?: string;
+  model?: string;
+}
+
+/** Every accounting-bearing entry, each counted once. */
+export function accountingItems(
   entries: readonly SessionEntry[],
   lookup?: ModelLookup,
-): TokenUsage {
-  const items: TokenUsage[] = [];
+): AccountingItem[] {
+  const items: AccountingItem[] = [];
   for (const entry of entries) {
     if (entry.type === "message" && entry.message.role === "assistant") {
       const message = entry.message;
-      items.push(
-        normalizeTokenUsage(
+      items.push({
+        entry,
+        usage: normalizeTokenUsage(
           message.usage,
           lookup?.(message.provider, message.model),
         ),
-      );
+        provider: message.provider,
+        model: message.model,
+      });
     } else if (entry.type === "compaction" || entry.type === "branch_summary") {
       // A summary is an accounting-bearing request, even if an extension omitted usage.
-      items.push(normalizeTokenUsage(entry.usage));
+      items.push({ entry, usage: normalizeTokenUsage(entry.usage) });
     } else if (
       entry.type === "message" &&
       entry.message.role === "toolResult" &&
       entry.message.usage
     ) {
-      items.push(normalizeTokenUsage(entry.message.usage));
+      items.push({ entry, usage: normalizeTokenUsage(entry.message.usage) });
     }
     // custom worklens.run-end usage is a checkpoint, NEVER an extra contribution.
   }
-  return aggregateUsage(items);
+  return items;
+}
+
+export function getConversationUsage(
+  entries: readonly SessionEntry[],
+  lookup?: ModelLookup,
+): TokenUsage {
+  return aggregateUsage(
+    accountingItems(entries, lookup).map((item) => item.usage),
+  );
 }
 
 export function buildContextUsage(raw: unknown): ContextUsage {

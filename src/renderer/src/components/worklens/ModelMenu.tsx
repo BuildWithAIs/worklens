@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plug,
+  Plus,
   SlidersHorizontal,
 } from "lucide-react";
 import {
@@ -39,6 +40,7 @@ export function ModelMenu({
   onChange,
   onManage,
   openRequest,
+  addLabel,
 }: {
   data: Pick<Bootstrap, "settings" | "providers">;
   value?: Selection;
@@ -46,6 +48,8 @@ export function ModelMenu({
   onChange: (value: Selection) => void;
   onManage: () => void;
   openRequest?: number;
+  /** Without a value, the trigger adds a model instead of choosing one. */
+  addLabel?: string;
 }) {
   const { t } = useAppTranslation();
   const [open, setOpen] = useState(false);
@@ -110,18 +114,27 @@ export function ModelMenu({
             />
           }
           disabled={disabled}
-          aria-label={t("models.chooseModel")}
+          aria-label={addLabel && !value ? addLabel : t("models.chooseModel")}
         >
-          <ProviderIcon provider={value?.provider} />
-          <span className="chat-model-name truncate">
-            {current?.name ?? t("models.chooseModel")}
-          </span>
-          {current?.available && value && current.levels.length > 1 && (
-            <span className="text-muted-foreground shrink-0">
-              · {t(levelKeys[value.thinking])}
-            </span>
+          {addLabel && !value ? (
+            <>
+              <Plus />
+              {addLabel}
+            </>
+          ) : (
+            <>
+              <ProviderIcon provider={value?.provider} />
+              <span className="chat-model-name truncate">
+                {current?.name ?? t("models.chooseModel")}
+              </span>
+              {current?.available && value && current.levels.length > 1 && (
+                <span className="text-muted-foreground shrink-0">
+                  · {t(levelKeys[value.thinking])}
+                </span>
+              )}
+              <ChevronDown />
+            </>
           )}
-          <ChevronDown />
         </PopoverTrigger>
         <PopoverContent
           className="chat-model-picker"
@@ -247,7 +260,12 @@ export function ModelMenu({
                                     ? "medium"
                                     : m.levels[0],
                           });
-                          // Keep the picker open so the user can choose reasoning next.
+                          // Keep the picker open so the user can choose reasoning
+                          // next; an added model sets its level in its own row.
+                          if (addLabel && !value) {
+                            setOpen(false);
+                            setQuery("");
+                          }
                         }}
                       >
                         <span>{m.name}</span>

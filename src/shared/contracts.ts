@@ -139,6 +139,8 @@ export interface Settings {
   codemodeEnabled?: boolean;
   /** Missing means "system": follow the operating system's proxy settings. */
   proxy?: ProxySettings;
+  /** Optional AI summaries in the usage report; models are tried in order. */
+  reportSummary?: { enabled: boolean; models: ReportSummaryModel[] };
   [key: string]: unknown;
 }
 export interface ProxySettings {
@@ -304,6 +306,117 @@ export interface Bootstrap {
   diagnostics: string[];
   recoveries: Recovery[];
 }
+/** Local calendar dates, YYYY-MM-DD, both inclusive. */
+export interface DateRange {
+  start: string;
+  end: string;
+}
+export interface OverviewRequest extends DateRange {
+  /** The period to compare with; absent for no comparison. */
+  previous?: DateRange;
+  /** First day of the week as a JavaScript weekday, 0 = Sunday. */
+  weekStart: number;
+}
+export type OverviewTopicSource =
+  | "jira"
+  | "github"
+  | "confluence"
+  | "keyword"
+  | "other";
+export interface OverviewTopic {
+  id: string;
+  /** A Jira project key, repository, space key or keyword; absent for other. */
+  label?: string;
+  source: OverviewTopicSource;
+  /** Known tokens only; see the overview's usage status. */
+  tokens: number;
+  conversationIds: string[];
+}
+export interface OverviewModel {
+  /** Absent for usage without a model, such as conversation summaries. */
+  provider?: string;
+  model?: string;
+}
+export interface OverviewConversation {
+  id: string;
+  /** Absent when the conversation has neither a name nor a first message. */
+  title?: string;
+  topicId: string;
+  /** Models used in the range, most recent first. */
+  models: Required<OverviewModel>[];
+  runs: number;
+  usage: TokenUsage;
+  lastAt: string;
+  /** Local dates in the range with activity. */
+  days: string[];
+}
+export interface Overview {
+  range: DateRange;
+  previous?: DateRange & {
+    usage: TokenUsage;
+    activeConversations: number;
+    /** The period starts before the earliest retained session. */
+    partial: boolean;
+  };
+  scope: "retained-local-sessions";
+  /** Readable retained sessions, in any period. */
+  retainedSessions: number;
+  unreadableSessions: number;
+  usage: TokenUsage;
+  granularity: "day" | "week" | "month";
+  trend: {
+    start: string;
+    end: string;
+    usage: TokenUsage;
+    runs: number;
+    /** Same offset into the comparison period; absent without one. */
+    previous?: TokenUsage;
+  }[];
+  /** Weekday rows (from weekStart) by local hour. Tokens are known tokens;
+   * `partial` marks cells where some requests reported no usage. */
+  activity: { tokens: number; runs: number; partial?: boolean }[][];
+  activeDays: string[];
+  sessions: {
+    created: number;
+    active: number;
+    /** Active conversations started before the range. */
+    continued: number;
+    runs: number;
+    failedRuns: number;
+  };
+  models: (OverviewModel & { runs: number; usage: TokenUsage })[];
+  tools: { name: string; calls: number }[];
+  topics: OverviewTopic[];
+  conversations: OverviewConversation[];
+}
+export interface ReportSummaryModel {
+  provider: string;
+  model: string;
+  /** Absent or "off" sends no thinking level. */
+  thinking?: Thinking;
+}
+export interface ReportSummaryRequest extends DateRange {
+  language: "en" | "zh";
+}
+export interface ReportSummary extends DateRange {
+  /** One short sentence. */
+  summary: string;
+  /** Short phrases shown as separate bubbles. */
+  highlights: string[];
+  themes: { title: string; description: string; conversationIds: string[] }[];
+  model: ReportSummaryModel;
+  usage: TokenUsage;
+  generatedAt: string;
+  /** Identifies the conversations and requests the summary was made from. */
+  fingerprint: string;
+}
+export interface ReportSummaryState {
+  summary?: ReportSummary;
+  /** Conversations or requests changed since the summary was made. */
+  stale: boolean;
+  /** Conversations in the range that a summary would cover. */
+  conversations: number;
+}
 export interface ConversationFile {
   path: string;
   kind: "html" | "image" | "file" | "directory";
@@ -421,6 +534,13 @@ export interface Requests {
   /** Stops pending searches, and with `warmUp` the warm-up too. */
   cancelSearch: { input: { warmUp: boolean }; output: void };
   delete: { input: { id: string }; output: void };
+  overview: { input: OverviewRequest; output: Overview };
+  /** Reads the saved summary for a range; never calls a model. */
+  reportSummary: { input: ReportSummaryRequest; output: ReportSummaryState };
+  generateReportSummary: {
+    input: ReportSummaryRequest;
+    output: ReportSummaryState;
+  };
   send: {
     input: {
       conversationId?: string;

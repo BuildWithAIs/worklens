@@ -66,6 +66,8 @@ import {
 } from "./conversation-search";
 import { findSearchMatch, foldSearchText } from "../shared/search-text";
 import { SearchCache, type SearchIndex } from "./search-cache";
+import { OverviewIndex, buildOverview } from "./overview";
+import { ReportSummaries } from "./report-summary";
 import { searchParser } from "./search-parser";
 import { shareUnchanged } from "./structural-sharing";
 import { SerialQueue, atomicJson, redactStrings } from "./storage";
@@ -92,7 +94,11 @@ import type {
   ConversationSearchResult,
   ConversationView,
   MessageView,
+  Overview,
+  OverviewRequest,
   Phase,
+  ReportSummaryModel,
+  ReportSummaryRequest,
   Selection,
   Recovery,
   UsageSnapshot,
@@ -145,6 +151,15 @@ export class AgentService {
   private retainedSessions = 12;
   private stopping = false;
   private usage = new UsageService();
+  private overviewIndex = new OverviewIndex();
+  private summaries?: ReportSummaries;
+  private reportSummaries() {
+    return (this.summaries ??= new ReportSummaries(
+      this.modelRuntime,
+      this.paths.userData,
+      this.redact,
+    ));
+  }
   private lookupModel = (provider: string, model: string) =>
     this.modelRuntime.getModel(provider, model);
   getGlobalUsage() {
@@ -633,6 +648,41 @@ export class AgentService {
       result.set(id, this.summary(id, runtime));
     return [...result.values()].sort((a, b) =>
       b.updatedAt.localeCompare(a.updatedAt),
+    );
+  }
+  /** Saved AI summary for a range; reading never calls a model. */
+  async reportSummary(request: ReportSummaryRequest) {
+    const { digests } = await this.overviewIndex.read(
+      this.paths,
+      this.lookupModel,
+    );
+    return redactStrings(
+      await this.reportSummaries().read(digests, request),
+      this.redact,
+    );
+  }
+  async generateReportSummary(
+    request: ReportSummaryRequest,
+    models: readonly ReportSummaryModel[],
+  ) {
+    const { digests } = await this.overviewIndex.read(
+      this.paths,
+      this.lookupModel,
+    );
+    return redactStrings(
+      await this.reportSummaries().generate(digests, request, models),
+      this.redact,
+    );
+  }
+  /** Usage across retained sessions for a date range, redacted like the list. */
+  async overview(request: OverviewRequest): Promise<Overview> {
+    const { digests, unreadable } = await this.overviewIndex.read(
+      this.paths,
+      this.lookupModel,
+    );
+    return redactStrings(
+      buildOverview(digests, request, { unreadable }),
+      this.redact,
     );
   }
   // A search cancels the previous search and any warm-up; a warm-up only

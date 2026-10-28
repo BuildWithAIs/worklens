@@ -178,7 +178,7 @@ export const ConversationNavigation = memo(
             >
               <div className="section-label">{group.label}</div>
               {group.key === "recents" && !conversations.length && (
-                <p className="sidebar-empty">{t("app.noConversationsYet")}</p>
+                <p className="sidebar-empty">{t("app.recentsEmpty")}</p>
               )}
               {group.conversations.map((conversation) => (
                 <ConversationRow
