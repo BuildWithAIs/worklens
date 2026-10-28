@@ -421,6 +421,144 @@ test("connection tests report the proxy that could not be reached", async () => 
   await expect(
     service.test({ mode: "custom", url: unreachable }),
   ).rejects.toThrow(`Could not reach the network through proxy ${unreachable}`);
+  // A test of an unsaved draft never changes the current configuration's status.
+  expect(service.status()).toMatchObject({ proxy: false, bypass: false });
+});
+
+test.skipIf(!openssl)(
+  "a destination's certificate is not the proxy's failure, but the proxy's own is",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "worklens-proxy-stage-"));
+    const servers: Server[] = [];
+    const listen = async (server: Server) => {
+      servers.push(server);
+      await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+      return port(server);
+    };
+    // Tunnels every CONNECT to `destination`, like a working proxy.
+    const tunnel = (server: Server, destination: () => number) =>
+      server.on("connect", (_request, socket, head) => {
+        const upstream = connect(destination(), "127.0.0.1", () => {
+          socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+          upstream.write(head);
+          upstream.pipe(socket);
+          socket.pipe(upstream);
+        });
+        upstream.on("error", () => socket.destroy());
+        socket.on("error", () => upstream.destroy());
+      });
+    try {
+      execFileSync(
+        "openssl",
+        [
+          "req",
+          "-x509",
+          "-newkey",
+          "ec",
+          "-pkeyopt",
+          "ec_paramgen_curve:prime256v1",
+          "-nodes",
+          "-keyout",
+          join(dir, "key.pem"),
+          "-out",
+          join(dir, "cert.pem"),
+          "-days",
+          "1",
+          "-subj",
+          "/CN=untrusted.example.test",
+        ],
+        { stdio: "ignore" },
+      );
+      const credentials = {
+        key: await readFile(join(dir, "key.pem")),
+        cert: await readFile(join(dir, "cert.pem")),
+      };
+      let securePort = 0;
+      securePort = await listen(
+        createHttpsServer(credentials, (_request, response) =>
+          response.end("ok"),
+        ),
+      );
+      const plainProxy = await listen(tunnel(createServer(), () => securePort));
+      const secureProxy = await listen(
+        tunnel(createHttpsServer(credentials), () => port(target)),
+      );
+      service = new NetworkProxy({
+        resolveSystem: async () => "DIRECT",
+        setSessionProxy: async () => {},
+      });
+      await service.apply({
+        mode: "custom",
+        url: `http://127.0.0.1:${plainProxy}`,
+      });
+      await expect(
+        fetch("https://untrusted.example.test/"),
+      ).rejects.toMatchObject({
+        cause: { code: "DEPTH_ZERO_SELF_SIGNED_CERT" },
+      });
+      expect(service.status()).toMatchObject({ proxy: false });
+
+      await service.apply({
+        mode: "custom",
+        url: `https://127.0.0.1:${secureProxy}`,
+      });
+      await expect(fetch("http://behind.example.test/")).rejects.toThrow();
+      expect(service.status()).toMatchObject({ proxy: true });
+    } finally {
+      await service?.dispose();
+      service = undefined;
+      for (const server of servers)
+        await new Promise<void>((done) => server.close(() => done()));
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+test("a rejected proxy tunnel updates runtime status and the same origin can recover", async () => {
+  let rejectTunnel = true;
+  const unstable = createServer();
+  unstable.on("connect", (_request, socket, head) => {
+    if (rejectTunnel) {
+      socket.end(
+        "HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n",
+      );
+      return;
+    }
+    const upstream = connect(port(target), "127.0.0.1", () => {
+      socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      upstream.write(head);
+      upstream.pipe(socket);
+      socket.pipe(upstream);
+    });
+    upstream.on("error", () => socket.destroy());
+    socket.on("error", () => upstream.destroy());
+  });
+  await new Promise<void>((done) => unstable.listen(0, "127.0.0.1", done));
+  const changed = vi.fn();
+  try {
+    service = new NetworkProxy({
+      resolveSystem: async () => "DIRECT",
+      setSessionProxy: async () => {},
+      onStatus: changed,
+    });
+    await service.apply({
+      mode: "custom",
+      url: `http://127.0.0.1:${port(unstable)}`,
+    });
+    await expect(fetch("http://unstable.example.test/")).rejects.toThrow();
+    expect(service.status()).toMatchObject({ proxy: true, bypass: false });
+    expect(changed).toHaveBeenCalledTimes(1);
+    rejectTunnel = false;
+    expect(await (await fetch("http://unstable.example.test/")).text()).toBe(
+      "ok:unstable.example.test",
+    );
+    expect(service.status()).toMatchObject({ proxy: false, bypass: false });
+    expect(changed).toHaveBeenCalledTimes(2);
+  } finally {
+    await service?.dispose();
+    service = undefined;
+    await new Promise((done) => unstable.close(done));
+  }
 });
 
 test.skipIf(process.platform === "win32")(

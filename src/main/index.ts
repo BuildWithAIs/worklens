@@ -89,6 +89,10 @@ else {
       const proxyProbe = session.fromPartition("worklens-proxy-probe");
       await proxyProbe.setProxy({ mode: "system" });
       const proxy = new NetworkProxy({
+        onStatus: (status) => {
+          if (window && !window.isDestroyed())
+            window.webContents.send("worklens:network", status);
+        },
         resolveSystem: (url) => proxyProbe.resolveProxy(url),
         setSessionProxy: (config) => session.defaultSession.setProxy(config),
         readShellProxy,

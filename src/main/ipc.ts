@@ -132,6 +132,7 @@ export function requestHandlers(context: RequestContext): RequestHandlers {
     },
     proxyDetect: (input) => proxy.detect(input.shell),
     proxyTest: (input) => proxy.test(input),
+    proxyStatus: () => proxy.status(),
     providers: () => providers.list(),
     login: (input) =>
       providers.login(input.provider, input.type, input.loginId),

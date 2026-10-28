@@ -192,8 +192,8 @@ function ToastList() {
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1 wrap-anywhere">
           <ToastTitle />
           <ToastDescription />
+          <ToastAction className="mt-2 self-start" />
         </div>
-        <ToastAction />
         <ToastClose />
       </ToastContent>
     </Toast>

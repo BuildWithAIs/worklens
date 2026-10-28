@@ -35,6 +35,7 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import type { SettingsSection } from "@/components/worklens/SettingsPage";
+import { useNetworkStatus } from "@/components/worklens/use-network-status";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { imageFileError, systemText } from "@/lib/system-text";
@@ -129,6 +130,11 @@ export function App() {
     failed: boolean;
   }>();
   const [page, setPage] = useState<"chat" | "settings">("chat");
+  const openNetworkSettings = useCallback(() => {
+    setSettingsSection("general");
+    setPage("settings");
+  }, []);
+  const network = useNetworkStatus(openNetworkSettings);
   // The overview replaces the chat column; settings still open over either.
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -982,6 +988,8 @@ export function App() {
           {page === "settings" && (
             <Suspense fallback={null}>
               <SettingsPage
+                networkStatus={network.status}
+                onNetworkWarningSeen={network.acknowledge}
                 data={data}
                 conversation={currentView}
                 onConsentChange={acceptView}

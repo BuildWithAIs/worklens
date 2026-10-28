@@ -83,6 +83,14 @@ export async function mockWorklens(page, options = {}) {
         skills: "/Users/example/WorkLens/skills",
       },
     };
+    if (options.connectorError)
+      data.jira = {
+        url: "https://issues.example.test",
+        deployment: "data-center",
+        tokenType: "classic",
+        configured: true,
+        error: "Could not reach the service",
+      };
     let skillId = 0;
     const skill = (name, source, summary, enabled = true) => ({
       id: (++skillId).toString(16).padStart(64, "0"),
@@ -171,7 +179,17 @@ export async function mockWorklens(page, options = {}) {
     let listeners = [],
       pending;
     window.calls = [];
+    let networkStatus = { revision: 0, proxy: false, bypass: false };
+    const networkListeners = new Set();
+    window.emitNetworkStatus = (status) => {
+      networkStatus = status;
+      for (const listener of networkListeners) listener(status);
+    };
     window.worklens = {
+      onNetwork: (fn) => {
+        networkListeners.add(fn);
+        return () => networkListeners.delete(fn);
+      },
       onChat: () => () => {},
       onAuth: (fn) => {
         listeners.push(fn);
@@ -188,6 +206,7 @@ export async function mockWorklens(page, options = {}) {
           };
         }
         window.calls.push({ name, input });
+        if (name === "proxyStatus") return { ...networkStatus };
         if (name === "bootstrap") {
           data.settings.modelCatalogs ??= {};
           for (const provider of data.providers.filter((p) => p.configured)) {
@@ -328,9 +347,12 @@ export async function mockWorklens(page, options = {}) {
             : (window.proxyDetection ?? {});
         if (name === "proxyTest") {
           await new Promise((resolve) => setTimeout(resolve, 120));
+          // As in the main process, a bypassed test address goes direct.
           if (window.failProxyTest)
             throw Error(
-              `Could not reach the network through proxy ${input.url}`,
+              !input.url || input.bypass === "*"
+                ? "Could not reach the network test address"
+                : `Could not reach the network through proxy ${input.url}`,
             );
           return input.bypass === "*" ? {} : { proxy: input.url };
         }
