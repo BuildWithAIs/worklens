@@ -1268,7 +1268,9 @@ button.overview-bar-row:hover,
   line-height: 1.5;
 }
 /* Loading: blocks in the cards' places. One sheen, tinted with the brand
-   violet, sweeps across the whole window rather than each block. */
+   violet, sweeps across the whole window rather than each block. A tile is
+   one band plus its travel, so the next band enters as the last one leaves
+   and the first is already over the page when the skeleton appears. */
 .overview-grid > .overview-skeleton {
   gap: 14px;
   min-height: 272px;
@@ -1287,8 +1289,8 @@ button.overview-bar-row:hover,
     )
     var(--overview-track);
   background-attachment: fixed;
-  background-size: 200vw 100%;
-  animation: overview-sheen 1.8s linear infinite;
+  background-size: 130vw 100%;
+  animation: overview-sheen 1.6s linear infinite;
 }
 .overview-skeleton-fill {
   flex: 1;
@@ -1301,10 +1303,10 @@ button.overview-bar-row:hover,
 }
 @keyframes overview-sheen {
   from {
-    background-position: 100vw 0;
+    background-position: -60vw 0;
   }
   to {
-    background-position: -100vw 0;
+    background-position: 70vw 0;
   }
 }
 .overview-note {
