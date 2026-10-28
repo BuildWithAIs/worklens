@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { lookup } from "node:dns/promises";
 import type { LookupAddress } from "node:dns";
-import { isIP } from "node:net";
+import { isIP, type LookupFunction } from "node:net";
 import {
   Agent,
   Dispatcher,
@@ -39,6 +39,37 @@ const DEFAULT_SETTINGS: ProxySettings = { mode: "system" };
 /** Resolved bypass addresses are pinned so mixed DNS answers cannot leak direct. */
 type ResolvedDirect = { addresses: LookupAddress[]; agent?: Agent };
 type Route = string | undefined | ResolvedDirect;
+
+/**
+ * Resolves a bypassed host only to its pinned addresses. It answers on a
+ * later tick, as DNS does: Node connects inside the answer, and a connect that
+ * fails at once (EADDRNOTAVAIL after a network change) would otherwise throw
+ * before Undici attaches its error handler and crash the main process.
+ */
+export function bypassLookup(pinned: LookupAddress[]): LookupFunction {
+  return (_hostname, options, callback) =>
+    process.nextTick(answer, options, callback);
+  function answer(
+    options: Parameters<LookupFunction>[1],
+    callback: Parameters<LookupFunction>[2],
+  ) {
+    const addresses = pinned.filter(
+      ({ family }) => !options.family || family === options.family,
+    );
+    if (!addresses.length) {
+      callback(
+        Object.assign(new Error("No matching bypass address"), {
+          code: "ENOTFOUND",
+        }),
+        "",
+        0,
+      );
+      return;
+    }
+    if (options.all) callback(null, addresses);
+    else callback(null, addresses[0].address, addresses[0].family);
+  }
+}
 
 /** Register cancellation before asynchronous routing, then hand it to Undici. */
 class PendingDispatch {
@@ -312,25 +343,7 @@ export class ProxyRouter extends Dispatcher {
     if (!route) return this.direct;
     if (typeof route === "object") {
       route.agent ??= new Agent({
-        connect: {
-          lookup: (_hostname, options, callback) => {
-            const addresses = route.addresses.filter(
-              ({ family }) => !options.family || family === options.family,
-            );
-            if (!addresses.length) {
-              callback(
-                Object.assign(new Error("No matching bypass address"), {
-                  code: "ENOTFOUND",
-                }),
-                "",
-                0,
-              );
-              return;
-            }
-            if (options.all) callback(null, addresses);
-            else callback(null, addresses[0].address, addresses[0].family);
-          },
-        },
+        connect: { lookup: bypassLookup(route.addresses) },
       });
       return route.agent;
     }

@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { Agent } from "undici";
 import type { LookupAddress } from "node:dns";
 import type { ProxySettings } from "../src/shared/contracts";
-import { ProxyRouter } from "../src/main/network-proxy";
+import { ProxyRouter, bypassLookup } from "../src/main/network-proxy";
 
 const proxy = "http://127.0.0.1:7890";
 const routers: { router: ProxyRouter; direct: Agent }[] = [];
@@ -212,4 +212,23 @@ test("the route cache evicts old origins while retaining recent results", async 
   expect(resolve).toHaveBeenCalledTimes(257);
   await router.route("https://host-0.example.test");
   expect(resolve).toHaveBeenCalledTimes(258);
+});
+
+test("bypass lookups answer asynchronously, like DNS", async () => {
+  // Node connects inside a synchronous lookup answer, so a connect that fails
+  // at once (EADDRNOTAVAIL after a network change) would throw before Undici
+  // attaches its error handler and crash the main process.
+  const lookup = bypassLookup([{ address: "160.12.34.56", family: 4 }]);
+  for (const options of [{ all: true }, {}]) {
+    const callback = vi.fn();
+    lookup("bypass.example.test", options, callback);
+    expect(callback).not.toHaveBeenCalled();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(callback).toHaveBeenCalledTimes(1);
+  }
+  const missing = vi.fn();
+  bypassLookup([])("bypass.example.test", { family: 4 }, missing);
+  expect(missing).not.toHaveBeenCalled();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(missing.mock.calls[0][0]).toMatchObject({ code: "ENOTFOUND" });
 });
