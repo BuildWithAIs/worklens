@@ -96,7 +96,7 @@ async function openInsights(
         if (name === "reportSummary")
           return {
             stale: false,
-            conversations: 1,
+            conversations: overview.conversations.length,
             summary: options.summary
               ? {
                   ...overview.range,
@@ -308,18 +308,15 @@ test("multiple focus areas wrap within their columns and disclose long titles", 
   expect(await title.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
     true,
   );
+  const hint = page.locator('[data-slot="tooltip-content"][data-open]');
   await topics.nth(1).hover();
-  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
-    longTitle,
-  );
+  await expect(hint).toHaveText(longTitle);
   await page.mouse.move(0, 0);
   await topics.nth(1).focus();
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Tab");
   await expect(topics.nth(1)).toBeFocused();
-  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
-    longTitle,
-  );
+  await expect(hint).toHaveText(longTitle);
   await page.keyboard.press("Escape");
   await card.screenshot({
     path: testInfo.outputPath("focus-areas-narrow.png"),
@@ -460,4 +457,59 @@ test("summary settings reveal long model names without squeezing the controls", 
   const bounds = await model.boundingBox();
   const buttons = await actions.boundingBox();
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(buttons!.x);
+});
+
+test("short model names show no hint, and the summary separator is evenly spaced", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openInsights(page, 7, { summary: true });
+  const meta = page.locator(".overview-summary-meta");
+  const label = meta.locator(".truncate");
+  const hint = page.locator('[data-slot="tooltip-content"]');
+  expect(await label.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
+    false,
+  );
+  const spacing = await meta.evaluate((el) => {
+    const [label, details] = [...el.children];
+    const text = details.firstChild!;
+    const glyph = (start: number) => {
+      const range = document.createRange();
+      range.setStart(text, start);
+      range.setEnd(text, start + 1);
+      return range.getBoundingClientRect();
+    };
+    const dot = glyph(0);
+    return {
+      before: dot.left - label.getBoundingClientRect().right,
+      after: glyph(2).left - dot.right,
+    };
+  });
+  expect(spacing.before).toBeGreaterThan(0);
+  expect(Math.abs(spacing.before - spacing.after)).toBeLessThanOrEqual(1);
+
+  await meta.hover();
+  await page.waitForTimeout(800);
+  await expect(hint).toHaveCount(0);
+  await page.mouse.move(0, 0);
+  await meta.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(meta).toBeFocused();
+  await page.waitForTimeout(800);
+  await expect(hint).toHaveCount(0);
+
+  await page
+    .getByRole("button", { name: "AI summary settings", exact: true })
+    .click();
+  const name = page
+    .getByRole("dialog")
+    .locator(".report-settings-model > .truncate")
+    .first();
+  await name.hover();
+  await page.waitForTimeout(800);
+  await expect(hint).toHaveCount(0);
+  // A hint that declines to open must not consume the dialog's Escape.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });

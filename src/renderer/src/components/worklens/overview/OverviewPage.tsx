@@ -824,6 +824,10 @@ function SummaryCard({
         time: formatLastActive(result.generatedAt, new Date(), locale),
       }
     : { tokens: "", time: "" };
+  const summaryMeta = t("overview.summary.meta", {
+    model: summaryModel,
+    ...summaryDetails,
+  });
   const effect = settings.backgroundEffect ?? "none";
   const regenerate = t(
     view.state?.stale
@@ -895,13 +899,13 @@ function SummaryCard({
           </div>
         )}
         {result && !view.generating && (
-          <Hint
-            content={t("overview.summary.meta", {
-              model: summaryModel,
-              ...summaryDetails,
-            })}
-          >
-            <span className="overview-summary-meta" tabIndex={0}>
+          <Hint content={summaryMeta} truncatedOnly>
+            <span
+              className="overview-summary-meta"
+              role="note"
+              aria-label={summaryMeta}
+              tabIndex={0}
+            >
               <span className="truncate">{summaryModel}</span>
               <span className="overview-summary-details">
                 {t("overview.summary.details", summaryDetails)}

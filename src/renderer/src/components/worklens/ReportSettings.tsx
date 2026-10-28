@@ -210,7 +210,7 @@ function SummaryModel({
   return (
     <span className="report-settings-model">
       <ProviderIcon provider={model.provider} />
-      <Hint content={name}>
+      <Hint content={name} truncatedOnly>
         <span className="truncate" tabIndex={0}>
           {name}
         </span>
