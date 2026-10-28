@@ -815,6 +815,15 @@ function SummaryCard({
   const { t } = useAppTranslation();
   const result = view.state?.summary;
   const hasModels = !!settings.reportSummary?.models.length;
+  const summaryModel = result
+    ? modelName(result.model.provider, result.model.model)
+    : "";
+  const summaryDetails = result
+    ? {
+        tokens: formatTokens(result.usage.total),
+        time: formatLastActive(result.generatedAt, new Date(), locale),
+      }
+    : { tokens: "", time: "" };
   const effect = settings.backgroundEffect ?? "none";
   const regenerate = t(
     view.state?.stale
@@ -886,15 +895,19 @@ function SummaryCard({
           </div>
         )}
         {result && !view.generating && (
-          <div className="overview-summary-meta">
-            <span>
-              {t("overview.summary.meta", {
-                model: modelName(result.model.provider, result.model.model),
-                tokens: formatTokens(result.usage.total),
-                time: formatLastActive(result.generatedAt, new Date(), locale),
-              })}
+          <Hint
+            content={t("overview.summary.meta", {
+              model: summaryModel,
+              ...summaryDetails,
+            })}
+          >
+            <span className="overview-summary-meta" tabIndex={0}>
+              <span className="truncate">{summaryModel}</span>
+              <span className="overview-summary-details">
+                {t("overview.summary.details", summaryDetails)}
+              </span>
             </span>
-          </div>
+          </Hint>
         )}
         {!result && !view.generating && (!hasModels || !!conversations) && (
           <div className="overview-insight-action">
