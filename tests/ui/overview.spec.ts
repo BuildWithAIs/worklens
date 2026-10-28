@@ -114,3 +114,14 @@ test("a dense range's highlight fills its day", async ({ page }) => {
   const day = await width(page, ".overview-hit");
   expect(highlight).toBeCloseTo(day - 2, 0);
 });
+
+// A second rounded clip around the WebGL effect renders the corners jagged,
+// so only the card itself may round the summary's decoration.
+test("only the card rounds the summary's decoration", async ({ page }) => {
+  await openInsights(page, 7);
+  const card = page.locator('.overview-card[data-area="insight"]');
+  await expect(card).toHaveCSS("overflow", "hidden");
+  const layer = card.locator(".overview-insight-layer");
+  await expect(layer).toHaveCSS("overflow", "visible");
+  await expect(layer).toHaveCSS("border-radius", "0px");
+});

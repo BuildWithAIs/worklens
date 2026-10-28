@@ -551,12 +551,12 @@ button[data-slot="overview-button"]:disabled {
   min-height: 300px;
   padding: 0;
 }
+/* The card's clip alone rounds the decoration: a second rounded clip around
+   the WebGL canvas renders its corners jagged. */
 .overview-insight-layer {
   position: absolute;
   inset: 0;
   z-index: -1;
-  overflow: hidden;
-  border-radius: calc(var(--overview-radius) - 1px);
   background: radial-gradient(
     ellipse at 20% 100%,
     color-mix(in srgb, var(--overview-viz-1) 40%, transparent),
