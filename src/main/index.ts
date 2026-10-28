@@ -33,6 +33,9 @@ import { McpService } from "./mcp-service";
 import { installationId } from "./installation-id";
 import { NetworkProxy, readShellProxy } from "./network-proxy";
 import { trustSystemCertificates } from "./system-certificates";
+import { monitorProcessErrors } from "./process-errors";
+
+monitorProcessErrors();
 
 // Keep the original safeStorage identity: changing case selects a different
 // macOS Keychain key. The application bundle controls the Dock display name.
@@ -89,6 +92,10 @@ else {
       const proxyProbe = session.fromPartition("worklens-proxy-probe");
       await proxyProbe.setProxy({ mode: "system" });
       const proxy = new NetworkProxy({
+        onStatus: (status) => {
+          if (window && !window.isDestroyed())
+            window.webContents.send("worklens:network", status);
+        },
         resolveSystem: (url) => proxyProbe.resolveProxy(url),
         setSessionProxy: (config) => session.defaultSession.setProxy(config),
         readShellProxy,

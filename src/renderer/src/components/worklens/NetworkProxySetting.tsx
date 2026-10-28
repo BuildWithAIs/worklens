@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, Pencil, Zap } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CircleAlert, LoaderCircle, Pencil, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,19 +33,91 @@ import { Hint } from "@/components/ui/tooltip";
 import { useAppTranslation } from "@/i18n";
 import type {
   ProxyDetection,
+  NetworkStatus,
   ProxySettings,
   Settings,
 } from "../../../../shared/contracts";
 import { normalizeProxyUrl } from "../../../../shared/network-proxy";
 import { settingsFailure } from "./settings-notification";
+import { SettingsConnectionWarning } from "./SettingsConnectionWarning";
 
 const SYSTEM: ProxySettings = { mode: "system" };
 
+type Translate = ReturnType<typeof useAppTranslation>["t"];
+
+/** Tests `settings`, announcing success; returns the failure to show inline. */
+async function testConnection(
+  settings: ProxySettings,
+  t: Translate,
+  current: () => boolean,
+) {
+  try {
+    const result = await window.worklens.invoke("proxyTest", settings);
+    if (!current()) return "";
+    toast.add({
+      type: "success",
+      timeout: 3200,
+      title: t(
+        result.proxy
+          ? "settings.proxyConnected"
+          : "settings.connectionSuccessful",
+      ),
+      description: result.proxy
+        ? t("settings.proxyThrough", { proxy: result.proxy })
+        : t("settings.proxyConnectedDirect"),
+    });
+    return "";
+  } catch (failure) {
+    // The test goes direct when the bypass list covers the test address;
+    // the main process names the proxy only when it was used.
+    return t(
+      String(failure).includes(" through proxy ")
+        ? "settings.proxyTestFailedProxy"
+        : "settings.proxyTestFailedDirect",
+    );
+  }
+}
+
+/** A connection test whose result is dropped if `invalidate` runs meanwhile. */
+function useConnectionTest() {
+  const { t } = useAppTranslation();
+  const [testing, setTesting] = useState(false);
+  const [failure, setFailure] = useState("");
+  const run = useRef(0);
+  const invalidate = useCallback(() => {
+    run.current++;
+    setFailure("");
+  }, []);
+  useEffect(
+    () => () => {
+      run.current++;
+    },
+    [],
+  );
+  async function start(settings: ProxySettings) {
+    const current = ++run.current;
+    const valid = () => current === run.current;
+    setTesting(true);
+    setFailure("");
+    try {
+      const result = await testConnection(settings, t, valid);
+      if (valid()) setFailure(result);
+    } finally {
+      setTesting(false);
+    }
+  }
+  return { testing, failure, start, invalidate };
+}
+
 export function NetworkProxySetting({
+  networkStatus,
+  onWarningSeen,
   proxy = SYSTEM,
   save,
   onSuccess,
 }: {
+  networkStatus?: NetworkStatus;
+  onWarningSeen?: () => void;
   proxy?: ProxySettings;
   save: (patch: Partial<Settings>) => Promise<void>;
   onSuccess: (message: string) => void;
@@ -54,7 +126,16 @@ export function NetworkProxySetting({
   const [detection, setDetection] = useState<ProxyDetection>();
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
+  const connection = useConnectionTest();
   const saving = useRef(false);
+  const failing = !!(networkStatus?.proxy || networkStatus?.bypass);
+  useEffect(() => {
+    if (failing) onWarningSeen?.();
+  }, [failing, onWarningSeen]);
+  // A test result describes the settings and failures it was run against.
+  const tested = `${proxy.mode}\n${proxy.url ?? ""}\n${proxy.bypass ?? ""}`;
+  const { invalidate } = connection;
+  useEffect(invalidate, [networkStatus?.revision, tested, invalidate]);
   useEffect(() => {
     let active = true;
     void window.worklens
@@ -175,6 +256,35 @@ export function NetworkProxySetting({
                 {status}
               </ItemDescription>
             )}
+            {(failing || connection.failure) && (
+              <SettingsConnectionWarning id="network-proxy-warning">
+                <span>
+                  {connection.failure ||
+                    t(
+                      networkStatus?.proxy && networkStatus.bypass
+                        ? "settings.networkBothFailed"
+                        : networkStatus?.bypass
+                          ? "settings.networkBypassFailed"
+                          : "settings.networkProxyFailed",
+                    )}
+                  {/* A custom proxy is tested from its dialog, beside Edit. */}
+                  {proxy.mode !== "custom" && (
+                    <Button
+                      variant="link"
+                      className="ml-1.5 inline h-auto border-0 p-0 align-baseline text-[length:inherit] leading-[inherit] font-medium text-inherit underline underline-offset-2"
+                      disabled={connection.testing || pending}
+                      onClick={() => void connection.start(proxy)}
+                    >
+                      {t(
+                        connection.testing
+                          ? "settings.proxyTesting"
+                          : "settings.proxyTest",
+                      )}
+                    </Button>
+                  )}
+                </span>
+              </SettingsConnectionWarning>
+            )}
           </ItemContent>
           <ItemActions className="settings-entry-actions">
             {proxy.mode === "custom" && (
@@ -250,11 +360,12 @@ function CustomProxyDialog({
   onSave: (proxy: ProxySettings) => Promise<void>;
   onClose: () => void;
 }) {
-  const { t, language } = useAppTranslation();
+  const { t } = useAppTranslation();
   const [source, setSource] = useState<"system" | "environment">();
   const [url, setUrl] = useState(proxy.url ?? "");
   const [bypass, setBypass] = useState(proxy.bypass ?? "");
   const [error, setError] = useState("");
+  const connection = useConnectionTest();
   const [busy, setBusy] = useState<"test" | "save">();
   const filled = useRef(false);
   const input = useRef<HTMLInputElement>(null);
@@ -305,32 +416,7 @@ function CustomProxyDialog({
     if (!normalized) return;
     setBusy("test");
     try {
-      const result = await window.worklens.invoke(
-        "proxyTest",
-        draft(normalized),
-      );
-      toast.add({
-        type: "success",
-        timeout: 3200,
-        title: t(
-          result.proxy
-            ? "settings.proxyConnected"
-            : "settings.connectionSuccessful",
-        ),
-        description: result.proxy
-          ? t("settings.proxyThrough", { proxy: result.proxy })
-          : t("settings.proxyConnectedDirect"),
-      });
-    } catch (failure) {
-      toast.add(
-        settingsFailure(
-          t("settings.proxyTestFailed"),
-          String(failure),
-          language,
-          false,
-          t("settingsFeedback.unknown"),
-        ),
-      );
+      await connection.start(draft(normalized));
     } finally {
       setBusy(undefined);
     }
@@ -397,6 +483,7 @@ function CustomProxyDialog({
                   setUrl(event.target.value);
                   setSource(undefined);
                   setError("");
+                  connection.invalidate();
                 }}
               />
               {!error && source && (
@@ -421,12 +508,26 @@ function CustomProxyDialog({
                 autoComplete="off"
                 spellCheck={false}
                 aria-describedby="network-proxy-bypass-hint"
-                onChange={(event) => setBypass(event.target.value)}
+                onChange={(event) => {
+                  setBypass(event.target.value);
+                  connection.invalidate();
+                }}
               />
               <FieldDescription id="network-proxy-bypass-hint">
                 {t("settings.proxyBypassHint")}
               </FieldDescription>
             </Field>
+            {connection.failure && (
+              <FieldDescription className="text-[var(--warning)]" role="alert">
+                <span className="inline-flex items-start gap-1.5">
+                  <CircleAlert
+                    className="mt-0.5 size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  {connection.failure}
+                </span>
+              </FieldDescription>
+            )}
           </fieldset>
         </form>
         <DialogFooter>

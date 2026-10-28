@@ -5,7 +5,7 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { BrandIcon, ProviderIcon } from "../ProviderIcon";
-import { CircleAlert, Plus, Settings2 } from "lucide-react";
+import { Plus, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +24,7 @@ import {
   type ConnectorSettingsProps,
 } from "./catalog";
 import { settingsErrorDescription } from "../settings-notification";
+import { SettingsConnectionWarning } from "../SettingsConnectionWarning";
 export function ConnectionsSettings({
   data,
   refresh,
@@ -141,21 +142,15 @@ export function ConnectionsSettings({
                       )}
                     </ItemTitle>
                     {instance?.error && (
-                      <ItemDescription className="text-[var(--warning)]">
-                        <span className="inline-flex items-center gap-1.5">
-                          <CircleAlert
-                            className="size-3.5 shrink-0"
-                            aria-hidden="true"
-                          />
-                          {t("settingsFeedback.connectionNeedsAttention", {
-                            reason: settingsErrorDescription(
-                              instance.error,
-                              language,
-                              true,
-                            ),
-                          })}
-                        </span>
-                      </ItemDescription>
+                      <SettingsConnectionWarning>
+                        {t("settingsFeedback.connectionNeedsAttention", {
+                          reason: settingsErrorDescription(
+                            instance.error,
+                            language,
+                            true,
+                          ),
+                        })}
+                      </SettingsConnectionWarning>
                     )}
                     {group.added && (
                       <ItemDescription className="settings-entry-description">

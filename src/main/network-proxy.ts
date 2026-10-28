@@ -5,13 +5,19 @@ import { isIP, type LookupFunction } from "node:net";
 import {
   Agent,
   Dispatcher,
+  Pool,
   ProxyAgent,
   fetch as undiciFetch,
   getGlobalDispatcher,
   setGlobalDispatcher,
 } from "undici";
 import type { ProxyConfig } from "electron";
-import type { ProxyDetection, ProxySettings } from "../shared/contracts";
+import type {
+  NetworkStatus,
+  ProxyDetection,
+  ProxySettings,
+} from "../shared/contracts";
+import { markProxyFailure, NetworkHealth } from "./network-health";
 import { NetworkBypass } from "./network-bypass";
 import {
   PROXY_PROBE_URL,
@@ -142,6 +148,7 @@ class PendingDispatch {
 }
 
 export interface ProxyHost {
+  onStatus?(status: NetworkStatus): void;
   /** Chromium's PAC-style proxy result for a URL, using system settings. */
   resolveSystem(url: string): Promise<string>;
   setSessionProxy(config: ProxyConfig): Promise<void>;
@@ -171,6 +178,7 @@ export class ProxyRouter extends Dispatcher {
     ) => Promise<string | undefined>,
     private readonly resolveAddresses = (hostname: string) =>
       lookup(hostname, { all: true }),
+    private readonly health?: NetworkHealth,
   ) {
     super();
     this.reset();
@@ -322,6 +330,22 @@ export class ProxyRouter extends Dispatcher {
     handler: Dispatcher.DispatchHandler,
   ) {
     const target = this.target(route);
+    const hostname = new URL(String(options.origin)).hostname;
+    const kind =
+      typeof route === "string"
+        ? "proxy"
+        : this.settings().mode === "custom" &&
+            !bypassesProxy(hostname, proxyBypassList()) &&
+            (typeof route === "object" || this.bypass.matches(hostname))
+          ? "bypass"
+          : undefined;
+    if (kind && this.health)
+      handler = this.health.observe(
+        String(options.origin),
+        kind,
+        handler,
+        typeof route === "string" ? route : "bypass",
+      );
     try {
       return target.dispatch(options, handler);
     } finally {
@@ -349,7 +373,24 @@ export class ProxyRouter extends Dispatcher {
     }
     let agent = this.agents.get(route);
     if (!agent) {
-      agent = new ProxyAgent({ uri: route });
+      agent = new ProxyAgent({
+        uri: route,
+        // The proxy's own client opens each tunnel; what it throws happened
+        // while reaching the proxy, before the destination was involved.
+        clientFactory: (origin, options) => {
+          const client = new Pool(origin, options);
+          const connect = client.connect.bind(client);
+          client.connect = (async (params: Dispatcher.ConnectOptions) => {
+            try {
+              return await connect(params);
+            } catch (error) {
+              markProxyFailure(error);
+              throw error;
+            }
+          }) as typeof client.connect;
+          return client;
+        },
+      });
       this.agents.set(route, agent);
     }
     return agent;
@@ -392,21 +433,25 @@ export class NetworkProxy {
   private readonly original: NodeJS.ProcessEnv;
   private readonly previous = getGlobalDispatcher();
   private readonly router: ProxyRouter;
+  private readonly health: NetworkHealth;
   private timer?: NodeJS.Timeout;
 
   constructor(private readonly host: ProxyHost) {
     this.original = { ...process.env };
+    this.health = new NetworkHealth((status) => host.onStatus?.(status));
     this.router = new ProxyRouter(
       this.previous,
       () => this.settings,
       (url) => this.system(url),
       host.resolveAddresses,
+      this.health,
     );
     setGlobalDispatcher(this.router);
   }
 
   async apply(settings: ProxySettings = DEFAULT_SETTINGS) {
     this.settings = settings;
+    this.health.reset();
     this.router.reset();
     clearInterval(this.timer);
     this.timer = undefined;
@@ -418,6 +463,10 @@ export class NetworkProxy {
       }, SYSTEM_REFRESH_MS);
       this.timer.unref();
     }
+  }
+
+  status(): NetworkStatus {
+    return this.health.snapshot();
   }
 
   async detect(shell = false): Promise<ProxyDetection> {

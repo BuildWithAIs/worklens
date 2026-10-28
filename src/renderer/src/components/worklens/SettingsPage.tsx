@@ -56,6 +56,7 @@ import { systemText } from "@/lib/system-text";
 import { languageTag, useAppTranslation } from "@/i18n";
 import type {
   Bootstrap,
+  NetworkStatus,
   McpSnapshot,
   ProviderInfo,
   Settings,
@@ -70,6 +71,8 @@ export type SettingsSection =
   | "connections"
   | "skills";
 type Props = {
+  networkStatus?: NetworkStatus;
+  onNetworkWarningSeen?: () => void;
   conversation?: ConversationView;
   onConsentChange?: (view: ConversationView) => void;
   data: Bootstrap;
@@ -83,6 +86,8 @@ type Props = {
 };
 const api = window.worklens;
 export function SettingsPage({
+  networkStatus,
+  onNetworkWarningSeen,
   conversation,
   onConsentChange,
   data,
@@ -787,6 +792,8 @@ export function SettingsPage({
                   save={save}
                 />
                 <NetworkProxySetting
+                  networkStatus={networkStatus}
+                  onWarningSeen={onNetworkWarningSeen}
                   proxy={data.settings.proxy}
                   save={save}
                   onSuccess={onSuccess}

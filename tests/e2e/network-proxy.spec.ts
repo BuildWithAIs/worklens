@@ -108,7 +108,7 @@ test("Electron routes main-process requests, sessions and child environments thr
       const dns = process.getBuiltinModule("node:dns").promises;
       const original = dns.lookup;
       dns.lookup = ((hostname: string, options: any) =>
-        hostname === "connector.example.test"
+        ["connector.example.test", "failure.example.test"].includes(hostname)
           ? Promise.resolve([
               { address: "192.0.2.1", family: 4 },
               { address: "127.0.0.1", family: 4 },
@@ -124,6 +124,51 @@ test("Electron routes main-process requests, sessions and child environments thr
       ),
     ).toBe(`ok:connector.example.test:${targetPort}`);
     expect(tunnels).toEqual(["worklens.test:80"]);
+
+    // Force the original native failure in this isolated Electron instance.
+    // The error must cross the router, IPC and preload before appearing in UI.
+    expect(
+      await application.evaluate(async (_electron, port) => {
+        const binding = (process as unknown as { binding(name: string): any })
+          .binding;
+        const tcp = binding("tcp_wrap").TCP.prototype;
+        const original = tcp.connect;
+        tcp.connect = () => binding("uv").UV_EADDRNOTAVAIL;
+        try {
+          await fetch(`http://failure.example.test:${port}/`);
+          return "unexpected success";
+        } catch (error) {
+          return ((error as Error).cause as { code?: string })?.code;
+        } finally {
+          tcp.connect = original;
+        }
+      }, targetPort),
+    ).toBe("EADDRNOTAVAIL");
+    const networkToast = page
+      .locator('[data-slot="toast"]')
+      .filter({ hasText: /Some network requests failed|部分网络请求失败/ });
+    await expect(networkToast).toBeVisible();
+    // Base UI's F6 shortcut moves keyboard focus to the notifications.
+    await page.keyboard.press("F6");
+    await networkToast
+      .getByRole("button", { name: /Open settings|打开设置/ })
+      .click();
+    const warning = page.locator("#network-proxy-warning");
+    await expect(warning).toContainText(/Direct requests failed|直连请求失败/);
+    expect(
+      await page.evaluate(() => window.worklens.invoke("proxyStatus", {})),
+    ).toMatchObject({ proxy: false, bypass: true });
+
+    // A successful request to another origin cannot erase this failure.
+    await application.evaluate(async (_electron, port) => {
+      await (await fetch(`http://connector.example.test:${port}/`)).text();
+    }, targetPort);
+    await expect(warning).toBeVisible();
+    await application.evaluate(async (_electron, port) => {
+      await (await fetch(`http://failure.example.test:${port}/`)).text();
+    }, targetPort);
+    await expect(warning).toHaveCount(0);
+    await expect(networkToast).not.toBeVisible();
 
     // The saved proxy is applied at startup, before services make requests.
     await application.close();

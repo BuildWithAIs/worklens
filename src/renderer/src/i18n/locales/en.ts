@@ -728,7 +728,15 @@ const en = {
     proxyConnected: "Proxy connection successful",
     proxyThrough: "Connected through {{proxy}}",
     proxyConnectedDirect: "Connected directly to the network test address.",
-    proxyTestFailed: "Couldn’t connect through the proxy",
+    proxyTestFailedProxy:
+      "Couldn’t complete the connection test. Check the proxy address and your network.",
+    proxyTestFailedDirect:
+      "Couldn’t complete the connection test. Check your network.",
+    networkRequestFailed: "Some network requests failed",
+    networkCheckSettings: "Check your network and proxy settings.",
+    networkProxyFailed: "Proxy requests failed",
+    networkBypassFailed: "Direct requests failed",
+    networkBothFailed: "Proxy and direct requests failed",
     proxySaved: "Proxy settings saved",
     proxySaveFailed: "Couldn’t save proxy settings",
 

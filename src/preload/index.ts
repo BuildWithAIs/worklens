@@ -28,5 +28,13 @@ const api: WorkLensAPI = {
     ipcRenderer.on("worklens:auth", handler);
     return () => ipcRenderer.removeListener("worklens:auth", handler);
   },
+  onNetwork: (listener) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      value: Parameters<typeof listener>[0],
+    ) => listener(value);
+    ipcRenderer.on("worklens:network", handler);
+    return () => ipcRenderer.removeListener("worklens:network", handler);
+  },
 };
 contextBridge.exposeInMainWorld("worklens", api);

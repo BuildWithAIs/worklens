@@ -127,6 +127,7 @@ export const schemas = {
   providers: z.undefined(),
   proxyDetect: z.object({ shell: z.boolean().optional() }).strict(),
   proxyTest: proxySettings,
+  proxyStatus: z.object({}).strict(),
   modelSelection: z
     .object({
       provider: z.string().min(1).max(200),

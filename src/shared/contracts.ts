@@ -158,6 +158,12 @@ export interface ProxyDetection {
   /** HTTP(S)_PROXY from the launch or login-shell environment. */
   environment?: string;
 }
+/** Transport failures observed this session; no request details cross IPC. */
+export interface NetworkStatus {
+  revision: number;
+  proxy: boolean;
+  bypass: boolean;
+}
 export interface SkillInfo {
   id: string;
   /** Same-name skills use built-in-first precedence, even if the winner is disabled. */
@@ -500,6 +506,7 @@ export interface Requests {
   providers: { input: undefined; output: ProviderInfo[] };
   proxyDetect: { input: { shell?: boolean }; output: ProxyDetection };
   proxyTest: { input: ProxySettings; output: { proxy?: string } };
+  proxyStatus: { input: Record<string, never>; output: NetworkStatus };
   login: {
     input: { provider: string; type: "api_key" | "oauth"; loginId: string };
     output: void;
@@ -659,6 +666,7 @@ export interface WorkLensAPI {
   ): Promise<Requests[K]["output"]>;
   onChat(listener: (event: ChatEvent) => void): () => void;
   onAuth(listener: (event: AuthStep) => void): () => void;
+  onNetwork(listener: (status: NetworkStatus) => void): () => void;
 }
 declare global {
   interface Window {
