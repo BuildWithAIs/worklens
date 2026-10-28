@@ -236,6 +236,9 @@ export function TrendChart({
   const line = smoothPath(current);
   const baseline = y(0);
   const barWidth = Math.min(28, band * 0.56);
+  // The highlight stays near its bar, so a short range doesn't fill the whole
+  // plot; the hit area still takes the full band.
+  const highlight = Math.max(0, Math.min(band - 2, barWidth * 2));
   const marked =
     hovered ?? trend.findIndex((item) => item.start === selectedDay);
   const labelEvery = Math.ceil(
@@ -286,9 +289,9 @@ export function TrendChart({
               key={item.start}
               className="overview-hover-band"
               data-active={hovered === index || selectedDay === item.start}
-              x={left + band * index + 1}
+              x={center(index) - highlight / 2}
               y={top - 6}
-              width={Math.max(0, band - 2)}
+              width={highlight}
               height={plotHeight + 6}
               rx={6}
             />
