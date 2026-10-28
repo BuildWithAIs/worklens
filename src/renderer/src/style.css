@@ -335,6 +335,14 @@ kbd {
 .new-chat:hover {
   background: var(--selection-fill);
 }
+/* Insights sits right under New chat; the larger gap follows the pair. */
+.new-chat:has(+ .sidebar-report-button) {
+  margin-bottom: 2px;
+}
+.sidebar-report-button[aria-current="page"] {
+  background: var(--selection-fill);
+  color: var(--navigation-text-selected);
+}
 .new-chat kbd {
   margin-left: auto;
   opacity: 0;
@@ -434,15 +442,13 @@ kbd {
   overflow: auto;
   min-height: 0;
 }
+/* A quiet line in place of rows, aligned with them. */
 .sidebar-empty {
-  font-size: 12px;
+  margin: 0;
+  padding: 0 12px;
   color: var(--faint);
-  text-align: center;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  margin: 4px 4px 0;
-  padding: 20px 12px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.5;
 }
 .conversation-item {
   position: relative;

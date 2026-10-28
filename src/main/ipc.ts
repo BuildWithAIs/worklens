@@ -187,6 +187,13 @@ export function requestHandlers(context: RequestContext): RequestHandlers {
     prepareSearch: () => agents.prepareSearch(),
     cancelSearch: (input) => agents.cancelSearch(input.warmUp),
     delete: (input) => agents.delete(input.id),
+    overview: (input) => agents.overview(input),
+    reportSummary: (input) => agents.reportSummary(input),
+    generateReportSummary: (input) => {
+      const settings = state.value.reportSummary;
+      if (!settings?.enabled) throw new Error("REPORT_SUMMARY_DISABLED");
+      return agents.generateReportSummary(input, settings.models);
+    },
     send: (input) => agents.send(input),
     editMessage: (input) => agents.editMessage(input),
     selectMessageVersion: (input) => agents.selectMessageVersion(input),

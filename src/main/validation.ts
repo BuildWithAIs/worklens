@@ -3,6 +3,7 @@ import { connectorSchemas } from "./connectors/ipc";
 import { chatImageSourceSchema, chatImagesSchema } from "./chat-images";
 import { CHAT_IMAGE_LIMITS } from "../shared/chat-images";
 import { normalizeProxyUrl } from "../shared/network-proxy";
+import { daysBetween, parseDay } from "../shared/date-range";
 
 const proxySettings = z
   .object({
@@ -23,6 +24,21 @@ const id = z
   .min(1)
   .max(180)
   .regex(/^[a-zA-Z0-9_-]+$/);
+// About ten years: the overview reads every retained session either way.
+const MAX_RANGE_DAYS = 3660;
+const dateRange = z
+  .object({ start: z.string().max(10), end: z.string().max(10) })
+  .strict()
+  .refine((value) => {
+    const start = parseDay(value.start);
+    const end = parseDay(value.end);
+    return (
+      !!start &&
+      !!end &&
+      start <= end &&
+      daysBetween(start, end) < MAX_RANGE_DAYS
+    );
+  }, "Enter a valid date range");
 export const selection = z
   .object({
     provider: z.string().min(1).max(200),
@@ -150,6 +166,23 @@ export const schemas = {
         .enum(["violet", "electric", "ice", "sunset", "neon"])
         .optional(),
       riskAccepted: z.boolean().optional(),
+      reportSummary: z
+        .object({
+          enabled: z.boolean(),
+          models: z
+            .array(
+              z
+                .object({
+                  provider: z.string().min(1).max(200),
+                  model: z.string().min(1).max(300),
+                  thinking: selection.shape.thinking.optional(),
+                })
+                .strict(),
+            )
+            .max(5),
+        })
+        .strict()
+        .optional(),
       defaults: selection.optional(),
       hiddenModels: z.array(z.string().min(1).max(400)).max(2000).optional(),
       lastConversation: id.optional(),
@@ -190,6 +223,43 @@ export const schemas = {
   prepareSearch: z.object({}).strict(),
   cancelSearch: z.object({ warmUp: z.boolean() }).strict(),
   delete: z.object({ id }).strict(),
+  reportSummary: z
+    .object({
+      start: z.string().max(10),
+      end: z.string().max(10),
+      language: z.enum(["en", "zh"]),
+    })
+    .strict()
+    .refine(
+      (value) =>
+        dateRange.safeParse({ start: value.start, end: value.end }).success,
+      "Enter a valid date range",
+    ),
+  generateReportSummary: z
+    .object({
+      start: z.string().max(10),
+      end: z.string().max(10),
+      language: z.enum(["en", "zh"]),
+    })
+    .strict()
+    .refine(
+      (value) =>
+        dateRange.safeParse({ start: value.start, end: value.end }).success,
+      "Enter a valid date range",
+    ),
+  overview: z
+    .object({
+      start: z.string().max(10),
+      end: z.string().max(10),
+      previous: dateRange.optional(),
+      weekStart: z.number().int().min(0).max(6),
+    })
+    .strict()
+    .refine(
+      (value) =>
+        dateRange.safeParse({ start: value.start, end: value.end }).success,
+      "Enter a valid date range",
+    ),
   send: z
     .object({
       conversationId: id.optional(),

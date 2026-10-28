@@ -1,0 +1,1625 @@
+/* Opted out of the global button style. */
+button[data-slot="overview-button"] {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+button[data-slot="overview-button"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+button[data-slot="overview-button"]:disabled {
+  cursor: default;
+}
+
+/* Cards on a faintly tinted plane; WorkLens' monochrome plus one brand purple.
+   The purple ramp is ordinal: 1 is closest to the surface, 4 the most
+   emphatic (lighter in dark mode). Both ramps pass the 2:1 surface floor.
+   Token kinds reuse the usage popover's colors. */
+.overview-page {
+  --overview-plane: color-mix(in srgb, var(--text) 2.5%, var(--bg));
+  --overview-card: var(--surface);
+  --overview-edge: color-mix(in srgb, var(--text) 8%, transparent);
+  --overview-shadow: 0 1px 2px #18181b08, 0 8px 24px -12px #18181b14;
+  --overview-grid: color-mix(in srgb, var(--text) 7%, transparent);
+  --overview-axis: color-mix(in srgb, var(--text) 18%, transparent);
+  --overview-track: color-mix(in srgb, var(--text) 6%, transparent);
+  --overview-hatch-ink: color-mix(in srgb, var(--text) 24%, transparent);
+  --overview-viz-1: #b59af1;
+  --overview-viz-2: #9374e4;
+  --overview-viz-3: #7350d2;
+  --overview-viz-4: #52309f;
+  --overview-input: #8b5cf6;
+  --overview-output: #71717a;
+  --overview-cache-read: #c4b5fd;
+  --overview-cache-write: #45289f;
+  --overview-radius: 20px;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--overview-plane);
+}
+/* Scrollbars appear only while the pointer is over the area they scroll. */
+.overview-page
+  :is(
+    .overview-scroll,
+    .overview-card-body,
+    .overview-summary-body,
+    .overview-drawer-list
+  ) {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.overview-page
+  :is(
+    .overview-scroll,
+    .overview-card-body,
+    .overview-summary-body,
+    .overview-drawer-list
+  ):hover {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+:root[data-theme="dark"] .overview-page {
+  --overview-plane: color-mix(in srgb, #000 14%, var(--bg));
+  --overview-card: #1f1f22;
+  --overview-shadow: 0 1px 2px #00000040, 0 12px 28px -16px #00000080;
+  --overview-viz-1: #5b3ba6;
+  --overview-viz-2: #7654cf;
+  --overview-viz-3: #987ae6;
+  --overview-viz-4: #c0a9f6;
+  --overview-input: #a78bfa;
+  --overview-output: #8b8b94;
+  --overview-cache-read: #6d5ba8;
+  --overview-cache-write: #d8ccfb;
+}
+
+/* Page header: the title on the left; comparison, range and settings on the
+   right. The native window rule centres the header's first child for
+   dragging; the title keeps that drag area but reads from the left. */
+.overview-page .overview-header {
+  min-height: 72px;
+  padding-top: 20px;
+  padding-bottom: 12px;
+  background: var(--overview-plane);
+}
+.overview-page .overview-header::after {
+  background: linear-gradient(to bottom, var(--overview-plane), transparent);
+}
+:root .overview-page .overview-header > .overview-title.overview-title {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.overview-title h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+.overview-range-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.overview-range-pill {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--overview-edge);
+  border-radius: 999px;
+  background: var(--overview-card);
+  box-shadow: 0 1px 2px var(--shadow);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.overview-range-pill:hover,
+.overview-range-pill[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--text) 3%, var(--overview-card));
+}
+.overview-range-pill svg {
+  width: 14px;
+  height: 14px;
+  color: var(--faint);
+}
+.overview-icon-button {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--overview-card) 65%, transparent);
+  color: var(--muted);
+}
+.overview-icon-button:hover {
+  background: var(--selection-fill);
+  color: var(--text);
+}
+.overview-icon-button svg {
+  width: 15px;
+  height: 15px;
+}
+.overview-icon-button[data-stale] {
+  position: relative;
+}
+.overview-icon-button[data-stale]::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--overview-viz-3);
+  box-shadow: 0 0 0 1.5px var(--overview-card);
+}
+.overview-settings-button {
+  background: transparent;
+}
+.overview-info {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  vertical-align: middle;
+}
+.overview-info:hover {
+  color: var(--text);
+}
+.overview-info svg {
+  width: 14px;
+  height: 14px;
+}
+.overview-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+/* Layout follows the report's own width, not the window's, so the cards fit
+   whatever space the sidebar leaves. */
+.overview-content {
+  container: report / inline-size;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 20px 32px 72px;
+}
+
+/* Grid: cards in a row stretch to the same height. */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  transition: opacity 160ms;
+}
+/* The previous range stays visible, and inert, until the new one arrives. */
+.overview-grid[data-stale] {
+  opacity: 0.5;
+}
+.overview-card {
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--overview-edge);
+  border-radius: var(--overview-radius);
+  background: var(--overview-card);
+  box-shadow: var(--overview-shadow);
+}
+.overview-card[data-span="3"] {
+  grid-column: span 3;
+}
+.overview-card[data-span="4"] {
+  grid-column: span 4;
+}
+.overview-card[data-span="5"] {
+  grid-column: span 5;
+}
+.overview-card[data-span="6"] {
+  grid-column: span 6;
+}
+.overview-card[data-span="7"] {
+  grid-column: span 7;
+}
+.overview-card[data-span="12"] {
+  grid-column: span 12;
+}
+/* Side by side, Conversations borrows a little width from Tokens. */
+.overview-card[data-area="tokens"][data-span="5"] {
+  margin-right: var(--overview-borrow);
+}
+.overview-card[data-area="sessions"][data-span="3"] {
+  margin-left: calc(-1 * var(--overview-borrow));
+}
+.overview-grid {
+  --overview-borrow: 24px;
+}
+/* Below about 880px the summary row keeps two cards and the summary moves to
+   its own row; charts stack; below about 620px everything stacks. */
+@container report (max-width: 880px) {
+  .overview-grid {
+    --overview-borrow: 0px;
+  }
+  .overview-card[data-area="tokens"] {
+    grid-column: span 7;
+  }
+  .overview-card[data-area="sessions"] {
+    grid-column: span 5;
+  }
+  .overview-card:is(
+    [data-area="insight"],
+    [data-area="trend"],
+    [data-area="activity"],
+    [data-area="list"]
+  ) {
+    grid-column: span 12;
+  }
+  .overview-card:is([data-area="models"], [data-area="tools"]) {
+    grid-column: span 6;
+  }
+  /* Alone in its row, the summary card takes the height of its content. */
+  .overview-grid > .overview-card[data-area="insight"] {
+    min-height: 0;
+  }
+  .overview-grid > .overview-card[data-area="insight"] .overview-insight {
+    position: relative;
+    inset: auto;
+    min-height: 180px;
+  }
+}
+@container report (max-width: 620px) {
+  .overview-grid > .overview-card {
+    grid-column: span 12;
+  }
+}
+@media (max-width: 860px) {
+  .overview-content {
+    padding-inline: 16px;
+  }
+  .overview-page .overview-header {
+    flex-wrap: wrap;
+  }
+}
+.overview-card-head {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+  margin-bottom: 14px;
+}
+.overview-card-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.overview-head-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+}
+@container (max-width: 340px) {
+  .overview-head-actions :is(.overview-legend, .overview-ramp) {
+    display: none;
+  }
+}
+.overview-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Room on both sides, so row highlights are not clipped by the scroll edge. */
+.overview-card-body[data-scroll] {
+  max-height: 264px;
+  margin: 0 -10px;
+  padding: 0 10px;
+  overflow: auto;
+}
+/* A card's header icon sits flush with the card edge. */
+.overview-head-icon {
+  width: 26px;
+  height: 26px;
+  margin-right: -4px;
+  background: transparent;
+}
+
+/* Figures */
+.overview-hero-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.overview-hero {
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+@container (max-width: 360px) {
+  .overview-hero {
+    font-size: 32px;
+  }
+}
+.overview-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--selection-fill);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.overview-delta svg {
+  width: 9px;
+  height: 9px;
+  fill: currentColor;
+}
+.overview-cost {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.overview-cost span {
+  margin-left: 6px;
+  color: var(--faint);
+  font-size: 12px;
+}
+/* Composition and active days share one style: blocks in a row. The meter
+   lights up block by block; hovering a part or its legend row isolates it. */
+.overview-meter,
+.overview-days {
+  display: flex;
+  gap: 3px;
+  height: 10px;
+  margin: 14px 0 12px;
+}
+.overview-meter {
+  gap: 2px;
+}
+.overview-meter > span {
+  flex: 1;
+  min-width: 0;
+  border-radius: 2px;
+  transition: opacity 160ms;
+}
+.overview-meter[data-animate] > span {
+  animation: overview-light 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@keyframes overview-light {
+  from {
+    opacity: 0;
+    transform: scaleY(0.3);
+  }
+}
+.overview-meter > span[data-empty] {
+  background: var(--overview-track);
+}
+.overview-meter > span[data-dim] {
+  opacity: 0.22;
+}
+.overview-legend-grid > div {
+  transition: opacity 160ms;
+}
+.overview-legend-grid > div[data-dim] {
+  opacity: 0.45;
+}
+.overview-legend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 20px;
+  margin: 0 0 16px;
+}
+@container (max-width: 480px) {
+  .overview-legend-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
+.overview-legend-grid > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.overview-legend-grid dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.overview-legend-grid dd {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  margin: 0 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+.overview-legend-grid dd b {
+  color: var(--text);
+  font-weight: 600;
+}
+.overview-legend-grid dd span {
+  width: 36px;
+  color: var(--faint);
+  text-align: right;
+}
+.overview-swatch {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+/* Pinned to the card's bottom edge, so facts line up across a row. */
+.overview-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: auto 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--overview-edge);
+}
+.overview-facts[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.overview-facts dt {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overview-facts dd {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 1px 0 0;
+  overflow: hidden;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.overview-facts dd span {
+  color: var(--faint);
+  font-size: 12px;
+}
+.overview-partial {
+  text-decoration: underline dotted
+    color-mix(in srgb, var(--text) 35%, transparent);
+  text-underline-offset: 3px;
+}
+.overview-muted {
+  color: var(--faint);
+}
+
+/* Conversations */
+.overview-days > span {
+  flex: 1;
+  min-width: 1px;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--overview-track);
+}
+.overview-days > span[data-active="true"] {
+  background: var(--overview-viz-3);
+}
+
+/* Highlight and AI summary. Decoration sits inside the padding box, under
+   one neutral outline. Content is laid over the card, so a long summary
+   scrolls inside it instead of stretching the row. */
+.overview-card[data-area="insight"] {
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 300px;
+  padding: 0;
+}
+.overview-insight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: calc(var(--overview-radius) - 1px);
+  background: radial-gradient(
+    ellipse at 20% 100%,
+    color-mix(in srgb, var(--overview-viz-1) 40%, transparent),
+    transparent 70%
+  );
+}
+.overview-insight-layer .background-effect {
+  z-index: 0;
+}
+.overview-insight {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+}
+.overview-insight-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* Same as .overview-card-head, so the titles line up across the row. */
+  min-height: 26px;
+}
+/* A plain title like the other cards': a pill nested in the card's rounded
+   corner never sits concentric with it. */
+.overview-insight-label > svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 2px;
+  color: var(--overview-viz-3);
+}
+.overview-insight-figure {
+  margin-top: auto;
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.overview-insight-figure span {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.overview-insight-title {
+  margin: 8px 0 0;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overview-insight-detail {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.overview-insight-action {
+  margin-top: 18px;
+}
+.overview-summary-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  margin-top: 12px;
+  padding-bottom: 12px;
+  overflow: auto;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+}
+.overview-summary-headline {
+  color: color-mix(in srgb, var(--text) 82%, transparent);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  line-height: 1.5;
+}
+/* Each highlight is its own bubble, so a summary reads in pieces. */
+.overview-bubbles {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.overview-bubbles li {
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  border-radius: 14px 14px 14px 4px;
+  background: color-mix(in srgb, var(--overview-card) 72%, transparent);
+  backdrop-filter: blur(10px);
+  font-size: 13px;
+  line-height: 1.45;
+  animation: overview-pop 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.overview-summary-intro {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.overview-summary-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+.overview-summary-status svg {
+  width: 16px;
+  height: 16px;
+}
+.overview-summary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  color: var(--faint);
+  font-size: 12px;
+}
+.overview-summary-error {
+  margin-top: 10px;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* Charts */
+.overview-chart {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+}
+.overview-chart svg {
+  display: block;
+  overflow: visible;
+}
+.overview-card[data-area="activity"] .overview-chart {
+  margin-bottom: 16px;
+}
+.overview-axis-text {
+  font-size: 11px;
+  fill: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.overview-value-text {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.overview-hover-band {
+  fill: var(--selection-fill);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.overview-hover-band[data-active="true"] {
+  opacity: 1;
+}
+.overview-hit {
+  fill: transparent;
+}
+.overview-hit[data-clickable] {
+  cursor: pointer;
+}
+/* Token trend: soft bars under a smooth line; the comparison is dashed. */
+/* The bars carry the values; the line over them only traces the shape, so
+   it stays thin and light enough not to read as a second series. */
+.overview-trend-bar {
+  fill: var(--overview-viz-3);
+  opacity: 0.45;
+  transition: opacity 120ms;
+}
+.overview-trend-bar[data-active] {
+  opacity: 0.7;
+}
+[data-animate] > .overview-trend-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: overview-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes overview-rise {
+  from {
+    transform: scaleY(0);
+  }
+}
+.overview-trend-line {
+  fill: none;
+  stroke: var(--overview-viz-3);
+  stroke-opacity: 0.7;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.overview-trend-line[data-previous] {
+  stroke: var(--overview-hatch-ink);
+  stroke-opacity: 1;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
+}
+[data-animate] > .overview-trend-line:not([data-previous]) {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: overview-draw 900ms 150ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+[data-animate] > [data-previous] {
+  animation: overview-fade 700ms ease both;
+}
+@keyframes overview-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes overview-fade {
+  from {
+    opacity: 0;
+  }
+}
+.overview-trend-point {
+  fill: var(--overview-card);
+  stroke: var(--overview-viz-3);
+  stroke-width: 2;
+}
+.overview-trend-point[data-rest] {
+  stroke-width: 1.5;
+}
+/* Resting dots appear once the line has drawn through them. */
+[data-animate] .overview-trend-point[data-rest] {
+  animation: overview-fade 300ms 800ms ease backwards;
+}
+.overview-trend-point[data-previous] {
+  stroke: var(--overview-hatch-ink);
+  stroke-width: 1.5;
+}
+.overview-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: overview-pop 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes overview-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+.overview-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.overview-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.overview-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.overview-legend i[data-line] {
+  width: 14px;
+  height: 2.5px;
+  border-radius: 2px;
+}
+.overview-legend i[data-line="dashed"] {
+  height: 1.5px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--overview-hatch-ink) 0 4px,
+    transparent 4px 7px
+  );
+}
+.overview-ramp {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.overview-ramp i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.overview-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--selection-fill);
+}
+.overview-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+}
+.overview-toggle button[aria-pressed="true"] {
+  background: var(--overview-card);
+  color: var(--text);
+  box-shadow: 0 1px 2px var(--shadow);
+}
+.overview-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+.overview-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.overview-data-table th {
+  position: sticky;
+  top: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--overview-edge);
+  background: var(--overview-card);
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+.overview-data-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--overview-edge);
+}
+.overview-data-table .numeric {
+  text-align: right;
+}
+.overview-data-table [data-muted] {
+  color: var(--faint);
+}
+
+/* Focus areas: columns share the row when there are few, and wrap at a
+   fixed minimum width when there are many, so labels never overlap. */
+.overview-topics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px 16px;
+  align-items: start;
+}
+.overview-topic {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 8px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+  transition: background 150ms;
+}
+.overview-topic:hover,
+.overview-topic[aria-pressed="true"] {
+  background: var(--selection-fill);
+}
+.overview-topic-dots {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  align-content: flex-start;
+  align-items: center;
+  gap: 4px;
+  width: 112px;
+  margin-bottom: 12px;
+}
+.overview-topic-dots > i {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: overview-pop 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.overview-topic-more {
+  color: var(--faint);
+  font-size: 11px;
+}
+.overview-topic-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+}
+.overview-topic-name svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+.overview-topic-meta {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overview-topic-meta b {
+  color: var(--text);
+  font-weight: 600;
+}
+.overview-topic-detail {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.overview-page .truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ranked rows under column labels; model rows filter the conversations. */
+.overview-bars-table {
+  --overview-columns: minmax(0, 1fr) 64px;
+}
+.overview-bars-table[data-table="models"] {
+  --overview-columns: minmax(0, 1fr) 44px 72px 40px;
+}
+@container (max-width: 320px) {
+  .overview-bars-table[data-table="models"] {
+    --overview-columns: minmax(0, 1fr) 72px 40px;
+  }
+  .overview-bars-table [data-column] {
+    display: none;
+  }
+}
+/* Column labels stay in view while the card scrolls. */
+.overview-bars-columns {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: var(--overview-columns);
+  align-items: baseline;
+  gap: 8px;
+  /* No rule under the labels: rows carry the dividers, so a hovered first
+     row floats the same as any other. */
+  padding: 0 0 4px;
+  background: var(--overview-card);
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 500;
+}
+.overview-bars-columns > :not(:first-child) {
+  text-align: right;
+}
+.overview-bars {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.overview-bars li + li {
+  border-top: 1px solid var(--overview-edge);
+}
+.overview-bar-row {
+  display: grid;
+  grid-template-columns: var(--overview-columns);
+  align-items: center;
+  gap: 6px 8px;
+  width: calc(100% + 16px);
+  margin: 0 -8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+}
+/* Insights lists share one row treatment: the fill bleeds 8px past the
+   dividers, hover takes the sidebar's light fill and a selection the stronger
+   one, and the dividers beside a filled row hide so it reads as one block. */
+button.overview-bar-row:hover,
+.overview-drawer-row:hover {
+  background: var(--navigation-hover);
+}
+.overview-bar-row[aria-pressed="true"] {
+  background: var(--selection-fill);
+}
+:is(.overview-bars, .overview-drawer-list)
+  li:has(> button:is(:hover, [aria-pressed="true"])),
+:is(.overview-bars, .overview-drawer-list)
+  li:has(> button:is(:hover, [aria-pressed="true"]))
+  + li {
+  border-top-color: transparent;
+}
+.overview-bar-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 500;
+}
+.overview-bar-name > svg,
+.overview-bar-name > [data-slot="provider-icon"] {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+/* The provider shows in full or wraps out of sight on a hidden second line. */
+.overview-bar-name:has(.overview-bar-provider) {
+  flex-wrap: wrap;
+  height: 20px;
+  overflow: hidden;
+  line-height: 20px;
+}
+/* Capped beside the 14px icon and 6px gap, so a long name stays on line one. */
+.overview-bar-name:has(.overview-bar-provider) > .truncate {
+  max-width: calc(100% - 20px);
+}
+.overview-bar-provider {
+  flex-shrink: 0;
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+/* Numbers sit a step below the names and stay on one line; a value wider
+   than its column ends in an ellipsis rather than wrapping the row. */
+.overview-bar-number,
+.overview-bar-value,
+.overview-bar-share {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overview-bar-number {
+  color: var(--muted);
+}
+.overview-bar-share {
+  color: var(--faint);
+}
+/* A thin bar under the name compares rows without filling the card. */
+.overview-bar-track {
+  display: block;
+  grid-column: 1;
+  height: 3px;
+}
+.overview-bar-fill {
+  display: block;
+  min-width: 2px;
+  height: 100%;
+  border-radius: 2px;
+  transform-origin: left;
+  animation: overview-grow-x 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes overview-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+.overview-tool-groups {
+  display: grid;
+  gap: 16px;
+}
+/* Outranks the app's global h3 size. */
+.overview-card h3.overview-bars-heading {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.overview-empty-text {
+  padding: 12px 0;
+  color: var(--faint);
+  font-size: 13px;
+  text-align: center;
+}
+
+.overview-list-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.overview-list-group svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+.overview-list-tokens {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.overview-mini {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 36px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--overview-track);
+}
+.overview-mini > i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--overview-viz-3);
+}
+
+/* Empty, loading and error states */
+.overview-state {
+  grid-column: span 12;
+  align-items: center;
+  padding: 72px 24px;
+  text-align: center;
+}
+.overview-state h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.overview-state-text {
+  margin-bottom: 20px;
+  color: var(--faint);
+  font-size: 13px;
+}
+.overview-state-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+/* With nothing to show, the page reads like a new chat: plain background,
+   a centered line and the next step. */
+.overview-page[data-empty],
+.overview-page[data-empty] .overview-header {
+  background: var(--bg);
+}
+.overview-page[data-empty] .overview-header::after {
+  display: none;
+}
+.overview-page[data-empty] .overview-scroll {
+  display: flex;
+}
+.overview-page[data-empty] .overview-content {
+  display: flex;
+  flex: 1;
+  width: 100%;
+}
+.overview-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 72px;
+  text-align: center;
+  transition: opacity 160ms;
+  animation: overview-empty-in 200ms ease-out both;
+}
+.overview-empty[data-stale] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+@keyframes overview-empty-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.overview-empty h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+.overview-empty p {
+  max-width: 440px;
+  margin: 0 0 20px;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* Loading: blocks in the cards' places. One sheen, tinted with the brand
+   violet, sweeps across the whole window rather than each block. */
+.overview-grid > .overview-skeleton {
+  gap: 14px;
+  min-height: 272px;
+  padding: 18px 20px;
+}
+.overview-skeleton-block,
+.overview-skeleton-fill {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: linear-gradient(
+      100deg,
+      transparent 40%,
+      color-mix(in srgb, var(--overview-viz-1) 26%, transparent) 50%,
+      transparent 60%
+    )
+    var(--overview-track);
+  background-attachment: fixed;
+  background-size: 200vw 100%;
+  animation: overview-sheen 1.8s linear infinite;
+}
+.overview-skeleton-fill {
+  flex: 1;
+  border-radius: 10px;
+}
+.overview-skeleton-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+@keyframes overview-sheen {
+  from {
+    background-position: 100vw 0;
+  }
+  to {
+    background-position: -100vw 0;
+  }
+}
+.overview-note {
+  margin-top: 20px;
+  color: var(--faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* AI summary settings, shown in a dialog from the report. */
+.overview-setup-dialog {
+  max-width: 560px;
+}
+.overview-setup-body {
+  max-height: min(60vh, 520px);
+  overflow: auto;
+}
+/* One group: the switch, then the models it uses. Row actions appear on
+   hover or focus so the list reads as names, not controls. */
+.report-settings {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.report-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.report-settings-copy {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.report-settings-copy > span {
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.report-settings-models {
+  padding: 10px 8px 8px;
+  border-top: 1px solid var(--border);
+}
+.report-settings-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 6px 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.report-settings-heading span {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+.report-settings-models ol {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.report-settings-models li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 4px;
+  border-radius: 8px;
+}
+.report-settings-models li:is(:hover, :focus-within) {
+  background: var(--navigation-hover);
+}
+.report-settings-model {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 6px;
+  font-size: 13px;
+}
+.report-settings-model > [data-slot="provider-icon"] {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.report-settings-provider {
+  flex: 0 10 auto;
+  color: var(--faint);
+  font-size: 12px;
+}
+.report-settings-model .report-settings-thinking {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--muted);
+}
+.report-settings-index {
+  width: 18px;
+  flex-shrink: 0;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.report-settings-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.report-settings-models li:is(:hover, :focus-within) .report-settings-actions {
+  opacity: 1;
+}
+.report-settings-add {
+  padding-left: 26px;
+  color: var(--muted);
+}
+
+/* Tooltip for chart marks: an accent pill. */
+.overview-tooltip {
+  position: fixed;
+  z-index: 60;
+  max-width: 280px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--accent);
+  box-shadow: 0 8px 24px -8px #00000059;
+  color: var(--accent-text);
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.overview-tooltip b {
+  font-weight: 600;
+}
+.overview-tooltip [data-muted] {
+  opacity: 0.68;
+}
+.overview-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.overview-tooltip-row i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+}
+.overview-tooltip-row i[data-line="dashed"] {
+  height: 1.5px;
+  vertical-align: middle;
+  background: repeating-linear-gradient(
+    90deg,
+    currentColor 0 3px,
+    transparent 3px 5px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-page *,
+  .overview-page *::before,
+  .overview-page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Conversations behind a selection, in a panel over the report's right edge. */
+.overview-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  animation: overview-fade 160ms ease both;
+}
+.overview-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 92%);
+  border-left: 1px solid var(--overview-edge);
+  background: var(--overview-card);
+  box-shadow: -16px 0 40px -24px #18181b40;
+  outline: none;
+  animation: overview-slide 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes overview-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes overview-slide {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+.overview-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 20px 12px;
+}
+.overview-drawer-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.overview-drawer-title h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.overview-drawer-title span {
+  color: var(--faint);
+  font-size: 12px;
+}
+.overview-drawer-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 20px 16px;
+  overflow: auto;
+  list-style: none;
+}
+.overview-drawer-list li + li {
+  border-top: 1px solid var(--overview-edge);
+}
+.overview-drawer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+  width: calc(100% + 16px);
+  margin: 0 -8px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+.overview-drawer-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+/* One line each, so every row has the same height; long text truncates. */
+.overview-drawer-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overview-drawer-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.overview-drawer-meta > * {
+  flex-shrink: 0;
+}
+.overview-drawer-meta > .overview-list-group {
+  flex-shrink: 1;
+  max-width: 50%;
+}
+.overview-drawer-models {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.overview-drawer-models > :is(svg, span) {
+  width: 12px;
+  height: 12px;
+}
+.overview-drawer-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 10px;
+}
+.overview-drawer-tools .overview-toggle button {
+  width: auto;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.overview-drawer-empty {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 8px 20px;
+  color: var(--faint);
+  font-size: 13px;
+}
