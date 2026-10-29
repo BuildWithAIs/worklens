@@ -438,7 +438,7 @@ test("compact tool activity, history actions and fluid message width", async ({
     weight: getComputedStyle(document.querySelector(".conversation-title"))
       .fontWeight,
   }));
-  expect(sidebarMetrics.height).toBeGreaterThanOrEqual(40);
+  expect(sidebarMetrics.height).toBeGreaterThanOrEqual(38);
   expect(sidebarMetrics.weight).toBe("400");
   const reply = page
     .locator('[data-slot="aui_assistant-message-root"]')

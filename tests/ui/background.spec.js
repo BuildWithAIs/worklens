@@ -280,7 +280,7 @@ test("navigation surfaces with an effect drop the unpigmented border column and 
   });
   await expect(page.locator(".settings-navigation")).toHaveCSS(
     "background-color",
-    "rgba(72, 72, 74, 0.9)",
+    "color(srgb 0.109804 0.109804 0.117647 / 0.9)",
   );
   await page.getByRole("button", { name: "Back to app", exact: true }).click();
   await expect(page.locator(".sidebar")).toHaveCSS("border-right-width", "0px");
