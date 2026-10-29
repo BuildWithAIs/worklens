@@ -53,10 +53,13 @@ function Tooltip({
 }: TooltipPrimitive.Root.Props) {
   const localActions = useRef<TooltipPrimitive.Root.Actions | null>(null);
   const [visible, setVisible] = useState(false);
+  // A controlled tooltip can decline an open request, such as when its label
+  // fits. Only an actually open hint may intercept the next Escape.
+  const isOpen = props.open ?? visible;
   // The trigger when keyboard focus opened the hint.
   const focusedTrigger = useRef<Element | undefined>(undefined);
   useEffect(() => {
-    if (!visible) return;
+    if (!isOpen) return;
     const close = () => (actionsRef ?? localActions).current?.close();
     const closeOnScroll = () => {
       // Focusing a trigger can scroll it into view; that hint follows its
@@ -80,7 +83,7 @@ function Tooltip({
       window.removeEventListener("scroll", closeOnScroll, true);
       window.removeEventListener("keydown", dismiss, true);
     };
-  }, [visible, actionsRef]);
+  }, [isOpen, actionsRef]);
   return (
     <TooltipPrimitive.Root
       data-slot="tooltip"
@@ -141,20 +144,45 @@ function TooltipContent({
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
 
+// Whether the trigger's `.truncate` label, or the trigger itself, cuts off text.
+function truncated(trigger: HTMLElement | null) {
+  const label = trigger?.matches(".truncate")
+    ? trigger
+    : trigger?.querySelector<HTMLElement>(".truncate");
+  return (
+    !!label &&
+    (label.scrollWidth > label.clientWidth ||
+      label.dataset.truncated === "true" ||
+      label.dataset.overflow === "true")
+  );
+}
+
 // Shared hint for existing controls and focusable explanatory text.
+// `truncatedOnly` opens it only while the label is cut off.
 function Hint({
   children,
   content,
   disabled = false,
+  truncatedOnly = false,
 }: {
   children: ReactElement;
   content: ReactNode;
   disabled?: boolean;
+  truncatedOnly?: boolean;
 }) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
   return (
     <TooltipProvider>
-      <Tooltip disabled={disabled}>
-        <TooltipTrigger render={children} />
+      <Tooltip
+        disabled={disabled}
+        {...(truncatedOnly && {
+          open,
+          onOpenChange: (next: boolean) =>
+            setOpen(next && truncated(trigger.current)),
+        })}
+      >
+        <TooltipTrigger ref={trigger} render={children} />
         <TooltipContent>{content}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -177,17 +205,7 @@ function OverflowHint({
       <Tooltip
         open={open}
         disableHoverablePopup
-        onOpenChange={(next) => {
-          const label =
-            trigger.current?.querySelector<HTMLElement>(".truncate");
-          setOpen(
-            next &&
-              !!label &&
-              (label.scrollWidth > label.clientWidth ||
-                label.dataset.truncated === "true" ||
-                label.dataset.overflow === "true"),
-          );
-        }}
+        onOpenChange={(next) => setOpen(next && truncated(trigger.current))}
       >
         <TooltipTrigger
           ref={trigger}

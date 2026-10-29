@@ -7,6 +7,7 @@ import {
   Dispatcher,
   Pool,
   ProxyAgent,
+  buildConnector,
   fetch as undiciFetch,
   getGlobalDispatcher,
   setGlobalDispatcher,
@@ -378,7 +379,25 @@ export class ProxyRouter extends Dispatcher {
         // The proxy's own client opens each tunnel; what it throws happened
         // while reaching the proxy, before the destination was involved.
         clientFactory: (origin, options) => {
-          const client = new Pool(origin, options);
+          const poolOptions = options as Pool.Options;
+          const proxyConnect =
+            typeof poolOptions.connect === "function"
+              ? poolOptions.connect
+              : buildConnector(poolOptions.connect);
+          const client = new Pool(origin, {
+            ...poolOptions,
+            connect: (params, callback) => {
+              // Sanitize SNI at the socket boundary. Clearing it on CONNECT
+              // instead makes Undici fall back to the destination's Host.
+              const servername = params.servername;
+              proxyConnect(
+                servername && isIP(servername.replace(/^\[|\]$/g, ""))
+                  ? { ...params, servername: undefined }
+                  : params,
+                callback,
+              );
+            },
+          });
           const connect = client.connect.bind(client);
           client.connect = (async (params: Dispatcher.ConnectOptions) => {
             try {

@@ -1056,6 +1056,7 @@ const zhCN = {
       chooseModel: "选择模型",
       stale: "会话有更新，重新生成",
       meta: "{{model}} · {{tokens}} token · {{time}}",
+      details: "· {{tokens}} token · {{time}}",
     },
     trend: {
       title: "Token 趋势",

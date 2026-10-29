@@ -48,6 +48,36 @@ function port(server: Server) {
   return (server.address() as AddressInfo).port;
 }
 
+async function tlsCredentials(dir: string, name: string, alternative: string) {
+  execFileSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "ec",
+      "-pkeyopt",
+      "ec_paramgen_curve:prime256v1",
+      "-nodes",
+      "-keyout",
+      join(dir, `${name}-key.pem`),
+      "-out",
+      join(dir, `${name}-cert.pem`),
+      "-days",
+      "1",
+      "-subj",
+      `/CN=${name}`,
+      "-addext",
+      `subjectAltName=${alternative}`,
+    ],
+    { stdio: "ignore" },
+  );
+  return {
+    key: await readFile(join(dir, `${name}-key.pem`)),
+    cert: await readFile(join(dir, `${name}-cert.pem`), "utf8"),
+  };
+}
+
 beforeAll(async () => {
   resetEnvironment();
   target = createServer((request, response) =>
@@ -297,6 +327,218 @@ test.skipIf(!openssl)(
     }
   },
 );
+
+test.skipIf(!openssl)(
+  "HTTPS proxies omit IP SNI, preserve domain SNI, and still verify proxy certificates",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "worklens-proxy-ip-tls-"));
+    const original = tls.getCACertificates("default");
+    const servers: Server[] = [];
+    const names: string[] = [];
+    try {
+      const valid = await tlsCredentials(
+        dir,
+        "proxy",
+        "IP:127.0.0.1,DNS:localhost",
+      );
+      const mismatch = await tlsCredentials(
+        dir,
+        "wrong-proxy",
+        "DNS:wrong.proxy.test",
+      );
+      tls.setDefaultCACertificates([...original, valid.cert, mismatch.cert]);
+      const proxy = async (credentials: typeof valid) => {
+        const server = createHttpsServer(credentials);
+        servers.push(server);
+        server.on("secureConnection", (socket) => {
+          names.push(socket.servername || "");
+        });
+        server.on("connect", (_request, socket, head) => {
+          const upstream = connect(port(target), "127.0.0.1", () => {
+            socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+            upstream.write(head);
+            upstream.pipe(socket);
+            socket.pipe(upstream);
+          });
+          upstream.on("error", () => socket.destroy());
+          socket.on("error", () => upstream.destroy());
+        });
+        await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+        return port(server);
+      };
+      const validPort = await proxy(valid);
+      const invalidPort = await proxy(mismatch);
+      service = new NetworkProxy({
+        resolveSystem: async () => "DIRECT",
+        setSessionProxy: async () => {},
+      });
+      for (const [host, name] of [
+        ["127.0.0.1", ""],
+        ["localhost", "localhost"],
+      ]) {
+        await service.apply({
+          mode: "custom",
+          url: `https://${host}:${validPort}`,
+        });
+        expect(await (await fetch("http://behind.example.test/")).text()).toBe(
+          "ok:behind.example.test",
+        );
+        expect(names.at(-1)).toBe(name);
+        expect(service.status()).toMatchObject({ proxy: false });
+      }
+      // Trust alone must not allow a certificate issued for the wrong host.
+      await service.apply({
+        mode: "custom",
+        url: `https://127.0.0.1:${invalidPort}`,
+      });
+      await expect(fetch("http://behind.example.test/")).rejects.toMatchObject({
+        cause: { code: "UND_ERR_PRX_TLS" },
+      });
+      expect(service.status()).toMatchObject({ proxy: true });
+    } finally {
+      await service?.dispose();
+      service = undefined;
+      tls.setDefaultCACertificates(original);
+      for (const server of servers)
+        await new Promise<void>((done) => server.close(() => done()));
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+for (const { host, servername } of [
+  { host: "127.0.0.1", servername: "" },
+  { host: "localhost", servername: "localhost" },
+  { host: "[::1]", servername: "" },
+]) {
+  test.skipIf(!openssl)(
+    `HTTPS proxy ${host} preserves separate proxy and destination TLS identities`,
+    async ({ skip }) => {
+      const dir = await mkdtemp(join(tmpdir(), "worklens-proxy-nested-tls-"));
+      const original = tls.getCACertificates("default");
+      const servers: Server[] = [];
+      const proxyNames: string[] = [];
+      const targetNames: string[] = [];
+      const tunnels: string[] = [];
+      const listen = async (server: Server, address: string) => {
+        await new Promise<void>((resolve, reject) => {
+          server.once("error", reject);
+          server.listen(0, address, () => {
+            server.off("error", reject);
+            resolve();
+          });
+        });
+        servers.push(server);
+        return port(server);
+      };
+      try {
+        const proxyCredentials = await tlsCredentials(
+          dir,
+          "proxy",
+          "IP:127.0.0.1,IP:::1,DNS:localhost",
+        );
+        const targetCredentials = await tlsCredentials(
+          dir,
+          "destination",
+          "DNS:destination.example.test",
+        );
+        // Both certificates are trusted, but neither identifies the other end.
+        tls.setDefaultCACertificates([
+          ...original,
+          proxyCredentials.cert,
+          targetCredentials.cert,
+        ]);
+        const secureTarget = createHttpsServer(
+          targetCredentials,
+          (request, response) => response.end(`ok:${request.headers.host}`),
+        );
+        secureTarget.on("secureConnection", (socket) => {
+          targetNames.push(socket.servername || "");
+        });
+        const targetPort = await listen(secureTarget, "127.0.0.1");
+        const proxy = async (credentials: typeof proxyCredentials) => {
+          const server = createHttpsServer(credentials);
+          server.on("secureConnection", (socket) => {
+            proxyNames.push(socket.servername || "");
+          });
+          server.on("connect", (request, socket, head) => {
+            tunnels.push(request.url ?? "");
+            const upstream = connect(targetPort, "127.0.0.1", () => {
+              socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+              upstream.write(head);
+              upstream.pipe(socket);
+              socket.pipe(upstream);
+            });
+            upstream.on("error", () => socket.destroy());
+            socket.on("error", () => upstream.destroy());
+            upstream.on("close", () => socket.destroy());
+            socket.on("close", () => upstream.destroy());
+          });
+          return listen(server, host === "[::1]" ? "::1" : "127.0.0.1");
+        };
+        let proxyPort: number;
+        try {
+          proxyPort = await proxy(proxyCredentials);
+        } catch (error) {
+          const { code } = error as NodeJS.ErrnoException;
+          if (
+            host === "[::1]" &&
+            (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL")
+          ) {
+            skip("IPv6 loopback is unavailable");
+          }
+          throw error;
+        }
+        service = new NetworkProxy({
+          resolveSystem: async () => "DIRECT",
+          setSessionProxy: async () => {},
+        });
+        await service.apply({
+          mode: "custom",
+          url: `https://${host}:${proxyPort}`,
+        });
+        expect(
+          await (await fetch("https://destination.example.test/")).text(),
+        ).toBe("ok:destination.example.test");
+        expect(proxyNames).toEqual([servername]);
+        expect(targetNames).toEqual(["destination.example.test"]);
+        expect(tunnels).toEqual(["destination.example.test:443"]);
+        expect(service.status()).toMatchObject({ proxy: false });
+
+        // A target identity error must not become a proxy failure warning.
+        await expect(
+          fetch("https://wrong.example.test/"),
+        ).rejects.toMatchObject({
+          cause: {
+            code: "ERR_TLS_CERT_ALTNAME_INVALID",
+            host: "wrong.example.test",
+          },
+        });
+        expect(service.status()).toMatchObject({ proxy: false });
+
+        // A trusted target certificate must be rejected at the proxy boundary.
+        const invalidPort = await proxy(targetCredentials);
+        await service.apply({
+          mode: "custom",
+          url: `https://${host}:${invalidPort}`,
+        });
+        const tunnelCount = tunnels.length;
+        await expect(
+          fetch("https://destination.example.test/"),
+        ).rejects.toMatchObject({ cause: { code: "UND_ERR_PRX_TLS" } });
+        expect(tunnels).toHaveLength(tunnelCount);
+        expect(service.status()).toMatchObject({ proxy: true });
+      } finally {
+        await service?.dispose();
+        service = undefined;
+        tls.setDefaultCACertificates(original);
+        for (const server of servers)
+          await new Promise<void>((done) => server.close(() => done()));
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+}
 
 test("aborted requests do not open a tunnel after pending DNS completes", async () => {
   let complete!: (addresses: LookupAddress[]) => void;

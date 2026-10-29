@@ -11,6 +11,7 @@ import {
 import { FieldLabel } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
+import { Hint } from "@/components/ui/tooltip";
 import { useAppTranslation } from "@/i18n";
 import { ModelMenu } from "./ModelMenu";
 import { ProviderIcon } from "./ProviderIcon";
@@ -209,7 +210,11 @@ function SummaryModel({
   return (
     <span className="report-settings-model">
       <ProviderIcon provider={model.provider} />
-      <span className="truncate">{name}</span>
+      <Hint content={name} truncatedOnly>
+        <span className="truncate" tabIndex={0}>
+          {name}
+        </span>
+      </Hint>
       <span className="report-settings-provider truncate">
         {info?.available
           ? (provider?.name ?? model.provider)

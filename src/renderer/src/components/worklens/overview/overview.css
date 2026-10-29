@@ -630,6 +630,7 @@ button[data-slot="overview-button"]:disabled {
   margin-top: 12px;
   padding-bottom: 12px;
   overflow: auto;
+  overflow-wrap: anywhere;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
 }
 .overview-summary-headline {
@@ -650,6 +651,8 @@ button[data-slot="overview-button"]:disabled {
   list-style: none;
 }
 .overview-bubbles li {
+  min-width: 0;
+  max-width: 100%;
   padding: 7px 12px;
   border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
   border-radius: 14px 14px 14px 4px;
@@ -679,11 +682,26 @@ button[data-slot="overview-button"]:disabled {
 }
 .overview-summary-meta {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-shrink: 0;
+  align-items: baseline;
+  min-width: 0;
   margin-top: 12px;
   color: var(--faint);
   font-size: 12px;
+  white-space: nowrap;
+}
+/* A real space before the leading "·" matches the spaces after it. */
+.overview-summary-details {
+  flex-shrink: 0;
+  white-space: pre;
+}
+.overview-summary-details::before {
+  content: " ";
+}
+.overview-summary-meta:focus-visible,
+.report-settings-model > .truncate:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .overview-summary-error {
   margin-top: 10px;
@@ -905,8 +923,8 @@ button[data-slot="overview-button"]:disabled {
   color: var(--faint);
 }
 
-/* Focus areas: columns share the row when there are few, and wrap at a
-   fixed minimum width when there are many, so labels never overlap. */
+/* Columns share the available space and wrap when needed. Each topic's
+   background and hit area hug its content, even when it has a row to itself. */
 .overview-topics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -917,8 +935,11 @@ button[data-slot="overview-button"]:disabled {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-self: start;
   gap: 2px;
+  width: fit-content;
   min-width: 0;
+  max-width: min(100%, 360px);
   padding: 10px 8px 8px;
   border: 0;
   border-radius: 14px;

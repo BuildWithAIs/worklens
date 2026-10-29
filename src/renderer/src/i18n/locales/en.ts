@@ -1125,6 +1125,7 @@ const en = {
       chooseModel: "Choose model",
       stale: "Conversations changed. Regenerate",
       meta: "{{model}} · {{tokens}} tokens · {{time}}",
+      details: "· {{tokens}} tokens · {{time}}",
     },
     trend: {
       title: "Token trend",
