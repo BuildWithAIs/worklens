@@ -8,13 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { useAppTranslation } from "@/i18n";
-import { ReportSettings } from "../ReportSettings";
+import { initialSummaryModels, ReportSettings } from "../ReportSettings";
+import { settingsFailure } from "../settings-notification";
 import type { ProviderInfo, Settings } from "../../../../../shared/contracts";
 
 /**
  * AI summary settings for the report. The first time the report opens it asks
- * once; closing without choosing keeps summaries off and does not ask again.
+ * once, as a plain question; turning summaries on then shows the models.
+ * Closing without choosing keeps summaries off and does not ask again.
  */
 export function ReportSetupDialog({
   open,
@@ -31,19 +34,44 @@ export function ReportSetupDialog({
   providers: ProviderInfo[];
   save: (patch: Partial<Settings>) => Promise<void>;
 }) {
-  const { t } = useAppTranslation();
-  // Decided when the dialog opens, so the title does not change mid-way.
+  const { t, language } = useAppTranslation();
+  // Decided when the dialog opens, so it does not change mid-way.
   const [firstRun, setFirstRun] = useState(!settings.reportSummary);
+  const [pending, setPending] = useState(false);
   const configured = !!settings.reportSummary;
   useEffect(() => {
     if (open) setFirstRun(!configured);
   }, [open]); // Only when the dialog opens.
+  const asking = firstRun && !settings.reportSummary?.enabled;
   const close = () => {
     if (!settings.reportSummary)
       void save({ reportSummary: { enabled: false, models: [] } }).catch(
         () => {},
       );
     onOpenChange(false);
+  };
+  const turnOn = async () => {
+    setPending(true);
+    try {
+      await save({
+        reportSummary: {
+          enabled: true,
+          models: initialSummaryModels(settings, providers),
+        },
+      });
+    } catch (error) {
+      toast.add(
+        settingsFailure(
+          t("settings.report.saveFailed"),
+          String(error),
+          language,
+          false,
+          t("settingsFeedback.unknown"),
+        ),
+      );
+    } finally {
+      setPending(false);
+    }
   };
   return (
     <Dialog
@@ -53,29 +81,39 @@ export function ReportSetupDialog({
       <DialogContent className="overview-setup-dialog">
         <DialogHeader>
           <DialogTitle>
-            {firstRun
+            {asking
               ? t("overview.setup.firstTitle")
               : t("overview.setup.title")}
           </DialogTitle>
-          <DialogDescription>
-            {t("overview.setup.description")}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="overview-setup-body">
-          <ReportSettings
-            settings={settings}
-            providers={providers}
-            save={save}
-            onManageModels={onManageModels}
-          />
-        </div>
-        <DialogFooter>
-          {firstRun && !settings.reportSummary?.enabled && (
-            <Button variant="outline" onClick={close}>
-              {t("overview.setup.notNow")}
-            </Button>
+          {asking && (
+            <DialogDescription>
+              {t("overview.setup.description")}
+            </DialogDescription>
           )}
-          <Button onClick={close}>{t("overview.setup.done")}</Button>
+        </DialogHeader>
+        {!asking && (
+          <div className="overview-setup-body">
+            <ReportSettings
+              settings={settings}
+              providers={providers}
+              save={save}
+              onManageModels={onManageModels}
+            />
+          </div>
+        )}
+        <DialogFooter>
+          {asking ? (
+            <>
+              <Button variant="outline" disabled={pending} onClick={close}>
+                {t("overview.setup.notNow")}
+              </Button>
+              <Button disabled={pending} onClick={() => void turnOn()}>
+                {t("overview.setup.turnOn")}
+              </Button>
+            </>
+          ) : (
+            <Button onClick={close}>{t("overview.setup.done")}</Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

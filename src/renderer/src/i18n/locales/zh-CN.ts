@@ -630,9 +630,9 @@ const zhCN = {
     report: {
       enable: "用 AI 生成总结",
       enableHint:
-        "只发送会话标题和你发出的消息摘录，不发送回复和工具输出。按模型价格计费。",
-      models: "总结模型",
-      modelsHint: "按顺序尝试",
+        "只发送会话标题和你发出的消息摘录，不发送回复和工具输出。已保存的 API 密钥和令牌会先移除。按模型价格计费。",
+      models: "模型",
+      modelsHint: "按顺序尝试。",
       moveUp: "上移：{{model}}",
       moveDown: "下移：{{model}}",
       remove: "移除：{{model}}",
@@ -1008,8 +1008,10 @@ const zhCN = {
       open: "AI 总结设置",
       title: "AI 总结",
       firstTitle: "要用 AI 总结你的工作吗？",
-      description: "开启后，可以为所选时间范围生成简短的总结和主题。",
+      description:
+        "只在你生成总结时，才会把会话标题和你发出的消息摘录发给模型。",
       notNow: "暂不使用",
+      turnOn: "开启",
       done: "完成",
     },
     tokens: {
