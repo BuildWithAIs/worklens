@@ -9,7 +9,7 @@ import type {
   ReportSummaryRequest,
   ReportSummaryState,
 } from "../shared/contracts";
-import { addDays, parseDay } from "../shared/date-range";
+import { addDays, daysBetween, parseDay } from "../shared/date-range";
 import { nonNegative } from "../shared/usage";
 import type { SessionDigest } from "./overview";
 import { atomicJson } from "./storage";
@@ -48,7 +48,7 @@ export function summaryInput(
           0,
         );
       const runs = digest.runs.filter(within).length;
-      const prompts = digest.prompts.filter(within).map((item) => item.text);
+      const prompts = digest.prompts.filter(within);
       return { digest, tokens, runs, prompts };
     })
     .filter((item) => item.runs > 0 || item.prompts.length > 0)
@@ -56,6 +56,9 @@ export function summaryInput(
     .slice(0, MAX_CONVERSATIONS);
   const refs = new Map<string, string>();
   const lines: string[] = [];
+  // Which conversations and requests were sent: identical wording in another
+  // conversation is still other work.
+  const sources: string[] = [];
   let length = 0;
   for (const [index, item] of active.entries()) {
     const ref = `c${index + 1}`;
@@ -66,25 +69,28 @@ export function summaryInput(
         ? [...item.prompts.slice(0, half), ...item.prompts.slice(-half)]
         : item.prompts;
     const requests = picked
-      .map((text) => JSON.stringify(redact(text).slice(0, REQUEST_LIMIT)))
+      .map(({ text }) => JSON.stringify(redact(text).slice(0, REQUEST_LIMIT)))
       .join(" / ");
     const title = redact(item.digest.title ?? "").slice(0, 120);
     const line = `${ref} | ${JSON.stringify(title)} | ${item.runs} runs | requests: ${requests || "none"}`;
     if (length + line.length > INPUT_LIMIT) break;
     refs.set(ref, item.digest.id);
     lines.push(line);
+    sources.push(
+      `${item.digest.id} ${picked.map((item) => item.at).join(",")}`,
+    );
     length += line.length;
   }
-  const text = [
-    `Period: ${request.start} to ${request.end} (local dates).`,
-    `Conversations (${lines.length}):`,
-    ...lines,
-  ].join("\n");
+  const conversations = [`Conversations (${lines.length}):`, ...lines].join(
+    "\n",
+  );
   return {
     refs,
-    text,
+    text: `Period: ${request.start} to ${request.end} (local dates).\n${conversations}`,
+    // Moving the range alone leaves the summary current; only a change in
+    // the conversations it covers does not.
     fingerprint: createHash("sha256")
-      .update(`${request.language}\n${text}`)
+      .update([request.language, conversations, ...sources].join("\n"))
       .digest("hex"),
     conversations: refs.size,
   };
@@ -187,6 +193,11 @@ const savedSchema = z.object({
 });
 const cacheKey = (request: ReportSummaryRequest) =>
   `${request.start}|${request.end}|${request.language}`;
+const rangeDays = (range: { start: string; end: string }) => {
+  const start = parseDay(range.start);
+  const end = parseDay(range.end);
+  return start && end ? daysBetween(start, end) + 1 : 0;
+};
 
 /** Summaries for the usage report, saved per range and language. */
 export class ReportSummaries {
@@ -229,12 +240,43 @@ export class ReportSummaries {
     request: ReportSummaryRequest,
   ): Promise<ReportSummaryState> {
     const input = summaryInput(digests, request, this.redact);
-    const summary = (await this.load()).entries[cacheKey(request)];
+    const { entries } = await this.load();
+    const summary =
+      entries[cacheKey(request)] ??
+      (input.conversations ? this.latest(entries, request) : undefined);
     return {
       summary,
       stale: !!summary && summary.fingerprint !== input.fingerprint,
       conversations: input.conversations,
     };
+  }
+
+  /**
+   * A rolling range moves every day; its last summary for an earlier day
+   * stays useful until regenerated. A one-day range covers other work.
+   */
+  private latest(
+    entries: Record<string, ReportSummary>,
+    request: ReportSummaryRequest,
+  ) {
+    const days = rangeDays(request);
+    if (days < 2) return undefined;
+    let found: ReportSummary | undefined;
+    for (const [key, entry] of Object.entries(entries)) {
+      if (
+        !key.endsWith(`|${request.language}`) ||
+        entry.end > request.end ||
+        rangeDays(entry) !== days
+      )
+        continue;
+      if (
+        !found ||
+        entry.end > found.end ||
+        (entry.end === found.end && entry.generatedAt > found.generatedAt)
+      )
+        found = entry;
+    }
+    return found;
   }
 
   generate(

@@ -91,6 +91,40 @@ describe("summary input", () => {
       ).fingerprint,
     ).not.toBe(base.fingerprint);
   });
+
+  test("the fingerprint ignores the dates while the covered conversations stay the same", () => {
+    const base = summaryInput([digest("a", ["one"])], request, identity);
+    const moved = summaryInput(
+      [digest("a", ["one"])],
+      { ...request, start: "2026-03-03", end: "2026-03-09" },
+      identity,
+    );
+    expect(moved.text).toContain("Period: 2026-03-03 to 2026-03-09");
+    expect(moved.fingerprint).toBe(base.fingerprint);
+    // The same title and wording in another conversation is other work.
+    const other = summaryInput(
+      [digest("b", ["one"], "2026-03-04", "a")],
+      request,
+      identity,
+    );
+    expect(other.text).toBe(base.text);
+    expect(other.fingerprint).not.toBe(base.fingerprint);
+    // Moving past a day with work changes what the summary covers.
+    expect(
+      summaryInput(
+        [digest("a", ["one"]), digest("b", ["two"], "2026-03-02")],
+        { ...request, start: "2026-03-03", end: "2026-03-09" },
+        identity,
+      ).fingerprint,
+    ).toBe(base.fingerprint);
+    expect(
+      summaryInput(
+        [digest("a", ["one"]), digest("b", ["two"], "2026-03-02")],
+        request,
+        identity,
+      ).fingerprint,
+    ).not.toBe(base.fingerprint);
+  });
 });
 
 describe("summary replies", () => {
@@ -273,6 +307,89 @@ describe("report summaries", () => {
         await summaries.read([digest("a", ["one"])], {
           ...request,
           language: "en",
+        })
+      ).summary,
+    ).toBeUndefined();
+  });
+
+  test("a moved multi-day range shows its latest earlier summary; a day range does not", async () => {
+    const { root } = await setup([]);
+    const digests = [digest("a", ["one"])];
+    const saved = (
+      range: ReportSummaryRequest,
+      summary: string,
+      generatedAt = `${range.end}T10:00:00.000Z`,
+    ) => ({
+      start: range.start,
+      end: range.end,
+      summary,
+      highlights: [],
+      themes: [],
+      model: { provider: "p", model: "m" },
+      usage: { status: "complete", total: 5, cost: { status: "unavailable" } },
+      generatedAt,
+      fingerprint: summaryInput(digests, range, identity).fingerprint,
+    });
+    const ranges = {
+      week: { start: "2026-03-01", end: "2026-03-07", language: "zh" },
+      olderWeek: { start: "2026-02-28", end: "2026-03-06", language: "zh" },
+      laterWeek: { start: "2026-03-03", end: "2026-03-09", language: "zh" },
+      englishWeek: { start: "2026-03-01", end: "2026-03-07", language: "en" },
+      month: { start: "2026-02-06", end: "2026-03-07", language: "zh" },
+      day: { start: "2026-03-07", end: "2026-03-07", language: "zh" },
+    } satisfies Record<string, ReportSummaryRequest>;
+    await writeFile(
+      join(root, "report-summaries.json"),
+      JSON.stringify({
+        version: 1,
+        entries: Object.fromEntries(
+          Object.entries(ranges).map(([name, range]) => [
+            `${range.start}|${range.end}|${range.language}`,
+            // The older week was regenerated later; the range still decides.
+            saved(
+              range,
+              name,
+              name === "olderWeek" ? "2026-03-08T10:00:00.000Z" : undefined,
+            ),
+          ]),
+        ),
+      }),
+    );
+    const summaries = new ReportSummaries({} as ModelRuntime, root, identity);
+
+    expect(await summaries.read(digests, request)).toMatchObject({
+      summary: { summary: "week", start: "2026-03-01" },
+      stale: false,
+    });
+    expect(
+      await summaries.read(
+        [...digests, digest("b", ["two"], "2026-03-08")],
+        request,
+      ),
+    ).toMatchObject({ summary: { summary: "week" }, stale: true });
+    expect(
+      (await summaries.read(digests, { ...request, language: "en" })).summary,
+    ).toMatchObject({ summary: "englishWeek" });
+    expect(
+      (
+        await summaries.read(digests, {
+          start: "2026-02-07",
+          end: "2026-03-08",
+          language: "zh",
+        })
+      ).summary,
+    ).toMatchObject({ summary: "month" });
+    // Nothing in the range, or a single day: no earlier summary stands in.
+    expect(
+      (await summaries.read([digest("old", ["x"], "2026-01-01")], request))
+        .summary,
+    ).toBeUndefined();
+    expect(
+      (
+        await summaries.read([digest("a", ["one"], "2026-03-08")], {
+          start: "2026-03-08",
+          end: "2026-03-08",
+          language: "zh",
         })
       ).summary,
     ).toBeUndefined();

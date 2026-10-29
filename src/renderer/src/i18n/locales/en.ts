@@ -682,9 +682,9 @@ const en = {
     report: {
       enable: "Summarize with AI",
       enableHint:
-        "Sends conversation titles and excerpts of your messages, not replies or tool output. Billed at the model’s price.",
-      models: "Summary models",
-      modelsHint: "Tried in order",
+        "Sends conversation titles and excerpts of your messages, not replies or tool output. Saved API keys and tokens are removed. Billed at the model’s price.",
+      models: "Models",
+      modelsHint: "Tried in order.",
       moveUp: "Move up: {{model}}",
       moveDown: "Move down: {{model}}",
       remove: "Remove: {{model}}",
@@ -1074,8 +1074,9 @@ const en = {
       title: "AI summary",
       firstTitle: "Summarize your work with AI?",
       description:
-        "Turn it on to generate a short summary and themes for the selected range.",
+        "Sends conversation titles and excerpts of your messages to a model, only when you generate a summary.",
       notNow: "Not now",
+      turnOn: "Turn on",
       done: "Done",
     },
     tokens: {

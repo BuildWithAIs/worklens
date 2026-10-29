@@ -27,6 +27,20 @@ const MAX_MODELS = 5;
 const keyOf = (model: ReportSummaryModel) =>
   `${model.provider}\u0000${model.model}`;
 
+/** Turning summaries on starts from the chat's default model, when usable. */
+export function initialSummaryModels(
+  settings: Settings,
+  providers: ProviderInfo[],
+): ReportSummaryModel[] {
+  const chosen = settings.defaults;
+  const available = providers
+    .find((item) => item.id === chosen?.provider)
+    ?.models.some((item) => item.id === chosen?.model && item.available);
+  return chosen && available
+    ? [{ provider: chosen.provider, model: chosen.model }]
+    : [];
+}
+
 /** Whether to summarize with AI, and the models to use, in order. */
 export function ReportSettings({
   settings,
@@ -104,13 +118,21 @@ export function ReportSettings({
           aria-busy={pending}
           checked={value.enabled}
           disabled={pending}
-          onCheckedChange={(enabled) => void change({ ...value, enabled })}
+          onCheckedChange={(enabled) =>
+            void change({
+              enabled,
+              models:
+                enabled && !value.models.length
+                  ? initialSummaryModels(settings, providers)
+                  : value.models,
+            })
+          }
         />
       </div>
       {value.enabled && (
         <div className="report-settings-models">
-          <div className="report-settings-heading">
-            {t("settings.report.models")}
+          <div className="report-settings-copy report-settings-heading">
+            <div>{t("settings.report.models")}</div>
             <span>{t("settings.report.modelsHint")}</span>
           </div>
           <ol>
