@@ -1,5 +1,6 @@
 import { test, expect } from "vitest";
 import {
+  accountingItems,
   aggregateUsage,
   buildContextUsage,
   getConversationUsage,
@@ -139,4 +140,38 @@ test("reported estimated cost survives missing token accounting independently", 
     status: "unavailable",
     cost: { status: "complete", usd: 0.02, source: "pi-estimate" },
   });
+});
+
+test("conversation summaries count under the model in use when they were made", () => {
+  const assistant = (provider: string, model: string) => ({
+    type: "message",
+    message: { role: "assistant", provider, model, usage: raw },
+  });
+  const entries = [
+    // Nothing has named a model yet.
+    { type: "compaction", usage: raw },
+    assistant("p", "first"),
+    { type: "branch_summary", usage: raw },
+    // Switching models applies to the next summary before any reply.
+    { type: "model_change", provider: "p", modelId: "second" },
+    { type: "compaction", usage: raw },
+    { type: "message", message: { role: "toolResult", usage: raw } },
+    assistant("q", "third"),
+    { type: "compaction", usage: raw },
+  ] as unknown as SessionEntry[];
+  expect(
+    accountingItems(entries).map((item) => [
+      item.entry.type === "message" ? item.entry.message.role : item.entry.type,
+      item.provider,
+      item.model,
+    ]),
+  ).toEqual([
+    ["compaction", undefined, undefined],
+    ["assistant", "p", "first"],
+    ["branch_summary", "p", "first"],
+    ["compaction", "p", "second"],
+    ["toolResult", undefined, undefined],
+    ["assistant", "q", "third"],
+    ["compaction", "q", "third"],
+  ]);
 });

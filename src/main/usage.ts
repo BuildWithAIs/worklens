@@ -169,7 +169,10 @@ export function subtractUsage(
 export interface AccountingItem {
   entry: SessionEntry;
   usage: TokenUsage;
-  /** Set for assistant replies; summaries and tool usage have no model. */
+  /**
+   * Set for assistant replies, and for conversation summaries made after a
+   * model is known; tool usage has no model.
+   */
   provider?: string;
   model?: string;
 }
@@ -180,9 +183,15 @@ export function accountingItems(
   lookup?: ModelLookup,
 ): AccountingItem[] {
   const items: AccountingItem[] = [];
+  // Pi summarizes with the conversation's model at that moment but records
+  // no model on the summary, so the latest one in file order stands in.
+  let current: { provider: string; model: string } | undefined;
   for (const entry of entries) {
-    if (entry.type === "message" && entry.message.role === "assistant") {
+    if (entry.type === "model_change")
+      current = { provider: entry.provider, model: entry.modelId };
+    else if (entry.type === "message" && entry.message.role === "assistant") {
       const message = entry.message;
+      current = { provider: message.provider, model: message.model };
       items.push({
         entry,
         usage: normalizeTokenUsage(
@@ -194,7 +203,14 @@ export function accountingItems(
       });
     } else if (entry.type === "compaction" || entry.type === "branch_summary") {
       // A summary is an accounting-bearing request, even if an extension omitted usage.
-      items.push({ entry, usage: normalizeTokenUsage(entry.usage) });
+      items.push({
+        entry,
+        usage: normalizeTokenUsage(
+          entry.usage,
+          current && lookup?.(current.provider, current.model),
+        ),
+        ...current,
+      });
     } else if (
       entry.type === "message" &&
       entry.message.role === "toolResult" &&

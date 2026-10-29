@@ -1107,7 +1107,7 @@ const zhCN = {
     },
     models: {
       title: "模型",
-      info: "部分工具调用和会话摘要没有记录模型名。它们的 Token 用量归入“未记录模型”。",
+      info: "部分工具调用没有记录模型名。它们的 Token 用量归入“未记录模型”。",
       columns: {
         model: "模型",
         runs: "运行",

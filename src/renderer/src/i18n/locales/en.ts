@@ -1176,7 +1176,7 @@ const en = {
     },
     models: {
       title: "Models",
-      info: "Some tool calls and conversation summaries have no recorded model name. Their token usage appears under “No model recorded.”",
+      info: "Some tool calls don’t record a model name. Their token usage appears under “No model recorded.”",
       columns: {
         model: "Model",
         runs: "Runs",
