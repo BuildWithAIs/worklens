@@ -1585,7 +1585,13 @@ function OverviewCards({
         </Card>
       )}
 
-      <Card area="models" span={6} title={t("overview.models.title")} scroll>
+      <Card
+        area="models"
+        span={6}
+        title={t("overview.models.title")}
+        info={t("overview.models.info")}
+        scroll
+      >
         {overview.models.length ? (
           <div className="overview-bars-table" data-table="models">
             <div className="overview-bars-columns" aria-hidden="true">
@@ -1596,7 +1602,34 @@ function OverviewCards({
               <span>{t("overview.models.columns.tokens")}</span>
               <span>{t("overview.models.columns.share")}</span>
             </div>
-            <ul className="overview-bars">{overview.models.map(modelRow)}</ul>
+            <ul className="overview-bars">
+              {overview.models.map((item, index) =>
+                item.model ? modelRow(item, index) : null,
+              )}
+            </ul>
+            {overview.models
+              .filter((item) => !item.model)
+              .map((item) => (
+                <div
+                  className="overview-model-footer"
+                  key={`${item.provider}/${item.model}`}
+                >
+                  <div className="overview-bar-row">
+                    <span className="overview-bar-name">
+                      <span className="truncate">
+                        {t("overview.models.unattributed")}
+                      </span>
+                    </span>
+                    <span data-column="runs" />
+                    <span className="overview-bar-value">
+                      <TokenCount usage={item.usage} />
+                    </span>
+                    <span className="overview-bar-share">
+                      {share(item.usage.total)}
+                    </span>
+                  </div>
+                </div>
+              ))}
           </div>
         ) : (
           <div className="overview-empty-text">

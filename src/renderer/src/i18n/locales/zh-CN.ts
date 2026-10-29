@@ -1107,13 +1107,14 @@ const zhCN = {
     },
     models: {
       title: "模型",
+      info: "部分工具调用和会话摘要没有记录模型名。它们的 Token 用量归入“未记录模型”。",
       columns: {
         model: "模型",
         runs: "运行",
         tokens: "Token",
         share: "占比",
       },
-      unattributed: "未归属模型（如摘要）",
+      unattributed: "未记录模型",
       empty: "这段时间没有使用模型。",
       filter: "查看使用 {{model}} 的会话",
     },

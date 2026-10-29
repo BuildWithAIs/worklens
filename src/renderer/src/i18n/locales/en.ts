@@ -1176,13 +1176,14 @@ const en = {
     },
     models: {
       title: "Models",
+      info: "Some tool calls and conversation summaries have no recorded model name. Their token usage appears under “No model recorded.”",
       columns: {
         model: "Model",
         runs: "Runs",
         tokens: "Tokens",
         share: "Share",
       },
-      unattributed: "No model (summaries)",
+      unattributed: "No model recorded",
       empty: "No models were used in this period.",
       filter: "Show conversations using {{model}}",
     },
