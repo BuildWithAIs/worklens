@@ -1035,18 +1035,21 @@ function OverviewCards({
   const conversationIds = new Set(
     overview.conversations.map((item) => item.id),
   );
-  const groups: TopicGroup[] = aiResult
-    ? aiResult.themes
-        .map((theme, index) => ({
-          id: `ai:${index}`,
-          label: theme.title,
-          detail: theme.description,
-          Icon: Sparkles,
-          conversationIds: theme.conversationIds.filter((id) =>
-            conversationIds.has(id),
-          ),
-        }))
-        .filter((group) => group.conversationIds.length)
+  // An earlier summary may name only conversations outside this range; the
+  // range's own topics then stand in.
+  const aiGroups: TopicGroup[] = (aiResult?.themes ?? [])
+    .map((theme, index) => ({
+      id: `ai:${index}`,
+      label: theme.title,
+      detail: theme.description,
+      Icon: Sparkles,
+      conversationIds: theme.conversationIds.filter((id) =>
+        conversationIds.has(id),
+      ),
+    }))
+    .filter((group) => group.conversationIds.length);
+  const groups: TopicGroup[] = aiGroups.length
+    ? aiGroups
     : overview.topics.map((topic) => ({
         id: topic.id,
         label: topicLabel(topic, t),
@@ -1562,7 +1565,9 @@ function OverviewCards({
           span={12}
           title={t("overview.topics.title")}
           info={
-            aiResult ? t("overview.topics.aiInfo") : t("overview.topics.info")
+            aiGroups.length
+              ? t("overview.topics.aiInfo")
+              : t("overview.topics.info")
           }
           // Each area lists its conversations most tokens first, so the key
           // reads the same way.

@@ -13,6 +13,8 @@ async function openInsights(
     focusAreas?: { title: string; description: string }[];
     /** Adds usage without a model to the models list. */
     otherUsage?: boolean;
+    /** The saved summary's one theme names these conversations instead. */
+    themeIds?: string[];
   } = {},
 ) {
   await mockWorklens(page);
@@ -106,10 +108,18 @@ async function openInsights(
                   ...overview.range,
                   summary: `Reviewed ${"a".repeat(300)}`,
                   highlights: ["b".repeat(300), "Checked the layout"],
-                  themes: (options.focusAreas ?? []).map((area, index) => ({
-                    ...area,
-                    conversationIds: [`focus-${index}`],
-                  })),
+                  themes: options.themeIds
+                    ? [
+                        {
+                          title: "Old theme",
+                          description: "",
+                          conversationIds: options.themeIds,
+                        },
+                      ]
+                    : (options.focusAreas ?? []).map((area, index) => ({
+                        ...area,
+                        conversationIds: [`focus-${index}`],
+                      })),
                   model: { provider: "deepseek", model: "flash" },
                   usage: usage(12345),
                   generatedAt: "2026-10-28T09:00:00Z",
@@ -608,3 +618,20 @@ for (const appearance of [
     await expect(model).toBeFocused();
   });
 }
+
+// A summary kept from an earlier range may name only conversations that are
+// no longer in it; the range's own topics then fill the focus areas.
+for (const [ids, shown] of [
+  [["one"], "Old theme"],
+  [["gone"], "Other"],
+] as const)
+  test(`focus areas from a summary naming ${ids[0]} show ${shown}`, async ({
+    page,
+  }) => {
+    await openInsights(page, 7, { summary: true, themeIds: [...ids] });
+    const topics = page.locator('.overview-card[data-area="topics"]');
+    await expect(topics).toContainText(shown);
+    await expect(topics).not.toContainText(
+      shown === "Old theme" ? "Other" : "Old theme",
+    );
+  });
