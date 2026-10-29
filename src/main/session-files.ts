@@ -1,5 +1,13 @@
 import { lstat, mkdir, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+
+// Electron's ASAR-aware fs can leave archive files behind during recursive rm.
+// Cleanup must operate on physical files, including archives in build outputs.
+const removeDirectory: typeof rm = process.versions.electron
+  ? (createRequire(import.meta.url)("original-fs") as typeof import("node:fs"))
+      .promises.rm
+  : rm;
 
 export function sessionDirectory(sessions: string, id: string) {
   if (!/^[\w-]+$/.test(id)) throw new Error("Invalid session ID");
@@ -47,5 +55,5 @@ export async function ownedDirectory(
 
 export async function removeOwnedDirectory(root: string, path: string) {
   if (await ownedDirectory(root, path))
-    await rm(path, { recursive: true, force: true });
+    await removeDirectory(path, { recursive: true, force: true });
 }
