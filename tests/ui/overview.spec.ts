@@ -13,6 +13,8 @@ async function openInsights(
     focusAreas?: { title: string; description: string }[];
     /** The saved summary's one theme names these conversations instead. */
     themeIds?: string[];
+    /** Summaries not set up yet, so the setup dialog asks. */
+    firstVisit?: boolean;
   } = {},
 ) {
   await mockWorklens(page);
@@ -129,10 +131,11 @@ async function openInsights(
           if (options.theme) result.settings.theme = options.theme;
           if (options.modelName)
             result.providers[0].models[0].name = options.modelName;
-          result.settings.reportSummary = {
-            enabled: true,
-            models: [{ provider: "deepseek", model: "flash" }],
-          };
+          if (!options.firstVisit)
+            result.settings.reportSummary = {
+              enabled: true,
+              models: [{ provider: "deepseek", model: "flash" }],
+            };
         }
         return result;
       };
@@ -433,6 +436,76 @@ for (const appearance of [
     ).toBeLessThanOrEqual(1);
   });
 }
+
+test("the first visit asks once, and turning summaries on starts with the chat model", async ({
+  page,
+}) => {
+  await openInsights(page, 7, { firstVisit: true });
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Summarize your work with AI?" }),
+  ).toBeVisible();
+  // A question with two answers, not settings to work through.
+  await expect(dialog.getByRole("switch")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Turn on", exact: true }).click();
+
+  await expect(
+    dialog.getByRole("heading", { name: "AI summary" }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("switch")).toBeChecked();
+  await expect(dialog.locator(".report-settings-model")).toHaveCount(1);
+  await expect(
+    dialog.locator(".report-settings-model > .truncate").first(),
+  ).toHaveText("DeepSeek V4 Flash");
+  const saved = await page.evaluate(() =>
+    (window as any).calls.filter((call: any) => call.name === "settings"),
+  );
+  expect(saved.at(-1).input).toEqual({
+    reportSummary: {
+      enabled: true,
+      models: [{ provider: "deepseek", model: "flash" }],
+    },
+  });
+  // The models and the switch's hint start at the same edge.
+  const edge = async (selector: string) =>
+    (await dialog.locator(selector).first().boundingBox())!.x;
+  expect(
+    Math.abs(
+      (await edge(".report-settings-heading > div")) -
+        (await edge("#report-summary-hint")),
+    ),
+  ).toBeLessThanOrEqual(1);
+  await dialog.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test("skipping the first-visit question keeps summaries off and leaves the settings in the header", async ({
+  page,
+}) => {
+  await openInsights(page, 7, { firstVisit: true });
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Not now", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("ui-fixture-settings") ?? "{}")
+            .reportSummary,
+      ),
+    )
+    .toEqual({ enabled: false, models: [] });
+  await page
+    .getByRole("button", { name: "AI summary settings", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("heading", { name: "AI summary" }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("switch")).not.toBeChecked();
+  await expect(
+    dialog.getByRole("button", { name: "Not now", exact: true }),
+  ).toHaveCount(0);
+});
 
 test("summary settings reveal long model names without squeezing the controls", async ({
   page,
