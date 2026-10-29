@@ -24,7 +24,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Settings2,
   Sparkles,
   SquareTerminal,
   Table2,
@@ -700,7 +699,7 @@ function Report({
                 aria-label={t("overview.setup.open")}
                 onClick={() => setSetupOpen(true)}
               >
-                <Settings2 aria-hidden="true" />
+                <Sparkles aria-hidden="true" />
               </button>
             </Hint>
           </>

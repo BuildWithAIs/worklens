@@ -1350,7 +1350,7 @@ button.overview-bar-row:hover,
 
 /* AI summary settings, shown in a dialog from the report. */
 .overview-setup-dialog {
-  max-width: 560px;
+  max-width: 480px;
 }
 .overview-setup-body {
   max-height: min(60vh, 520px);
@@ -1381,22 +1381,13 @@ button.overview-bar-row:hover,
   line-height: 1.5;
 }
 .report-settings-models {
-  padding: 10px 8px 8px;
+  padding: 12px 8px 8px;
   border-top: 1px solid var(--border);
 }
+/* Same shape as the switch's label and hint above it. */
 .report-settings-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 0 6px 4px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
-}
-.report-settings-heading span {
-  color: var(--faint);
-  font-size: 12px;
-  font-weight: 400;
+  padding: 0 6px 6px;
+  font-size: 14px;
 }
 .report-settings-models ol {
   display: grid;
@@ -1461,6 +1452,10 @@ button.overview-bar-row:hover,
 .report-settings-add {
   padding-left: 26px;
   color: var(--muted);
+}
+/* With no models there are no names to line up with; start at the rows' edge. */
+.report-settings-models ol:empty + .report-settings-add {
+  padding-left: 0;
 }
 
 /* Tooltip for chart marks: an accent pill. */
