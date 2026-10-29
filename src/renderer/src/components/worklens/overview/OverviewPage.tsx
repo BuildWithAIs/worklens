@@ -1596,7 +1596,34 @@ function OverviewCards({
               <span>{t("overview.models.columns.tokens")}</span>
               <span>{t("overview.models.columns.share")}</span>
             </div>
-            <ul className="overview-bars">{overview.models.map(modelRow)}</ul>
+            <ul className="overview-bars">
+              {overview.models.map((item, index) =>
+                item.model ? modelRow(item, index) : null,
+              )}
+            </ul>
+            {overview.models
+              .filter((item) => !item.model)
+              .map((item) => (
+                <div
+                  className="overview-model-footer"
+                  key={`${item.provider}/${item.model}`}
+                >
+                  <div className="overview-bar-row">
+                    <span className="overview-bar-name">
+                      <span className="truncate">
+                        {t("overview.models.unattributed")}
+                      </span>
+                    </span>
+                    <span data-column="runs" />
+                    <span className="overview-bar-value">
+                      <TokenCount usage={item.usage} />
+                    </span>
+                    <span className="overview-bar-share">
+                      {share(item.usage.total)}
+                    </span>
+                  </div>
+                </div>
+              ))}
           </div>
         ) : (
           <div className="overview-empty-text">

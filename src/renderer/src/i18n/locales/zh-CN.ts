@@ -1113,7 +1113,7 @@ const zhCN = {
         tokens: "Token",
         share: "占比",
       },
-      unattributed: "未归属模型（如摘要）",
+      unattributed: "未记录模型",
       empty: "这段时间没有使用模型。",
       filter: "查看使用 {{model}} 的会话",
     },

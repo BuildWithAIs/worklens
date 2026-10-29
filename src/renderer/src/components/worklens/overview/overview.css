@@ -1121,6 +1121,17 @@ button.overview-bar-row:hover,
   font-size: 12px;
   font-weight: 400;
 }
+/* Usage without a model is accounting context below the ranked model list. */
+.overview-model-footer {
+  border-top: 1px solid var(--overview-edge);
+}
+.overview-bars:empty + .overview-model-footer {
+  border-top: 0;
+}
+/* Model rows are buttons, which take the card's size; match them. */
+.overview-model-footer .overview-bar-row {
+  font-size: inherit;
+}
 /* Numbers sit a step below the names and stay on one line; a value wider
    than its column ends in an ellipsis rather than wrapping the row. */
 .overview-bar-number,

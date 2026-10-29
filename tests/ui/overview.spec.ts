@@ -11,6 +11,8 @@ async function openInsights(
     language?: string;
     theme?: string;
     focusAreas?: { title: string; description: string }[];
+    /** Adds usage without a model to the models list. */
+    otherUsage?: boolean;
   } = {},
 ) {
   await mockWorklens(page);
@@ -79,6 +81,8 @@ async function openInsights(
           },
         ],
       };
+      if (options.otherUsage)
+        overview.models.push({ runs: 0, usage: usage(1200) } as any);
       if (options.focusAreas) {
         const conversation = overview.conversations[0];
         overview.conversations = options.focusAreas.map((area, index) => ({
@@ -513,3 +517,94 @@ test("short model names show no hint, and the summary separator is evenly spaced
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+for (const appearance of [
+  {
+    language: "en",
+    theme: "light",
+    label: "No model recorded",
+  },
+  {
+    language: "zh",
+    theme: "dark",
+    label: "未记录模型",
+  },
+]) {
+  test(`usage without a model sits in an aligned footer (${appearance.theme})`, async ({
+    page,
+  }, testInfo) => {
+    await openInsights(page, 7, { ...appearance, otherUsage: true });
+    const card = page.locator('.overview-card[data-area="models"]');
+    const table = card.locator('.overview-bars-table[data-table="models"]');
+    const model = table.locator(".overview-bars .overview-bar-row").first();
+    const footer = table.locator(".overview-model-footer");
+    const label = footer.locator(".overview-bar-name .truncate");
+    await expect(label).toHaveText(appearance.label);
+    await expect(footer.locator("p")).toHaveCount(0);
+    await expect(footer.locator(".overview-bar-value")).toHaveText("1.2k");
+    await expect(footer.locator(".overview-bar-share")).toHaveText("<1%");
+    await expect(
+      footer.locator("button, svg, .overview-bar-track, .overview-partial"),
+    ).toHaveCount(0);
+    for (const property of ["font-size", "font-weight", "color"])
+      expect(
+        await label.evaluate(
+          (el, p) => getComputedStyle(el).getPropertyValue(p),
+          property,
+        ),
+      ).toBe(
+        await model
+          .locator(".overview-bar-name > .truncate")
+          .evaluate(
+            (el, p) => getComputedStyle(el).getPropertyValue(p),
+            property,
+          ),
+      );
+
+    for (const viewportWidth of [1440, 1100, 850]) {
+      await page.setViewportSize({ width: viewportWidth, height: 900 });
+      await footer.scrollIntoViewIfNeeded();
+      // Rows bleed 8px past the table into the card body's padding; the
+      // body is what would scroll.
+      expect(
+        await card
+          .locator(".overview-card-body")
+          .evaluate((el) => el.scrollWidth - el.clientWidth),
+      ).toBeLessThanOrEqual(1);
+      const heading = (await table
+        .locator(".overview-bars-columns > span")
+        .first()
+        .boundingBox())!;
+      expect((await label.boundingBox())!.x).toBeCloseTo(heading.x, 0);
+      for (const column of [".overview-bar-value", ".overview-bar-share"]) {
+        const baseline = (await model.locator(column).boundingBox())!;
+        const supplemental = (await footer.locator(column).boundingBox())!;
+        expect(supplemental.x + supplemental.width).toBeCloseTo(
+          baseline.x + baseline.width,
+          0,
+        );
+      }
+      await card.screenshot({
+        path: testInfo.outputPath(`models-${viewportWidth}.png`),
+      });
+    }
+    // The label explains itself: nothing to hover, focus or open.
+    await expect(label).not.toHaveAttribute("tabindex");
+    await label.hover();
+    await page.waitForTimeout(800);
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
+    await expect(footer.locator(".overview-bar-row")).toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+    await label.click();
+    await expect(page.locator(".overview-drawer")).toHaveCount(0);
+    await page.mouse.move(0, 0);
+    await model.focus();
+    await page.keyboard.press("Enter");
+    await expect(model).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".overview-drawer-row")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(model).toBeFocused();
+  });
+}

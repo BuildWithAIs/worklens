@@ -1182,7 +1182,7 @@ const en = {
         tokens: "Tokens",
         share: "Share",
       },
-      unattributed: "No model (summaries)",
+      unattributed: "No model recorded",
       empty: "No models were used in this period.",
       filter: "Show conversations using {{model}}",
     },
