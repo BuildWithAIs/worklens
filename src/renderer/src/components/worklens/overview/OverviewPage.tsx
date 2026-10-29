@@ -1585,7 +1585,13 @@ function OverviewCards({
         </Card>
       )}
 
-      <Card area="models" span={6} title={t("overview.models.title")} scroll>
+      <Card
+        area="models"
+        span={6}
+        title={t("overview.models.title")}
+        info={t("overview.models.info")}
+        scroll
+      >
         {overview.models.length ? (
           <div className="overview-bars-table" data-table="models">
             <div className="overview-bars-columns" aria-hidden="true">
