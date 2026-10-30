@@ -98,8 +98,9 @@ export function summaryInput(
 
 export function summaryPrompt(language: ReportSummaryRequest["language"]) {
   return [
-    "You summarize a person's recent work in WorkLens, a desktop AI assistant, using only the conversation titles and the requests they sent.",
-    "Describe what they worked on. Do not guess results, causes, quality or effort, and do not give advice.",
+    "You summarize a user's recent work in WorkLens, a desktop AI assistant, using only the conversation titles and the requests sent by that user.",
+    "Describe what the user worked on. Do not guess results, causes, quality or effort, and do not give advice.",
+    'Keep the summary, highlights and themes focused on the work itself, without referring to the user by pronouns or labels such as "they", "you" or "the user" (or equivalents in Chinese).',
     `Write in ${language === "zh" ? "Simplified Chinese" : "English"}. Keep every text short.`,
     "Reply with one JSON object and nothing else:",
     '{"summary": "one sentence, at most 25 words", "highlights": ["a short phrase about one piece of work"], "themes": [{"title": "2 to 6 words", "description": "one short sentence", "conversations": ["c1"]}]}',
