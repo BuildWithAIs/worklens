@@ -1529,10 +1529,14 @@ export class AgentService {
           ? `/skill:${skillCommand[1]}${skillCommand[2] ? ` ${skillCommand[2]}` : ""}`
           : input.text;
         const id = runtime.manager.getSessionId();
-        if (!runtime.manager.getSessionName() && !edit)
+        if (!runtime.manager.getSessionName() && !edit) {
+          const title = skillCommand
+            ? skillCommand[2]?.trim() || skillCommand[1]
+            : input.text.trim();
           runtime.session!.setSessionName(
-            (input.text.trim() || images[0]?.name || "新会话").slice(0, 48),
+            (title || images[0]?.name || "新会话").slice(0, 48),
           );
+        }
         this.sessions.set(id, runtime);
         const active: ActiveRun = {
           id: randomUUID(),

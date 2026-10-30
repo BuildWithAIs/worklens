@@ -253,6 +253,7 @@ button[data-slot="overview-button"]:disabled {
 }
 .overview-grid {
   --overview-borrow: 24px;
+  --overview-scroll-height: 264px;
 }
 /* Below about 880px the summary row keeps two cards and the summary moves to
    its own row; charts stack; below about 620px everything stacks. */
@@ -340,10 +341,16 @@ button[data-slot="overview-button"]:disabled {
 }
 /* Room on both sides, so row highlights are not clipped by the scroll edge. */
 .overview-card-body[data-scroll] {
-  max-height: 264px;
+  max-height: var(--overview-scroll-height);
   margin: 0 -10px;
   padding: 0 10px;
   overflow: auto;
+}
+/* Chart and table views share one height, so switching views never moves the
+   cards below. */
+.overview-card:is([data-area="trend"], [data-area="activity"])
+  .overview-card-body {
+  min-height: var(--overview-scroll-height);
 }
 /* A card's header icon sits flush with the card edge. */
 .overview-head-icon {

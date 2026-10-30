@@ -19,7 +19,7 @@ function parse(text: string) {
 }
 
 test.each([
-  "）。预报会更新，出门前建议再看一次当天实时。",
+  "）。说明会更新，请查看页面上的最新内容。",
   "，请查看来源。",
   "。\n下一段说明",
 ])("literal URL stops before Chinese punctuation: %s", (suffix) => {
@@ -40,10 +40,10 @@ test.each([
 
 test("explicit links, angle autolinks and valid Unicode URL paths retain their intent", () => {
   for (const source of [
-    "[www.example.com（说明）](https://example.com/天气（南京）)",
-    "[预报会更新，出门前再看](https://example.com/天气（南京）)",
-    "<https://example.com/天气（南京）>",
-    "https://example.com/天气/南京?日期=今天&mode=daily",
+    "[www.example.com（说明）](https://example.com/目录（示例）)",
+    "[说明已更新，打开页面查看](https://example.com/目录（示例）)",
+    "<https://example.com/目录（示例）>",
+    "https://example.com/目录/示例?版本=当前&mode=daily",
   ]) {
     const plain = unified().use(remarkParse).use(remarkGfm).parse(source)
       .children[0];
@@ -55,7 +55,7 @@ test("explicit links, angle autolinks and valid Unicode URL paths retain their i
 test.each(["https://", "http://", "www.", "WWW."])(
   "%s literal URLs stop before every supported CJK boundary",
   (prefix) => {
-    const label = prefix + "example.com/天气?q=南京&mode=daily#section";
+    const label = prefix + "example.com/目录?q=示例&mode=daily#section";
     const url = /^www\./i.test(label) ? "http://" + label : label;
     for (const punctuation of "，。！？；、（）【】“”‘’") {
       const suffix = punctuation + "请查看来源。";
@@ -67,34 +67,34 @@ test.each(["https://", "http://", "www.", "WWW."])(
   },
 );
 
-test.each(["/gk/xdnt/", "opening hours"])(
+test.each(["/guide/intro/", "page details"])(
   "restores swallowed inline code: %s",
   (code) => {
     const nodes = parse(
-      `南京图书馆官网 www.jslib.org.cn（首页开馆时间、\`${code}\` 南图简介，均返回 200 且内容正常）`,
+      `示例文档站点 www.docs.example.test（页面导航说明、\`${code}\` 站点说明，支持代码与标点解析）`,
     );
     expect(nodes).toMatchObject([
-      { type: "text", value: "南京图书馆官网 " },
+      { type: "text", value: "示例文档站点 " },
       {
         type: "link",
-        url: "http://www.jslib.org.cn",
-        children: [{ type: "text", value: "www.jslib.org.cn" }],
+        url: "http://www.docs.example.test",
+        children: [{ type: "text", value: "www.docs.example.test" }],
       },
-      { type: "text", value: "（首页开馆时间、" },
+      { type: "text", value: "（页面导航说明、" },
       { type: "inlineCode", value: code },
-      { type: "text", value: " 南图简介，均返回 200 且内容正常）" },
+      { type: "text", value: " 站点说明，支持代码与标点解析）" },
     ]);
   },
 );
 
 test("recovers emphasis and subsequent links without changing explicit links or code", () => {
   const nodes = parse(
-    "www.example.com（**opening hours**，https://other.example.com。详情 [来源][ref]）\n\n[ref]: https://example.com/天气（南京）",
+    "www.example.com（**page details**，https://other.example.com。详情 [来源][ref]）\n\n[ref]: https://example.com/目录（示例）",
   );
   expect(nodes).toMatchObject([
     { type: "link", url: "http://www.example.com" },
     { type: "text", value: "（" },
-    { type: "strong", children: [{ type: "text", value: "opening hours" }] },
+    { type: "strong", children: [{ type: "text", value: "page details" }] },
     { type: "text", value: "，" },
     { type: "link", url: "https://other.example.com" },
     { type: "text", value: "。详情 " },

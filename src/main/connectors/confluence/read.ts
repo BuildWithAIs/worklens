@@ -1,4 +1,4 @@
-import { assertNever } from "./list-results";
+import { assertNever, citationUrl } from "./list-results";
 import type { ReadRequest } from "./schema";
 import type { Execution } from "./operation-context";
 import { ServiceError, type Json } from "./http";
@@ -189,8 +189,10 @@ export async function read(ctx: Execution, a: ReadRequest): Promise<Json> {
         a,
         d.cloud ? v2("/attachments") : v1("/child/attachment?expand=version"),
       );
-    case "read_attachment":
-      return d.attachment(a.attachmentId);
+    case "read_attachment": {
+      const attachment = await d.attachment(a.attachmentId);
+      return { ...attachment, url: citationUrl(attachment, h) };
+    }
     case "download_attachment": {
       const raw = await d.attachment(a.attachmentId);
       const destination = await ctx.operations.prepareDestination(

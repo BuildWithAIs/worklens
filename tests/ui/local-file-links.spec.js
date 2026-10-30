@@ -443,7 +443,7 @@ for (const theme of ["light", "dark"]) {
           {
             id: "a",
             role: "assistant",
-            text: "我可以帮你写成文件，比如：\n\n- `国学入门计划.md`：12 周读什么\n- `workspace/关系表.html`：关系速查\n- [参考表](参考表.md)：还没输出\n\n你的 `statusline-command.sh` 已经在读取配置。\n\n网页路径 `/gk/xdnt/` 保持原样。",
+            text: "我可以帮你写成文件，比如：\n\n- `示例说明.md`：说明文档的内容\n- `workspace/示例页面.html`：示例数据概览\n- [参考表](参考表.md)：还没输出\n\n你的 `sample-config-helper.sh` 已经在读取配置。\n\n网页路径 `/gk/xdnt/` 保持原样。",
           },
         ],
       };
@@ -465,21 +465,24 @@ for (const theme of ["light", "dark"]) {
       window.worklens.invoke = async (name, input) => {
         if (name === "conversationFile") {
           window.fileChecks.push(input);
-          if (input.path === "statusline-command.sh") {
+          if (input.path === "sample-config-helper.sh") {
             if (input.action === "inspect" && !window.scriptInspected) {
               return new Promise((resolve) => {
                 window.confirmScript = () => {
                   window.scriptInspected = true;
-                  resolve({ path: "/tmp/statusline-command.sh", kind: "file" });
+                  resolve({
+                    path: "/tmp/sample-config-helper.sh",
+                    kind: "file",
+                  });
                 };
               });
             }
-            return { path: "/tmp/statusline-command.sh", kind: "file" };
+            return { path: "/tmp/sample-config-helper.sh", kind: "file" };
           }
           return {
             path: "/tmp/" + input.path,
             kind: input.path.endsWith("html") ? "html" : "file",
-            ...(window.suggestionExists && input.path === "国学入门计划.md"
+            ...(window.suggestionExists && input.path === "示例说明.md"
               ? { produced: true }
               : { issue: "missing" }),
           };
@@ -505,11 +508,11 @@ for (const theme of ["light", "dark"]) {
     ).toHaveCount(0);
     await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(0);
     await expect(
-      page.locator("code").filter({ hasText: /^statusline-command\.sh$/ }),
+      page.locator("code").filter({ hasText: /^sample-config-helper\.sh$/ }),
     ).toBeVisible();
     await page.evaluate(() => window.confirmScript());
     const script = page.getByRole("link", {
-      name: "statusline-command.sh",
+      name: "sample-config-helper.sh",
       exact: true,
     });
     await expect(script).toBeVisible();
@@ -519,10 +522,10 @@ for (const theme of ["light", "dark"]) {
     await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(0);
     await expect(page.locator("li")).toHaveCount(3);
     await expect(
-      page.locator("code").filter({ hasText: /^国学入门计划\.md$/ }),
+      page.locator("code").filter({ hasText: /^示例说明\.md$/ }),
     ).toBeVisible();
     await expect(
-      page.locator("code").filter({ hasText: /^workspace\/关系表\.html$/ }),
+      page.locator("code").filter({ hasText: /^workspace\/示例页面\.html$/ }),
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "参考表", exact: true }),
@@ -537,7 +540,7 @@ for (const theme of ["light", "dark"]) {
     });
     await page.evaluate(() => window.finishSuggestedFile());
     await expect(
-      page.getByRole("link", { name: "国学入门计划.md", exact: true }),
+      page.getByRole("link", { name: "示例说明.md", exact: true }),
     ).toBeVisible();
     await expect(page.locator('[data-slot="html-file-card"]')).toHaveCount(0);
   });

@@ -2224,6 +2224,60 @@ kbd {
 .aui-md .katex-display > .katex {
   text-align: start;
 }
+/* Replies step their headings up; compact thinking keeps the base scale.
+   Models use # and ## interchangeably for sections, so they share one size. */
+.aui-md-reply :is(.aui-md-h1, .aui-md-h2) {
+  margin: 24px 0 8px;
+  font-size: 17px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.aui-md-reply .aui-md-h3 {
+  margin: 20px 0 8px;
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 600;
+}
+.aui-md-reply :is(.aui-md-h4, .aui-md-h5, .aui-md-h6) {
+  line-height: 1.6;
+  font-weight: 600;
+}
+.aui-md-reply :is(.aui-md-h1, .aui-md-h2, .aui-md-h3) {
+  text-wrap: balance;
+}
+.aui-md-reply :is(.aui-md-h1, .aui-md-h2, .aui-md-h3):first-child {
+  margin-top: 0;
+}
+.aui-md-reply :is(.aui-md-h1, .aui-md-h2, .aui-md-h3):last-child {
+  margin-bottom: 0;
+}
+/* A heading sits closer to what it introduces than to what precedes it. */
+.aui-md-reply :is(.aui-md-h1, .aui-md-h2, .aui-md-h3) + * {
+  margin-top: 0;
+}
+.aui-md-reply
+  :is(.aui-md-h1, .aui-md-h2, .aui-md-h3)
+  + :is(.aui-md-h1, .aui-md-h2, .aui-md-h3) {
+  margin-top: 12px;
+}
+/* Nested items read as part of their parent, not as a new list. */
+.aui-md-reply .aui-md-li > :is(.aui-md-ul, .aui-md-ol) {
+  margin-block: 4px 0;
+}
+.aui-md-reply .aui-md-p {
+  text-wrap: pretty;
+}
+/* Body lines open up without making table rows taller. */
+.aui-md-reply .aui-md-table {
+  line-height: 1.7;
+}
+/* Long columns cannot squeeze short labels into one character per line. */
+.aui-md-reply :is(.aui-md-th, .aui-md-td) {
+  min-width: 5em;
+}
+.aui-md-reply .aui-md-strong {
+  font-weight: 600;
+}
 @media (hover: none) {
   .aui-code-header-root .aui-code-copy {
     opacity: 1;
