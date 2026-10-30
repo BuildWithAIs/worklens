@@ -421,6 +421,15 @@ kbd {
   background-color: color-mix(in srgb, #facc15 45%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, #facc15 45%, transparent);
 }
+/* A control marked whole, such as a skill tag whose name is cut short; its
+   text takes no second layer. */
+[data-searchable][data-search-match] {
+  background-color: color-mix(in srgb, #facc15 45%, transparent);
+}
+[data-searchable][data-search-match]::highlight(worklens-search),
+[data-searchable][data-search-match] ::highlight(worklens-search) {
+  background-color: transparent;
+}
 .section-label {
   font-size: 13px;
   font-weight: 400;
