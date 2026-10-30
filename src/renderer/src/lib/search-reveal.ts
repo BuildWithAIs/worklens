@@ -180,10 +180,26 @@ export function revealSearchMatch(
     ...message.querySelectorAll("[data-search-text]"),
   ]);
   let range: Range | undefined;
+  let control: Element | undefined;
   for (const text of texts) {
-    range = findRenderedMatches(text, query).find(
-      (candidate) => !clipped(candidate, thread),
-    );
+    for (const candidate of findRenderedMatches(text, query)) {
+      if (!clipped(candidate, thread)) {
+        range = candidate;
+        break;
+      }
+      // A match cut off inside a searchable control, such as a skill name its
+      // tag shortens, reveals the whole control while the control shows.
+      const owner = [candidate.startContainer, candidate.endContainer]
+        .map((node) => node.parentElement?.closest("[data-searchable]"))
+        .find((element) => element && text.contains(element));
+      if (!owner) continue;
+      const whole = document.createRange();
+      whole.selectNodeContents(owner);
+      if (clipped(whole, thread)) continue;
+      range = whole;
+      control = owner;
+      break;
+    }
     if (range) break;
   }
   const view = scroller(thread);
@@ -193,6 +209,7 @@ export function revealSearchMatch(
     for (const formula of thread.querySelectorAll(".katex"))
       if (range.intersectsNode(formula))
         formula.setAttribute("data-search-match", "");
+    control?.setAttribute("data-search-match", "");
     dismissOnNextAction();
   }
   const place = () => {
