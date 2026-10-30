@@ -2,8 +2,10 @@ import { foldSearchText } from "../../../shared/search-text";
 
 const HIGHLIGHT = "worklens-search";
 // Controls and labels a message shows beside its text, such as a code
-// block's language.
-const skipped = "button, [aria-hidden='true'], .sr-only, .aui-code-header-root";
+// block's language. A control that shows the message's own text, such as a
+// skill call's tag, is marked searchable.
+const skipped =
+  "button:not([data-searchable]), [aria-hidden='true'], .sr-only, .aui-code-header-root";
 const blocks = "p, li, h1, h2, h3, h4, h5, h6, pre, blockquote, td, th, dt, dd";
 const cell = "td, th";
 
@@ -112,9 +114,10 @@ export function findRenderedMatches(message: Element, query: string) {
 }
 
 // Text past the edge of a box that clips without scrolling, such as a
-// collapsed prompt, is not visible.
+// collapsed prompt, is not visible. A match is judged by where it starts: it
+// may run on out of a box that clips, such as a skill call's tag.
 function clipped(range: Range, boundary: Element) {
-  const rect = range.getBoundingClientRect();
+  const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
   for (
     let element = range.startContainer.parentElement;
     element && element !== boundary;

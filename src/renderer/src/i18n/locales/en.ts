@@ -559,6 +559,8 @@ const en = {
     shadowed: "Inactive: the {{source}} version takes precedence.",
     builtin: "Built-in",
     builtinDescription: "Ships with WorkLens.",
+    builtinSkill: "Built-in skill",
+    localSkill: "Local skill",
     local: "Local",
     localHeading: "Local (~/.agents/skills)",
     localDescription:

@@ -3,6 +3,7 @@ import type {
   MessageView,
 } from "../shared/contracts";
 import { foldSearchText } from "../shared/search-text";
+import { parseSkillCommand } from "../shared/skill-command";
 import {
   searchParser,
   type IndexedSearchText,
@@ -84,8 +85,10 @@ export async function searchableMessages(
   for (const message of messages) {
     if (message.role === "user") turnId = message.entryId;
     if (message.role !== "user" && message.role !== "assistant") continue;
-    // Prompts are shown as typed; replies are rendered Markdown.
-    let text = message.text;
+    // Prompts are shown as typed, a skill call as its name; replies are
+    // rendered Markdown.
+    let text =
+      message.role === "user" ? shownPrompt(message.text) : message.text;
     let folded: string | undefined;
     if (message.role === "assistant") {
       used.add(message.text);
@@ -120,6 +123,14 @@ export async function searchableMessages(
   for (const markdown of parsed.keys())
     if (!used.has(markdown)) parsed.delete(markdown);
   return [...replies, ...prompts];
+}
+
+// A skill call shows its name as a tag, then the message.
+function shownPrompt(text: string) {
+  const command = parseSkillCommand(text);
+  return command
+    ? [command.name, command.message].filter(Boolean).join(" ")
+    : text;
 }
 
 /**

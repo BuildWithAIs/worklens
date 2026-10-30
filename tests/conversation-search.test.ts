@@ -116,6 +116,20 @@ test("reads replies as rendered Markdown", async () => {
       ])
     ).map(({ text }) => text),
   ).toEqual(["copper leaf", "**raw** prompt"]);
+  // A skill call shows as its name's tag, then the message.
+  expect(
+    (
+      await searchableMessages([
+        { id: "u", role: "user", text: "/skill:maple-report Draft it" },
+        { id: "v", role: "user", text: "/skill:maple-report" },
+        { id: "w", role: "user", text: "Use /skill:maple-report later" },
+      ])
+    ).map(({ text }) => text),
+  ).toEqual([
+    "maple-report Draft it",
+    "maple-report",
+    "Use /skill:maple-report later",
+  ]);
 });
 
 test("prefilters stored Markdown without missing split phrases", () => {

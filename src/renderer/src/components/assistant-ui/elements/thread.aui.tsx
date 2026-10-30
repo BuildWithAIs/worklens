@@ -28,6 +28,8 @@ import {
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { ModelMenu } from "@/components/worklens/ModelMenu";
 import { useModelMenuContext } from "@/components/worklens/model-menu-context";
+import { SkillCommandTag } from "@/components/worklens/skills/SkillCommandTag";
+import { parseSkillCommand } from "../../../../../shared/skill-command";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -339,8 +341,10 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "none";
   };
+  // Above the scroll-to-bottom button: the shell's blur traps the skill
+  // chooser's own z-index, and the chooser opens where the button sits.
   return (
-    <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+    <ComposerPrimitive.Root className="aui-composer-root relative z-20 flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone
         disabled={disabled}
         onDragEnterCapture={preventDisabledDrop}
@@ -776,6 +780,7 @@ const UserMessageText: FC<TextMessagePartProps> = ({ text }) => {
   }, [text]);
 
   const collapsed = overflows && !expanded;
+  const command = parseSkillCommand(text);
   return (
     <div>
       <div
@@ -792,7 +797,14 @@ const UserMessageText: FC<TextMessagePartProps> = ({ text }) => {
       >
         {/* Conversation search indexes the prompt as typed. */}
         <div ref={contentRef} className="whitespace-pre-wrap" data-search-text>
-          {text}
+          {command ? (
+            <>
+              <SkillCommandTag name={command.name} />
+              {command.message && ` ${command.message}`}
+            </>
+          ) : (
+            text
+          )}
         </div>
       </div>
       {overflows && (

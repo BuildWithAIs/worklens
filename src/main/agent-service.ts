@@ -65,6 +65,7 @@ import {
   type SearchableMessage,
 } from "./conversation-search";
 import { findSearchMatch, foldSearchText } from "../shared/search-text";
+import { parseSkillCommand } from "../shared/skill-command";
 import { SearchCache, type SearchIndex } from "./search-cache";
 import { OverviewIndex, buildOverview } from "./overview";
 import { ReportSummaries } from "./report-summary";
@@ -1508,30 +1509,28 @@ export class AgentService {
           },
           this.assertSelection(input.selection),
         );
-        const skillCommand = /^\/skill:([^\s]+)(?:\s+([\s\S]*))?$/.exec(
-          input.text,
-        );
+        const skillCommand = parseSkillCommand(input.text);
         if (input.text.startsWith("/skill:") && !skillCommand)
           throw new Error("该技能未启用或已不存在，请在设置中检查技能");
         const prepared = await this.prepareSession(
           input.selection,
-          skillCommand?.[1],
+          skillCommand?.name,
         );
         if (!edit)
           await this.ensureSession(
             runtime,
             input.selection,
-            skillCommand?.[1],
+            skillCommand?.name,
             prepared,
           );
         const previousLeaf = runtime.manager.getLeafId();
         const prompt = skillCommand
-          ? `/skill:${skillCommand[1]}${skillCommand[2] ? ` ${skillCommand[2]}` : ""}`
+          ? `/skill:${skillCommand.name}${skillCommand.message ? ` ${skillCommand.message}` : ""}`
           : input.text;
         const id = runtime.manager.getSessionId();
         if (!runtime.manager.getSessionName() && !edit) {
           const title = skillCommand
-            ? skillCommand[2]?.trim() || skillCommand[1]
+            ? skillCommand.message.trim() || skillCommand.name
             : input.text.trim();
           runtime.session!.setSessionName(
             (title || images[0]?.name || "新会话").slice(0, 48),
@@ -1583,7 +1582,7 @@ export class AgentService {
             await this.ensureSession(
               runtime,
               input.selection,
-              skillCommand?.[1],
+              skillCommand?.name,
               prepared,
             );
           }

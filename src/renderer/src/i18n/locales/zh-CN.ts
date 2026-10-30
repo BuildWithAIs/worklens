@@ -515,6 +515,8 @@ const zhCN = {
     shadowed: "未生效：优先使用{{source}}的同名技能。",
     builtin: "内置",
     builtinDescription: "随 WorkLens 安装。",
+    builtinSkill: "内置技能",
+    localSkill: "本地技能",
     local: "本地",
     localHeading: "本地 (~/.agents/skills)",
     localDescription: "你主目录下的技能，与本机其他 Agent 工具共用。",

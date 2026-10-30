@@ -103,6 +103,13 @@ async function setup(page: Page) {
           thinking: "The oak table is ready.",
           text: "The oak table is ready.",
         },
+        {
+          id: "m-13",
+          entryId: "mixed-entry-5",
+          role: "user",
+          text: "/skill:maple-report Draft the summary",
+        },
+        { id: "m-14", role: "assistant", text: "Drafted." },
       ],
     };
     const views: Record<string, any> = {
@@ -125,6 +132,7 @@ async function setup(page: Page) {
       python: [result("mixed", "python", "mixed-entry-2")],
       brass: [result("mixed", "brass", "mixed-entry-3")],
       oak: [result("mixed", "oak", "mixed-entry-4")],
+      maple: [result("mixed", "maple-report Draft", "mixed-entry-5")],
       zebra: [result("long", "zebra crossing", "long-entry-3")],
       violet: [result("long", "violet horizon", "long-entry-5")],
       alder: [result("long", "alder silver", "long-entry-6")],
@@ -849,4 +857,10 @@ test("reveals only the prompt and reply text the search indexes", async ({
     .poll(() => highlightedBlock(page))
     .toBe("The oak table is ready.");
   expect(await highlightInDisclosure(page)).toBe(false);
+
+  // A skill call is indexed as shown: its tag's name, then the message.
+  await open("maple-report draft");
+  await expect
+    .poll(() => highlighted(page))
+    .toMatchObject({ role: "user", text: "maple-report Draft" });
 });
