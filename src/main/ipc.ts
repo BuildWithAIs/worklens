@@ -84,6 +84,7 @@ export function requestHandlers(context: RequestContext): RequestHandlers {
       agents.resetJevConsent(input.conversationId, input.blocked),
     artifact: async (input) => {
       const artifact = await artifacts.get(input.id);
+      if (input.action === "inspect") return { file: artifact };
       if (input.action === "show") shell.showItemInFolder(artifact.path);
       else if (input.action === "open") {
         if (await isExecutableFile(artifact.path)) {

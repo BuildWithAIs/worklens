@@ -119,7 +119,7 @@ export const schemas = {
   artifact: z
     .object({
       id: z.string().uuid(),
-      action: z.enum(["open", "show", "saveAs"]),
+      action: z.enum(["inspect", "open", "show", "saveAs"]),
     })
     .strict(),
   refreshModels: z.object({ provider: z.string().min(1).max(200) }).strict(),

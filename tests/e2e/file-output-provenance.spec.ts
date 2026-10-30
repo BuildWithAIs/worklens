@@ -219,7 +219,7 @@ for (const explicitLinks of [true, false]) {
     )!;
     // Exercise the real wrapper and persisted details, not fabricated produced flags.
     const script =
-      "const f=require('node:fs'); f.mkdirSync('logo'); for(const name of ['bmw-logo-white.svg','result.uninventedformat123456789','README','.env','报告 最终版']) f.writeFileSync('logo/'+name, name.endsWith('.svg') ? '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\"><rect width=\"80\" height=\"80\" fill=\"royalblue\"/></svg>' : 'delivered'); f.writeFileSync('logo/preview-white.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=','base64'));";
+      "const f=require('node:fs'); f.mkdirSync('logo'); for(const name of ['sample-symbol.svg','result.uninventedformat123456789','README','.env','示例 文档']) f.writeFileSync('logo/'+name, name.endsWith('.svg') ? '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\"><rect width=\"80\" height=\"80\" fill=\"royalblue\"/></svg>' : 'delivered'); f.writeFileSync('logo/sample-raster.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=','base64'));";
     const scriptPath = join(workspace, "make-output.cjs");
     await writeFile(scriptPath, script);
     const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
@@ -234,12 +234,12 @@ for (const explicitLinks of [true, false]) {
       undefined,
     );
     const names = [
-      "bmw-logo-white.svg",
-      "preview-white.png",
+      "sample-symbol.svg",
+      "sample-raster.png",
       "result.uninventedformat123456789",
       "README",
       ".env",
-      "报告 最终版",
+      "示例 文档",
     ];
     const timestamp = new Date().toISOString();
     const text =
@@ -356,7 +356,7 @@ for (const explicitLinks of [true, false]) {
       ).toHaveCount(0);
       await expect(page.locator(".local-file-menu")).toHaveCount(0);
       await page
-        .getByRole("link", { name: "bmw-logo-white.svg", exact: true })
+        .getByRole("link", { name: "sample-symbol.svg", exact: true })
         .click();
       await expect(
         page.locator('[data-slot="image-zoom-overlay"]'),

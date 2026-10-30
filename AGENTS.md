@@ -8,7 +8,7 @@ WorkLens is a desktop working agent built with Electron, React, TypeScript, Tail
 - `src/preload/`: typed Electron bridge; `src/shared/`: IPC and UI contracts plus shared data utilities.
 - `src/renderer/src/`: React UI, hooks, utilities, styles, brand assets, and `i18n/locales/` translations. Product components live in `components/worklens/`, with reusable UI in `components/ui/` and chat elements in `components/assistant-ui/`.
 - `tests/`: Vitest unit/integration tests and fixtures; `tests/connectors/`: service integration tests; `tests/e2e/`: Electron acceptance; `tests/ui/`: browser UI checks.
-- `resources/skills/`: resource directory for bundled agent skills; currently no skills are bundled. `build/`: application and installer icons.
+- `resources/skills/`: bundled agent skills, including `worklens-work-brief`. `build/`: application and installer icons.
 - `scripts/`: desktop development and production launch helpers.
 - `website/`: separate website package with its own dependencies, scripts, tests, and README.
 - `.github/workflows/`: CI workflows. Root configuration files define Electron/Vite builds, TypeScript, Vitest, and Playwright.

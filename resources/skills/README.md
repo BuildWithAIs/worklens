@@ -5,8 +5,11 @@ resynced into `~/.worklens/skills` on app launch. Edit the source here;
 user copies of bundled skills are replaced on the next launch.
 Local skills in `~/.agents/skills` are read only and never deleted or overwritten.
 
-No skills are currently bundled. Keep this resource directory for future built-in
-skills; the loading, settings, and invocation mechanisms remain available.
+Bundled skills:
+
+- `worklens-work-brief`: draft a project progress brief for a chosen period from
+  connected work sources or supplied materials, with source links and coverage
+  limits. Invoke it with `/skill:worklens-work-brief` and the project and period.
 
 Settings and the agent use the same built-in-first precedence for duplicate
 names. A shadowed local skill is shown as inactive and can still be revealed.

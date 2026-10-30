@@ -1,11 +1,209 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { readableStorage } from "../../../src/main/connectors/confluence/content";
+import { ConfluenceService } from "../../../src/main/connectors/confluence/service";
+import { ConfluenceHttp } from "../../../src/main/connectors/confluence/http";
+import { citationUrl } from "../../../src/main/connectors/confluence/list-results";
+import { projectMessages } from "../../../src/main/projection";
+import { messageOutputPaths } from "../../../src/shared/file-references";
 import { setup } from "./setup";
 
 const site = "https://example.com/confluence";
 const source = `${site}/pages/viewpage.action?pageId=1`;
+
+test("search returns remote citation URLs without advertising retrieval files as artifacts", async () => {
+  const f = await setup();
+  const items = [
+    {
+      content: { id: "11", type: "page", title: "Overview" },
+      url: "/display/ENG/Overview",
+    },
+    {
+      content: {
+        id: "12",
+        type: "page",
+        title: "Guide",
+        _links: { webui: "/confluence/display/ENG/Guide" },
+      },
+    },
+    { content: { id: "13", type: "blogpost", title: "News" } },
+    {
+      id: "14",
+      type: "page",
+      title: "Reference",
+      _links: { webui: "display/ENG/Reference" },
+    },
+    {
+      content: { id: "15", type: "page", title: "Absolute" },
+      url: `${f.fixture.url}/pages/viewpage.action?pageId=15#notes`,
+    },
+    {
+      content: { id: "16", type: "attachment", title: "report.pdf" },
+      url: "/download/attachments/11/report.pdf",
+    },
+    { id: "17", type: "global", name: "Engineering" },
+  ];
+  const fetcher = vi.fn(async () =>
+    Response.json({ results: items, _links: {} }),
+  );
+  const service = new ConfluenceService(f.sites, f.artifacts, fetcher);
+  const out = await service.execute(
+    false,
+    { request: { operation: "search", cql: "type=page" } },
+    "session1",
+    "run1",
+  );
+  const data = JSON.parse((out.content[0] as { text: string }).text);
+  expect(data.status).toBe("success");
+  expect(data.items.map((item: { url?: string }) => item.url)).toEqual([
+    `${f.fixture.url}/display/ENG/Overview`,
+    `${f.fixture.url}/display/ENG/Guide`,
+    `${f.fixture.url}/pages/viewpage.action?pageId=13`,
+    `${f.fixture.url}/display/ENG/Reference`,
+    `${f.fixture.url}/pages/viewpage.action?pageId=15#notes`,
+    `${f.fixture.url}/download/attachments/11/report.pdf`,
+    undefined,
+  ]);
+  expect(out.details).toMatchObject({ artifacts: [] });
+  const messages = projectMessages([
+    {
+      role: "toolResult",
+      toolName: "confluence_read",
+      toolCallId: "search",
+      ...out,
+    },
+  ]);
+  expect(messages[0].artifacts).toEqual([]);
+  expect(messageOutputPaths(messages)).toEqual([]);
+  const saved = JSON.parse(await readFile(data.resultPath, "utf8"));
+  expect(saved.items).toEqual(
+    items.map((item, index) => ({ ...item, url: data.items[index].url })),
+  );
+});
+
+test.each(["data-center", "cloud"] as const)(
+  "%s PDF metadata has remote URLs in search, lists and reads without downloading the PDF",
+  async (deployment) => {
+    const f = await setup();
+    if (deployment === "cloud")
+      await f.connections.save({
+        url: "https://fixture.atlassian.net/wiki",
+        deployment,
+        tokenType: "scoped",
+        token: "synthetic-scoped-token",
+        email: "fixture@example.com",
+        cloudId: "cloud-123",
+      });
+    const base = f.connections.snapshot().settings.url;
+    const download = "/download/attachments/11/report.pdf?version=2";
+    const attachment = {
+      id: "21",
+      type: "attachment",
+      title: "report.pdf",
+      ...(deployment === "cloud"
+        ? { downloadLink: "/wiki" + download, fileSize: 4096 }
+        : { _links: { download }, extensions: { fileSize: 4096 } }),
+    };
+    const fetcher = vi.fn(async (url: Parameters<typeof fetch>[0]) => {
+      const path = new URL(String(url)).pathname;
+      if (path.endsWith("/search"))
+        return Response.json({
+          results: [{ content: attachment }],
+          _links: {},
+        });
+      if (path.endsWith("/attachments") || path.endsWith("/child/attachment"))
+        return Response.json({ results: [attachment], _links: {} });
+      return Response.json(attachment);
+    });
+    const service = new ConfluenceService(f.sites, f.artifacts, fetcher);
+    const save = vi.spyOn(f.artifacts, "save");
+    for (const request of [
+      { operation: "search", cql: "type=attachment" },
+      { operation: "list_attachments", page: "11" },
+      { operation: "read_attachment", attachmentId: "21" },
+    ]) {
+      const result = await service.execute(
+        false,
+        { request },
+        "session1",
+        "run1",
+      );
+      const data = JSON.parse((result.content[0] as { text: string }).text);
+      expect(data.status).toBe("success");
+      expect(data.items?.[0].url ?? data.url).toBe(base + download);
+      expect(result.details).toMatchObject({ artifacts: [] });
+      if (data.resultPath) {
+        const cached = JSON.parse(await readFile(data.resultPath, "utf8"));
+        expect(cached.items[0].url).toBe(base + download);
+        expect(cached.items[0].content ?? cached.items[0]).toMatchObject(
+          attachment,
+        );
+      }
+    }
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(
+      save.mock.calls.every((call) => call[1] === "confluence-result.json"),
+    ).toBe(true);
+
+    // Disk failure must not replace usable remote citations with filenames.
+    save.mockRejectedValue(new Error("ENOSPC"));
+    const result = await service.execute(
+      false,
+      { request: { operation: "search", cql: "type=attachment" } },
+      "session1",
+      "run2",
+    );
+    const data = JSON.parse((result.content[0] as { text: string }).text);
+    expect(data.itemsSummarized).toBe(false);
+    expect(data.items[0].url).toBe(base + download);
+    expect(result.details).toMatchObject({ artifacts: [] });
+  },
+);
+
+test("invalid attachment URLs do not become local targets or discard valid alternatives", async () => {
+  const f = await setup();
+  const http = new ConfluenceHttp(f.connections.snapshot());
+  for (const url of [
+    "javascript:alert(1)",
+    "file:///tmp/report.pdf",
+    "https://[",
+    42,
+  ]) {
+    expect(
+      citationUrl({ type: "attachment", id: "21", url }, http),
+    ).toBeUndefined();
+    expect(
+      citationUrl(
+        {
+          type: "attachment",
+          id: "21",
+          url,
+          _links: { download: "/download/attachments/11/report.pdf" },
+        },
+        http,
+      ),
+    ).toBe(`${f.fixture.url}/download/attachments/11/report.pdf`);
+  }
+});
+
+test("Cloud attachment browser links take precedence over download links", async () => {
+  const f = await setup();
+  const http = new ConfluenceHttp(f.connections.snapshot());
+  const webuiLink =
+    "/pages/viewpageattachments.action?pageId=11&preview=%2F11%2F21%2Freport.pdf";
+  expect(
+    citationUrl(
+      {
+        id: "21",
+        webuiLink,
+        downloadLink: "/download/attachments/11/report.pdf",
+      },
+      http,
+    ),
+  ).toBe(f.fixture.url + webuiLink);
+});
+
 test("table exports rewrite exact attachment names without consuming HTML or similarly named links", async () => {
   const f = await setup();
   f.fixture.state.attachmentTitle = "report.pdf";

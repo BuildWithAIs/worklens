@@ -18,7 +18,7 @@ for (const language of ["en", "zh"]) {
           {
             id: "a",
             role: "assistant",
-            text: "[Website](https://example.com/path?q=1#section)\n\nhttp://example.org\n\n[File](/tmp/example.txt)\n\n`https://example.com/image.jpg`\n\n[`https://example.com/nested`](https://example.com/nested)\n\n`max_results`\n\n来源：（https://www.yzwb.net/news/tt/202609/t20260916_393366.html）。预报会更新，出门前建议再看一次当天实时。",
+            text: "[Website](https://example.com/path?q=1#section)\n\nhttp://example.org\n\n[File](/tmp/example.txt)\n\n`https://example.com/image.jpg`\n\n[`https://example.com/nested`](https://example.com/nested)\n\n`max_results`\n\n来源：（https://news.example.test/guides/sample-entry.html）。说明会更新，请查看页面上的最新内容。",
           },
         ],
       };
@@ -72,19 +72,19 @@ for (const language of ["en", "zh"]) {
     await expect(
       page.locator("code").filter({ hasText: /^max_results$/ }),
     ).toHaveCount(1);
-    const weather = page.getByRole("link", {
-      name: "https://www.yzwb.net/news/tt/202609/t20260916_393366.html",
+    const sourceLink = page.getByRole("link", {
+      name: "https://news.example.test/guides/sample-entry.html",
       exact: true,
     });
-    await weather.click();
+    await sourceLink.click();
     expect((await page.evaluate(() => window.externalLinks)).at(-1)).toBe(
-      "https://www.yzwb.net/news/tt/202609/t20260916_393366.html",
+      "https://news.example.test/guides/sample-entry.html",
     );
     await expect(
-      page.locator("a").filter({ hasText: "预报会更新" }),
+      page.locator("a").filter({ hasText: "说明会更新" }),
     ).toHaveCount(0);
     await expect(
-      page.getByText(/预报会更新，出门前建议再看一次当天实时。/),
+      page.getByText(/说明会更新，请查看页面上的最新内容。/),
     ).toBeVisible();
     await page.evaluate(() => {
       window.failOpen = true;
@@ -113,7 +113,7 @@ for (const theme of ["light", "dark"]) {
           {
             id: "a",
             role: "assistant",
-            text: "## 信息来源\n\n- 南京图书馆官网 www.jslib.org.cn（首页开馆时间、`/gk/xdnt/` 南图简介，均返回 200 且内容正常）\n- 参考 www.example.com（`opening hours`，**开放时间**）",
+            text: "## 信息来源\n\n- 示例文档站点 www.docs.example.test（页面导航说明、`/guide/intro/` 站点说明，支持代码与标点解析）\n- 参考 www.example.com（`page details`，**页面说明**）",
           },
         ],
       };
@@ -137,35 +137,35 @@ for (const theme of ["light", "dark"]) {
       document.documentElement.dataset.theme = theme;
     }, theme);
     const link = page.getByRole("link", {
-      name: "www.jslib.org.cn",
+      name: "www.docs.example.test",
       exact: true,
     });
-    await expect(link).toHaveAttribute("href", "http://www.jslib.org.cn");
+    await expect(link).toHaveAttribute("href", "http://www.docs.example.test");
     await expect(
-      page.locator("a").filter({ hasText: "首页开馆时间" }),
+      page.locator("a").filter({ hasText: "页面导航说明" }),
     ).toHaveCount(0);
     await expect(
-      page.locator("code").filter({ hasText: /^\/gk\/xdnt\/$/ }),
+      page.locator("code").filter({ hasText: /^\/guide\/intro\/$/ }),
     ).toBeVisible();
     await expect(
       page.locator('[data-slot="local-file-reference"]'),
     ).toHaveCount(0);
     await expect(
-      page.locator("code").filter({ hasText: /^opening hours$/ }),
+      page.locator("code").filter({ hasText: /^page details$/ }),
     ).toBeVisible();
     await expect(
-      page.locator("strong").filter({ hasText: "开放时间" }),
+      page.locator("strong").filter({ hasText: "页面说明" }),
     ).toBeVisible();
     await link.hover();
     await expect(page.locator('[data-slot="tooltip-content"]')).toContainText(
-      "http://www.jslib.org.cn",
+      "http://www.docs.example.test",
     );
     await link.click();
     await link.focus();
     await page.keyboard.press("Enter");
     expect(await page.evaluate(() => window.externalLinks)).toEqual([
-      "http://www.jslib.org.cn",
-      "http://www.jslib.org.cn",
+      "http://www.docs.example.test",
+      "http://www.docs.example.test",
     ]);
     await page.locator(".chat-header").hover();
     await page.screenshot({ path: info.outputPath(`cjk-links-${theme}.png`) });

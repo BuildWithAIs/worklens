@@ -1,5 +1,5 @@
 import type { ReadRequest } from "./schema";
-import { summarizeItem } from "./list-results";
+import { citationUrl, summarizeItem } from "./list-results";
 import { Continuations } from "./continuations";
 import { lstat } from "node:fs/promises";
 import type { ConnectionSnapshot } from "./connection";
@@ -64,8 +64,13 @@ export class OperationSupport {
       ? await this.continuations.save(owner, ctx.adapter.http.nextPath(next))
       : undefined;
     return {
-      items: data.results.map(summarizeItem),
-      rawItems: data.results,
+      items: data.results.map((item) => summarizeItem(item, ctx.adapter.http)),
+      // Cached and persistence-fallback results need the same citation targets
+      // as summaries; otherwise reading resultPath reintroduces relative URLs.
+      rawItems: data.results.map((item) => {
+        const url = citationUrl(item, ctx.adapter.http);
+        return { ...item, url };
+      }),
       itemsSummarized: true,
       complete: !continuation,
       continuation,

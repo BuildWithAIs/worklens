@@ -708,3 +708,36 @@ for (const [ids, shown] of [
       shown === "Old theme" ? "Other" : "Old theme",
     );
   });
+
+// Side by side and stacked, a card's chart and table share one height.
+for (const width of [1280, 1000]) {
+  test(`switching chart and table views keeps the cards below still (${width}px)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await openInsights(page, 7, {
+      summary: true,
+      focusAreas: [{ title: "Area", description: "Desc" }],
+    });
+    const below = () =>
+      page.evaluate(
+        () =>
+          document
+            .querySelector('.overview-card[data-area="topics"]')!
+            .getBoundingClientRect().top +
+          document.querySelector(".overview-scroll")!.scrollTop,
+      );
+    const start = await below();
+    for (const area of ["trend", "activity"]) {
+      const views = page.locator(
+        `.overview-card[data-area="${area}"] .overview-toggle button`,
+      );
+      await views.nth(1).click();
+      await expect(views.nth(1)).toHaveAttribute("aria-pressed", "true");
+      expect(await below()).toBe(start);
+      await views.nth(0).click();
+      await expect(views.nth(0)).toHaveAttribute("aria-pressed", "true");
+      expect(await below()).toBe(start);
+    }
+  });
+}

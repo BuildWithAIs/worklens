@@ -231,19 +231,19 @@ test("reference parsing keeps URLs distinct and supports spaces, Unicode and Win
     "/tmp/literal%20name.png",
   );
   for (const path of [
-    "C:\\Users\\Leo\\image.png",
-    "/Users/Leo/设计 图.png",
+    "C:\\Users\\example\\sample.png",
+    "/Users/example/Documents/示例 图片.png",
     "workspace/a.png",
     "./report.pdf",
   ])
     expect(isLocalReference(path)).toBe(true);
   expect(
     localReferences(
-      "[设计](</Users/Leo/设计 图.png>)\nworkspace/a.png\n[encoded](/tmp/a%20b.html)",
+      "[设计](</Users/example/Documents/示例 图片.png>)\nworkspace/a.png\n[encoded](/tmp/a%20b.html)",
     ),
   ).toEqual(
     expect.arrayContaining([
-      "/Users/Leo/设计 图.png",
+      "/Users/example/Documents/示例 图片.png",
       "workspace/a.png",
       "/tmp/a b.html",
     ]),

@@ -285,7 +285,10 @@ const zhCN = {
     failedCountSuffix: " · {{failed}} 次失败",
   },
   artifacts: {
+    files: "文件",
     savedFiles: "已保存文件",
+    checkingFile: "正在检查文件…",
+    localFileUnavailable: "本地文件不可用",
     showInFolder: "在文件夹中显示",
     saveAs: "另存为",
   },

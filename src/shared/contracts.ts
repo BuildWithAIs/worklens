@@ -493,9 +493,9 @@ export interface Requests {
   confluenceTest: { input: ConfluenceSiteInput; output: string };
   confluenceRemove: { input: { site: string }; output: void };
   artifact: {
-    input: { id: string; action: "show" | "open" | "saveAs" };
+    input: { id: string; action: "inspect" | "show" | "open" | "saveAs" };
     /** Executable files are shown in their folder instead of opened. */
-    output: { revealed?: boolean } | void;
+    output: { file?: LocalArtifact; revealed?: boolean } | void;
   };
   bootstrap: { input: undefined; output: Bootstrap };
   settings: { input: Partial<Settings>; output: Settings };

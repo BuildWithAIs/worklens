@@ -566,6 +566,8 @@ for (const theme of ["light", "dark"]) {
       window.artifactCalls = [];
       window.worklens.invoke = async (name, input) => {
         if (name === "artifact") {
+          if (input.action === "inspect")
+            return { file: view.messages[1].artifacts[0] };
           window.artifactCalls.push(input);
           if (window.failArtifact) throw new Error("File unavailable");
           if (window.holdArtifact)

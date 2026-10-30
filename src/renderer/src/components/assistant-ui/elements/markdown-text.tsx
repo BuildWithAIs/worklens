@@ -20,12 +20,11 @@ import { preprocessMarkdownMath } from "../../../../../shared/markdown-math";
 import { remarkCjkAutolinks } from "../../../../../shared/remark-cjk-autolinks";
 import { remarkLocalFiles } from "@/lib/remark-local-files";
 import { LocalFileLink } from "@/components/worklens/LocalFileLink";
-import { shortUrl } from "@/lib/link-label";
+import { WebLink, isWebUrl } from "@/components/worklens/WebLink";
 import {
   localReferences,
   fileReferenceAliases,
 } from "../../../../../shared/file-references";
-import { Hint } from "@/components/ui/tooltip";
 import {
   type ComponentPropsWithoutRef,
   type FC,
@@ -36,9 +35,6 @@ import {
   useEffect,
   useState,
   useRef,
-  Children,
-  isValidElement,
-  type ReactNode,
 } from "react";
 import {
   useAuiState,
@@ -50,8 +46,11 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
+import {
+  markdownBaseClassName,
+  markdownReplyClassName,
+} from "@/lib/markdown-presentation";
 import { useAppTranslation } from "@/i18n";
-import { toast } from "@/components/ui/toast";
 import { inspectConversationFile } from "@/lib/file-inspection-queue";
 import { isPlainTextLanguage } from "@/lib/syntax-highlight";
 import { CodeBlockContent, codeBlockClassName } from "./code-block-content";
@@ -183,10 +182,11 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components, compact }) => {
       ]}
       preprocess={preprocessMarkdownMath}
       containerProps={searchable ? searchTextProps : undefined}
-      className={cn(
-        "aui-md font-normal antialiased",
-        compact ? "text-sm leading-6" : "text-[14px] leading-[1.7]",
-      )}
+      className={
+        compact
+          ? cn(markdownBaseClassName, "text-sm leading-6")
+          : markdownReplyClassName
+      }
       components={markdownComponents}
       defer
     />
@@ -239,15 +239,6 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
 
 const InsideChatLink = createContext(false);
 
-function isInlineWebUrl(text: string) {
-  if (!/^https?:\/\/[^\s]+$/i.test(text)) return false;
-  try {
-    return Boolean(new URL(text).hostname);
-  } catch {
-    return false;
-  }
-}
-
 function ChatLink({
   className,
   href,
@@ -261,65 +252,15 @@ function ChatLink({
   "data-local-label"?: string;
   "data-local-display"?: string;
 }) {
-  const { t } = useAppTranslation();
   if (localPath)
     return localDisplay === "card" ? (
       <HtmlFileCard path={localPath} label={localLabel} />
     ) : (
       <LocalFileLink path={localPath} label={localLabel} />
     );
-  const textOf = (node: ReactNode): string =>
-    Children.toArray(node)
-      .map((item) =>
-        typeof item === "string"
-          ? item
-          : isValidElement<{ children?: ReactNode }>(item)
-            ? textOf(item.props.children)
-            : "",
-      )
-      .join("");
-  const text = textOf(props.children);
-  const shortened =
-    href &&
-    isInlineWebUrl(text) &&
-    text.replace(/\/$/, "") === href.replace(/\/$/, "")
-      ? shortUrl(text)
-      : text;
-  const link = (
-    <a
-      {...props}
-      children={shortened !== text ? shortened : props.children}
-      href={href}
-      className={cn(
-        "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
-        className,
-      )}
-      onClick={(event) => {
-        if (!href || !/^https?:\/\//i.test(href)) {
-          onClick?.(event);
-          return;
-        }
-        event.preventDefault();
-        void window.worklens.invoke("external", { url: href }).catch(() => {
-          toast.add({
-            type: "error",
-            title: t("chatLinks.openFailed"),
-            timeout: 0,
-            priority: "high",
-          });
-        });
-      }}
-    />
-  );
   return (
     <InsideChatLink.Provider value={true}>
-      {href && /^https?:\/\//i.test(href) ? (
-        <Hint content={<span className="link-target-hint">{href}</span>}>
-          {link}
-        </Hint>
-      ) : (
-        link
-      )}
+      <WebLink {...props} href={href} className={className} onClick={onClick} />
     </InsideChatLink.Provider>
   );
 }
@@ -480,7 +421,7 @@ const defaultComponents = memoizeMarkdownComponents({
     const insideLink = useContext(InsideChatLink);
     const path =
       typeof props.children === "string" ? props.children.trim() : "";
-    if (!isCodeBlock && !insideLink && isInlineWebUrl(path))
+    if (!isCodeBlock && !insideLink && isWebUrl(path))
       return (
         <ChatLink href={path} className="aui-md-code-link">
           <code className={cn("aui-md-inline-code", className)} {...props} />

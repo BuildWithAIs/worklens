@@ -44,7 +44,14 @@ test("Skills: bundled migration, isolated local files, concurrent IPC toggles an
     const initial = await page.evaluate(() =>
       window.worklens.invoke("skillsList", undefined),
     );
-    expect(initial.builtin).toEqual([]);
+    expect(initial.builtin).toEqual([
+      expect.objectContaining({
+        name: "worklens-work-brief",
+        source: "builtin",
+        enabled: true,
+        disableModelInvocation: false,
+      }),
+    ]);
     expect(initial.local).toHaveLength(3);
     expect(
       initial.local.find((skill) => skill.name === "retired-skill"),
@@ -74,7 +81,13 @@ test("Skills: bundled migration, isolated local files, concurrent IPC toggles an
       .locator(".settings-navigation")
       .getByRole("button", { name: "Skills", exact: true })
       .click();
-    await expect(page.getByText("No built-in skills yet.")).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: "About worklens-work-brief",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByText("No built-in skills yet.")).toHaveCount(0);
     await createSkill("local-skills", "gamma");
     await page
       .getByRole("button", { name: "Refresh skills", exact: true })
@@ -108,7 +121,7 @@ test("Skills: bundled migration, isolated local files, concurrent IPC toggles an
     );
     expect(await readdir(join(root, "skills"))).not.toContain("deep-research");
     expect(await readdir(join(root, "skills"))).not.toContain("retired-skill");
-    expect(restored.builtin).toEqual([]);
+    expect(restored.builtin).toEqual(initial.builtin);
   } finally {
     await app?.close();
     await rm(root, { recursive: true, force: true });

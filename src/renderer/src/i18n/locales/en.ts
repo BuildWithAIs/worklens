@@ -305,7 +305,10 @@ const en = {
     failedCountSuffix: " · {{failed}} failed",
   },
   artifacts: {
+    files: "Files",
     savedFiles: "Saved files",
+    checkingFile: "Checking file…",
+    localFileUnavailable: "Local file unavailable",
     showInFolder: "Show in folder",
     saveAs: "Save as",
   },

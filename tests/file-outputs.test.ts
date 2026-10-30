@@ -43,7 +43,7 @@ test("metadata collection covers arbitrary formats, extensionless names, renames
     "download.uninventedformat123456789",
     "README",
     ".env",
-    "报告 最终版",
+    "示例 文档",
   ])
     await writeFile(join(cwd, "logo", name), "new");
   await writeFile(join(cwd, "changed.future-format"), "new content");
@@ -76,7 +76,7 @@ test.skipIf(process.platform === "win32")(
       "shell-output",
       {
         command:
-          "mkdir -p logo; printf '<svg/>' > logo/bmw-logo-white.svg; printf data > logo/README; printf data > logo/report.uninventedformat123456789; cp logo/README logo/temp; mv logo/temp logo/renamed",
+          "mkdir -p logo; printf '<svg/>' > logo/sample-symbol.svg; printf data > logo/README; printf data > logo/report.uninventedformat123456789; cp logo/README logo/temp; mv logo/temp logo/renamed",
       },
       undefined,
       undefined,
@@ -112,7 +112,7 @@ test.skipIf(process.platform === "win32")(
           content: [
             {
               type: "text",
-              text: "已保存 bmw-logo-white.svg、README、report.uninventedformat123456789 和 renamed。",
+              text: "已保存 sample-symbol.svg、README、report.uninventedformat123456789 和 renamed。",
             },
           ],
         },
@@ -120,7 +120,7 @@ test.skipIf(process.platform === "win32")(
       cwd,
     );
     for (const name of [
-      "bmw-logo-white.svg",
+      "sample-symbol.svg",
       "README",
       "report.uninventedformat123456789",
       "renamed",

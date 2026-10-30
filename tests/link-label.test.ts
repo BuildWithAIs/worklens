@@ -14,7 +14,7 @@ import { remarkCjkAutolinks } from "../src/shared/remark-cjk-autolinks";
 
 test("website routes remain intact after CJK URL and local-file parsing", () => {
   const source =
-    "南京图书馆官网 www.jslib.org.cn（首页开馆时间、`/gk/xdnt/` 南图简介）\n\n接口 /api/v1/items，参考 `/docs/report.pdf`。";
+    "示例文档站点 www.docs.example.test（页面导航说明、`/guide/intro/` 站点说明）\n\n接口 /api/v1/items，参考 `/docs/report.pdf`。";
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -25,11 +25,11 @@ test("website routes remain intact after CJK URL and local-file parsing", () => 
   }) as Root;
   expect(tree.children[0]).toMatchObject({
     children: [
-      { type: "text", value: "南京图书馆官网 " },
-      { type: "link", url: "http://www.jslib.org.cn" },
-      { type: "text", value: "（首页开馆时间、" },
-      { type: "inlineCode", value: "/gk/xdnt/" },
-      { type: "text", value: " 南图简介）" },
+      { type: "text", value: "示例文档站点 " },
+      { type: "link", url: "http://www.docs.example.test" },
+      { type: "text", value: "（页面导航说明、" },
+      { type: "inlineCode", value: "/guide/intro/" },
+      { type: "text", value: " 站点说明）" },
     ],
   });
   expect(tree.children[1]).toMatchObject({
@@ -91,7 +91,7 @@ test("explicit file links support custom filesystem roots", () => {
 
 test("unproduced suggestions retain code, descriptions and list structure", () => {
   const source =
-    "- `国学入门计划.md`：12 周读什么\n- `workspace/计划.html`：入门课程\n- [参考表](表格.md)：关系速查";
+    "- `示例说明.md`：说明文档的内容\n- `workspace/示例页面.html`：示例页面内容\n- [参考表](表格.md)：示例数据概览";
   const processor = unified().use(remarkParse).use(remarkLocalFiles, {
     producedPaths: new Set<string>(),
   });
@@ -104,8 +104,8 @@ test("unproduced suggestions retain code, descriptions and list structure", () =
         children: [
           {
             children: [
-              { type: "inlineCode", value: "国学入门计划.md" },
-              { type: "text", value: "：12 周读什么" },
+              { type: "inlineCode", value: "示例说明.md" },
+              { type: "text", value: "：说明文档的内容" },
             ],
           },
         ],
@@ -114,8 +114,8 @@ test("unproduced suggestions retain code, descriptions and list structure", () =
         children: [
           {
             children: [
-              { type: "inlineCode", value: "workspace/计划.html" },
-              { type: "text", value: "：入门课程" },
+              { type: "inlineCode", value: "workspace/示例页面.html" },
+              { type: "text", value: "：示例页面内容" },
             ],
           },
         ],
@@ -125,7 +125,7 @@ test("unproduced suggestions retain code, descriptions and list structure", () =
           {
             children: [
               { type: "text", value: "参考表" },
-              { type: "text", value: "：关系速查" },
+              { type: "text", value: "：示例数据概览" },
             ],
           },
         ],
@@ -157,10 +157,10 @@ test("only produced file candidates become deliverables", () => {
 });
 
 test.each([
-  "你的 `statusline-command.sh` 已经在读取配置。",
-  "`statusline-command.sh` 已经在读取配置。",
+  "你的 `sample-config-helper.sh` 已经在读取配置。",
+  "`sample-config-helper.sh` 已经在读取配置。",
   "当前配置在 /Users/example/config.toml，请保留。",
-  "| 配置 |\n| --- |\n| `statusline-command.sh` |",
+  "| 配置 |\n| --- |\n| `sample-config-helper.sh` |",
 ])(
   "existing files mentioned in prose remain ordinary Markdown: %s",
   (source) => {
@@ -197,7 +197,7 @@ test.each([true, false])(
   (code) => {
     const path = "/Users/example/.worklens-dev/runtime/index.html";
     const missing = "/Users/example/.worklens-dev/runtime/later.html";
-    const source = `已创建 ${code ? "`" + path + "`" : path}。\n\n以后可以生成 \`${missing}\`。\n\n你的 \`statusline-command.sh\` 已在读取配置。\n\n\`\`\`bash\nopen ${path}\n\`\`\``;
+    const source = `已创建 ${code ? "`" + path + "`" : path}。\n\n以后可以生成 \`${missing}\`。\n\n你的 \`sample-config-helper.sh\` 已在读取配置。\n\n\`\`\`bash\nopen ${path}\n\`\`\``;
     const parser = unified().use(remarkParse);
     const tree = parser.parse(source);
     remarkLocalFiles({
@@ -224,7 +224,7 @@ test.each([true, false])(
     expect(tree.children[2]).toMatchObject({
       children: [
         { type: "text", value: "你的 " },
-        { type: "inlineCode", value: "statusline-command.sh" },
+        { type: "inlineCode", value: "sample-config-helper.sh" },
         { type: "text", value: " 已在读取配置。" },
       ],
     });
@@ -509,12 +509,12 @@ test.each(["html", "png", "txt", "pdf", "docx", "sh", "toml"])(
 
 test("known outputs in plain text support arbitrary extensions, no extension and spaces", () => {
   const paths = [
-    "bmw-logo-white.svg",
-    "preview-white.png",
+    "sample-symbol.svg",
+    "sample-raster.png",
     "result.uninventedformat123456789",
     "README",
     ".env",
-    "报告 最终版",
+    "示例 文档",
   ];
   const processor = unified()
     .use(remarkParse)
@@ -566,13 +566,14 @@ test("explicit available file links keep navigation without claiming output prov
 });
 
 test("long file names keep their start and extension", () => {
-  expect(shortFileName("image-2025-11-19_15-36-39.png")).toBe(
-    "image-2025-11-19_15-36-39.png",
+  expect(shortFileName("sample-illustration.png")).toBe(
+    "sample-illustration.png",
   );
-  const long = "image-2025-11-19_15-36-39-very-long-export-name-final-v3.png";
+  const long =
+    "sample-illustration-with-an-extra-long-descriptive-filename.png";
   const short = shortFileName(long);
   expect(Array.from(short)).toHaveLength(40);
-  expect(short).toBe("image-2025-11-19_15…rt-name-final-v3.png");
+  expect(short).toBe("sample-illustration…riptive-filename.png");
   // CJK characters and emoji take two columns.
   const cjk = shortFileName("设计评审".repeat(12) + "示例.png", 32);
   expect(cjk).toMatch(/^设计评审.*….*示例\.png$/);

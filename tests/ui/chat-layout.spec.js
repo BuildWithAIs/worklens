@@ -459,7 +459,19 @@ test("compact tool activity, history actions and fluid message width", async ({
         ),
     )
     .toBe(true);
-  await expect(reply.locator(".aui-md-h2")).toHaveCSS("font-size", "15px");
+  // Reply headings step above body text and the 15px chat title; table rows
+  // keep their compact line height when body lines open up.
+  await expect(reply.locator(".aui-md-h2")).toHaveCSS("font-size", "17px");
+  await expect(reply.locator(".aui-md-h2")).toHaveCSS("font-weight", "600");
+  await expect(reply.locator(".aui-md-h3")).toHaveCSS("font-size", "15px");
+  await expect(reply.locator(".aui-md-p").first()).toHaveCSS(
+    "line-height",
+    "25.2px",
+  );
+  await expect(reply.locator(".aui-md-td").first()).toHaveCSS(
+    "line-height",
+    "23.8px",
+  );
   await expect(page.locator('[data-slot="chat-title"]')).toHaveCSS(
     "font-size",
     "15px",

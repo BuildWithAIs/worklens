@@ -2,7 +2,7 @@ import { test, expect } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "../src/main/agent-service";
 import { SkillsService, summarize } from "../src/main/skills";
 import { resources } from "../src/main/resources";
@@ -11,6 +11,7 @@ import { schemas } from "../src/main/validation";
 import { mockServer, fixtureModel } from "./mock-server";
 import type { ChatEvent } from "../src/shared/contracts";
 import { textContent } from "../src/main/projection";
+import { dayKey } from "../src/shared/date-range";
 
 async function skillMd(dir: string, name: string, description: string) {
   await mkdir(dir, { recursive: true });
@@ -577,6 +578,83 @@ test("sessions rescan enabled skills and support Pi commands without exposing ma
     expect(
       textContent(messages().findLast((m: any) => m.role === "user").content),
     ).toContain('<skill name="ordinary"');
+    // Auto-naming uses the task, while invocation and stored messages keep the command.
+    const titleCases = [
+      {
+        text: "/skill:ordinary Prepare the monthly project brief.",
+        title: "Prepare the monthly project brief.",
+        message: "/skill:ordinary Prepare the monthly project brief.",
+        skill: "ordinary",
+      },
+      {
+        text: "/skill:manual\n  整理本周进展，用于团队同步。  ",
+        title: "整理本周进展，用于团队同步。",
+        message: "/skill:manual 整理本周进展，用于团队同步。",
+        skill: "manual",
+      },
+      {
+        text: "/skill:ordinary",
+        title: "ordinary",
+        message: "/skill:ordinary",
+        skill: "ordinary",
+      },
+      {
+        text: "/skill:manual   \n  ",
+        title: "manual",
+        message: "/skill:manual",
+        skill: "manual",
+      },
+      {
+        text: `/skill:ordinary ${"项目进展".repeat(20)}`,
+        title: "项目进展".repeat(12),
+        message: `/skill:ordinary ${"项目进展".repeat(20)}`,
+        skill: "ordinary",
+      },
+      {
+        text: "Discuss /skill:ordinary as plain text.",
+        title: "Discuss /skill:ordinary as plain text.",
+        message: "Discuss /skill:ordinary as plain text.",
+        skill: undefined,
+      },
+    ];
+    const titled: { id: string; title: string }[] = [];
+    for (const item of titleCases) {
+      const requestCount = server.requests.length;
+      const view = await send(item.text);
+      expect(view.title).toBe(item.title);
+      expect(server.requests.length).toBe(requestCount + 1);
+      expect(view.messages.find((m) => m.role === "user")?.text).toBe(
+        item.message,
+      );
+      if (item.skill)
+        expect(
+          textContent(
+            messages().findLast((m: any) => m.role === "user").content,
+          ),
+        ).toContain(`<skill name="${item.skill}"`);
+      titled.push({ id: view.id, title: item.title });
+    }
+    const list = await service.list();
+    const saved = await SessionManager.listAll(join(root, "sessions"));
+    const today = dayKey(new Date());
+    const overview = await service.overview({
+      start: today,
+      end: today,
+      weekStart: 1,
+    });
+    for (const item of titled) {
+      expect(list.find((view) => view.id === item.id)?.title).toBe(item.title);
+      expect(saved.find((info) => info.id === item.id)?.name).toBe(item.title);
+      expect(
+        overview.conversations.find((view) => view.id === item.id)?.title,
+      ).toBe(item.title);
+    }
+    // Follow-ups preserve both an automatic title and a manually chosen command-like title.
+    expect((await service.open(first.id)).title).toBe("hi");
+    await service.rename(first.id, "/skill:ordinary Keep this title");
+    expect((await send("/skill:ordinary Another task.", first.id)).title).toBe(
+      "/skill:ordinary Keep this title",
+    );
     await skills.setEnabled(
       skills.list().local.find((s) => s.name === "manual")!.id,
       false,
