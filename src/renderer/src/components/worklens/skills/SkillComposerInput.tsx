@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ComposerPrimitive, useAui, useAuiState } from "@assistant-ui/react";
-import { Sparkles } from "lucide-react";
+import { ScrollText } from "lucide-react";
 import { useAppTranslation } from "@/i18n";
 import { settingsErrorDescription } from "../settings-notification";
 import type { SkillInfo } from "../../../../../shared/contracts";
@@ -76,7 +76,7 @@ export function SkillComposerInput({ autoFocus }: { autoFocus: boolean }) {
       {open && (
         <div className="absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg">
           <p className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
-            <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
+            <ScrollText className="size-3.5 shrink-0" aria-hidden="true" />
             {t("skills.chooseSkill")}
           </p>
           {loading ? (
