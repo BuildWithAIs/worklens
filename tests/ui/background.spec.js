@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
+import {
+  mockBackgroundConversations,
+  navigationContrast,
+} from "./background-contrast.js";
 
 test("both appearances expose effects, save quietly and preserve choices", async ({
   page,
@@ -150,17 +154,21 @@ test("shader opacity fades in instead of covering native glass with a hard edge"
     const draw = WebGLRenderingContext.prototype.drawArrays;
     WebGLRenderingContext.prototype.drawArrays = function (...args) {
       draw.apply(this, args);
-      const pixel = new Uint8Array(4);
-      this.readPixels(
-        4,
-        Math.floor(this.canvas.height * 0.75),
-        1,
-        1,
-        this.RGBA,
-        this.UNSIGNED_BYTE,
-        pixel,
-      );
-      this.canvas.dataset.fadeAlpha = String(pixel[3]);
+      const alpha = (height) => {
+        const pixel = new Uint8Array(4);
+        this.readPixels(
+          4,
+          Math.floor(this.canvas.height * height),
+          1,
+          1,
+          this.RGBA,
+          this.UNSIGNED_BYTE,
+          pixel,
+        );
+        return pixel[3];
+      };
+      this.canvas.dataset.fadeAlpha = String(alpha(0.75));
+      this.canvas.dataset.lowerAlpha = String(alpha(0.15));
     };
   });
   await page.goto("/");
@@ -175,7 +183,135 @@ test("shader opacity fades in instead of covering native glass with a hard edge"
   await expect
     .poll(async () => Number(await canvas.getAttribute("data-fade-alpha")))
     .toBeGreaterThan(0);
-  expect(Number(await canvas.getAttribute("data-fade-alpha"))).toBeLessThan(20);
+  // The dark design tints the top faintly and brightens toward the bottom.
+  const upper = Number(await canvas.getAttribute("data-fade-alpha"));
+  expect(upper).toBeLessThan(40);
+  expect(upper).toBeLessThan(
+    Number(await canvas.getAttribute("data-lower-alpha")),
+  );
+});
+
+for (const effect of [
+  "fluid",
+  "surface",
+  "aurora",
+  "silk",
+  "caustics",
+  "nebula",
+]) {
+  test(`dark ${effect} preserves ordinary and selected title contrast after compositing`, async ({
+    page,
+  }) => {
+    test.setTimeout(90000);
+    await mockBackgroundConversations(page, effect);
+    const variants = [
+      ...["violet", "electric", "ice", "neon", "sunset"].map((palette) => ({
+        palette,
+        intensity: 100,
+      })),
+      { palette: "sunset", intensity: 50 },
+      { palette: "sunset", intensity: 100, time: 57, selected: 15 },
+      { palette: "sunset", intensity: 100, native: 0 },
+    ];
+    for (const variant of variants) {
+      await page.goto(
+        `/?${new URLSearchParams(Object.entries(variant).map(([key, value]) => [key, String(value)]))}`,
+      );
+      await expect(page.locator(".conversation-item.selected")).toBeVisible();
+      await expect(
+        page.locator(".sidebar .background-effect[data-fallback]"),
+      ).toHaveCount(0);
+      await expect(page.locator(".sidebar canvas")).toHaveAttribute(
+        "data-motion",
+        "static",
+      );
+      await page.mouse.move(600, 10);
+      const titles = await navigationContrast(page);
+      expect(titles.some((title) => title.selected)).toBe(true);
+      expect(titles.some((title) => !title.selected)).toBe(true);
+      for (const title of titles)
+        expect(
+          title.minimum,
+          `${effect} ${JSON.stringify(variant)} ${title.text}`,
+        ).toBeGreaterThanOrEqual(4.5);
+    }
+    await page.evaluate(() => {
+      document.documentElement.dataset.nativeVibrancy = "true";
+    });
+    await page
+      .locator(".conversation-item.selected .conversation-open")
+      .focus();
+    expect(
+      await page
+        .locator(".conversation-item.selected .conversation-open")
+        .evaluate((element) => element.matches(":focus-visible")),
+    ).toBe(true);
+    for (const title of await navigationContrast(page))
+      expect(
+        title.minimum,
+        `${effect} keyboard focus: ${title.text}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    const media = await page.context().newCDPSession(page);
+    await media.send("Emulation.setEmulatedMedia", {
+      features: [
+        { name: "prefers-reduced-motion", value: "reduce" },
+        { name: "prefers-reduced-transparency", value: "reduce" },
+      ],
+    });
+    await expect(page.locator(".sidebar")).toHaveCSS(
+      "background-color",
+      "rgb(17, 17, 19)",
+    );
+    for (const title of await navigationContrast(page))
+      expect(
+        title.minimum,
+        `${effect} reduced transparency: ${title.text}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    await media.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+    });
+    await media.detach();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.locator(".settings-navigation canvas")).toBeVisible();
+    await expect(page.locator(".settings-navigation nav")).toHaveCSS(
+      "opacity",
+      "1",
+    );
+    const settingsTitles = await navigationContrast(page);
+    expect(settingsTitles.length).toBeGreaterThan(0);
+    for (const title of settingsTitles)
+      expect(
+        title.minimum,
+        `${effect} settings: ${title.text}`,
+      ).toBeGreaterThanOrEqual(4.5);
+  });
+}
+
+test("fallback pigment preserves ordinary and selected title contrast", async ({
+  page,
+}) => {
+  await mockBackgroundConversations(page, "fluid");
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+      return type === "webgl" ? null : getContext.call(this, type, ...args);
+    };
+  });
+  for (const palette of ["violet", "electric", "ice", "neon", "sunset"]) {
+    await page.goto(`/?palette=${palette}&intensity=100`);
+    await expect(
+      page.locator(".sidebar .background-effect[data-fallback]"),
+    ).toHaveCount(1);
+    const titles = await navigationContrast(page);
+    expect(titles.some((title) => title.selected)).toBe(true);
+    expect(titles.some((title) => !title.selected)).toBe(true);
+    for (const title of titles)
+      expect(
+        title.minimum,
+        `fallback ${palette} ${title.text}`,
+      ).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 for (const appearance of ["light", "dark"]) {
