@@ -76,6 +76,82 @@ export async function mockBackgroundConversations(page, effect) {
   }, effect);
 }
 
+// Serves Insights with a saved summary, so its card shows the footer.
+export async function mockSummary(page) {
+  await page.addInitScript(() => {
+    const usage = (total) => ({
+      status: "complete",
+      input: total,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total,
+      cost: { status: "unavailable", source: "unknown" },
+    });
+    const day = "2026-10-28";
+    const model = { provider: "deepseek", model: "flash" };
+    const overview = {
+      range: { start: day, end: day },
+      scope: "retained-local-sessions",
+      retainedSessions: 1,
+      unreadableSessions: 0,
+      usage: usage(400000),
+      granularity: "day",
+      trend: [{ start: day, end: day, usage: usage(400000), runs: 3 }],
+      activity: Array.from({ length: 7 }, () =>
+        Array.from({ length: 24 }, () => ({ tokens: 0, runs: 0 })),
+      ),
+      activeDays: [day],
+      sessions: { created: 1, active: 1, continued: 0, runs: 3, failedRuns: 0 },
+      models: [{ ...model, runs: 3, usage: usage(400000) }],
+      tools: [],
+      topics: [
+        {
+          id: "other",
+          source: "other",
+          tokens: 400000,
+          conversationIds: ["one"],
+        },
+      ],
+      conversations: [
+        {
+          id: "one",
+          title: "Weekly report",
+          topicId: "other",
+          models: [model],
+          runs: 3,
+          usage: usage(400000),
+          lastAt: `${day}T09:00:00Z`,
+          days: [day],
+        },
+      ],
+    };
+    const invoke = window.worklens.invoke;
+    window.worklens.invoke = async (method, input) => {
+      if (method === "overview") return overview;
+      if (method === "reportSummary")
+        return {
+          stale: false,
+          conversations: 1,
+          summary: {
+            ...overview.range,
+            summary: "Reviewed the reading plan.",
+            highlights: ["Checked the layout"],
+            themes: [],
+            model,
+            usage: usage(1800),
+            generatedAt: `${day}T09:00:00Z`,
+            fingerprint: "fixture",
+          },
+        };
+      const result = await invoke(method, input);
+      if (method === "bootstrap")
+        result.settings.reportSummary = { enabled: true, models: [model] };
+      return result;
+    };
+  });
+}
+
 function luminance(rgb) {
   return rgb.reduce((sum, channel, index) => {
     const encoded = channel / 255;
@@ -85,39 +161,48 @@ function luminance(rgb) {
   }, 0);
 }
 
-export async function navigationContrast(page) {
-  const selector = ".conversation-title, .settings-navigation nav button";
-  const titles = await page.locator(selector).evaluateAll((elements) =>
-    elements
-      .map((element) => {
-        const box = element.getBoundingClientRect();
-        const list = element
-          .closest(".conversation-list, .settings-navigation")
-          .getBoundingClientRect();
-        const style = getComputedStyle(element);
-        if (
-          style.visibility !== "visible" ||
-          !box.width ||
-          box.top < Math.max(0, list.top) ||
-          box.bottom > Math.min(innerHeight, list.bottom)
-        )
-          return null;
-        const canvas = document.createElement("canvas");
-        canvas.width = canvas.height = 1;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = style.color;
-        ctx.fillRect(0, 0, 1, 1);
-        return {
-          text: element.textContent,
-          selected: !!element.closest(".selected, [aria-current=page]"),
-          color: [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3),
-          x: Math.max(box.left, list.left),
-          y: Math.max(box.top, list.top),
-          right: Math.min(box.right, list.right),
-          bottom: Math.min(box.bottom, list.bottom),
-        };
-      })
-      .filter(Boolean),
+export function navigationContrast(page) {
+  return textContrast(
+    page,
+    ".conversation-title, .settings-navigation nav button",
+    ".conversation-list, .settings-navigation",
+  );
+}
+
+// Measures each matching text against what is drawn under its glyphs,
+// clipped to the visible part of its container.
+export async function textContrast(page, selector, container) {
+  const titles = await page.locator(selector).evaluateAll(
+    (elements, container) =>
+      elements
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          const list = element.closest(container).getBoundingClientRect();
+          const style = getComputedStyle(element);
+          if (
+            style.visibility !== "visible" ||
+            !box.width ||
+            box.top < Math.max(0, list.top) ||
+            box.bottom > Math.min(innerHeight, list.bottom)
+          )
+            return null;
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 1;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = style.color;
+          ctx.fillRect(0, 0, 1, 1);
+          return {
+            text: element.textContent,
+            selected: !!element.closest(".selected, [aria-current=page]"),
+            color: [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3),
+            x: Math.max(box.left, list.left),
+            y: Math.max(box.top, list.top),
+            right: Math.min(box.right, list.right),
+            bottom: Math.min(box.bottom, list.bottom),
+          };
+        })
+        .filter(Boolean),
+    container,
   );
   const visible = await sharp(await page.screenshot())
     .removeAlpha()

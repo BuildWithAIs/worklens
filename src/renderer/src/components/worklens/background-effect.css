@@ -128,6 +128,12 @@
   :is(.sidebar, .settings-navigation):has(> .background-effect) {
   --selection-fill: color-mix(in srgb, var(--text) 12%, transparent);
 }
+/* Faint text can't hold its contrast over emitted light, so it steps up to
+   the muted tone on any dark surface that carries an effect. */
+:root[data-theme="dark"]
+  :is(.sidebar, .settings-navigation, .overview-card):has(.background-effect) {
+  --faint: var(--muted);
+}
 
 .background-intensity-controls {
   --intensity-color: #ad7ed3;

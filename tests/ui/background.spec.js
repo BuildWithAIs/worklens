@@ -2,7 +2,9 @@ import { test, expect } from "@playwright/test";
 import { mockWorklens } from "./fixture.js";
 import {
   mockBackgroundConversations,
+  mockSummary,
   navigationContrast,
+  textContrast,
 } from "./background-contrast.js";
 
 test("both appearances expose effects, save quietly and preserve choices", async ({
@@ -287,6 +289,49 @@ for (const effect of [
       ).toBeGreaterThanOrEqual(4.5);
   });
 }
+
+test("dark summary footer stays readable over every effect", async ({
+  page,
+}) => {
+  test.setTimeout(180000);
+  for (const effect of [
+    "fluid",
+    "surface",
+    "aurora",
+    "silk",
+    "caustics",
+    "nebula",
+  ]) {
+    const tab = await page.context().newPage();
+    await mockBackgroundConversations(tab, effect);
+    await mockSummary(tab);
+    for (const variant of [
+      ...["violet", "electric", "ice", "neon", "sunset"].map((palette) => ({
+        palette,
+        intensity: 100,
+      })),
+      { palette: "sunset", intensity: 50 },
+    ]) {
+      await tab.goto(`/?${new URLSearchParams(Object.entries(variant))}`);
+      await tab.getByRole("button", { name: "Insights", exact: true }).click();
+      await expect(
+        tab.locator(".overview-insight-layer canvas"),
+      ).toHaveAttribute("data-motion", "static");
+      const footer = await textContrast(
+        tab,
+        ".overview-summary-meta",
+        ".overview-card",
+      );
+      expect(footer.length).toBe(1);
+      expect(footer[0].samples).toBeGreaterThan(0);
+      expect(
+        footer[0].minimum,
+        `${effect} ${JSON.stringify(variant)}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    await tab.close();
+  }
+});
 
 test("fallback pigment preserves ordinary and selected title contrast", async ({
   page,
