@@ -323,7 +323,7 @@ kbd {
   font-weight: 500;
   gap: 8px;
   border-width: 0;
-  min-height: 40px;
+  min-height: 38px;
   width: 100%;
   justify-content: flex-start;
   background: transparent;

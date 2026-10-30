@@ -118,6 +118,22 @@
 :root[data-theme="light"] .background-effect {
   opacity: 0.72;
 }
+/* Pigment swallows the plain selection tint, so deepen it over an effect. */
+:is(.sidebar, .settings-navigation):has(> .background-effect) {
+  --selection-fill: color-mix(in srgb, var(--text) 8%, transparent);
+}
+/* A light tint reads weaker on dark than a dark tint on light, and the emitted
+   pigment brightens what sits under it. */
+:root[data-theme="dark"]
+  :is(.sidebar, .settings-navigation):has(> .background-effect) {
+  --selection-fill: color-mix(in srgb, var(--text) 12%, transparent);
+}
+/* Faint text can't hold its contrast over emitted light, so it steps up to
+   the muted tone on any dark surface that carries an effect. */
+:root[data-theme="dark"]
+  :is(.sidebar, .settings-navigation, .overview-card):has(.background-effect) {
+  --faint: var(--muted);
+}
 
 .background-intensity-controls {
   --intensity-color: #ad7ed3;
@@ -200,10 +216,11 @@
 }
 
 /* Native glass takes on whatever sits behind the window, so the screen-blended
-   pigment lifts unevenly. Under an effect, a steadier scrim keeps it even. */
+   pigment lifts unevenly. Under an effect, a steadier scrim keeps it even; it
+   matches the content surface because screen blending washes out a lighter one. */
 @media (prefers-reduced-transparency: no-preference) {
   :root[data-theme="dark"][data-native-vibrancy="true"]
     :is(.sidebar, .settings-navigation):has(> .background-effect) {
-    background: #48484ae6;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
   }
 }

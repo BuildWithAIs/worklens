@@ -16,7 +16,7 @@ import { useCallback, useState } from "react";
 import {
   ArrowLeft,
   Plug,
-  Cpu,
+  Box,
   ArrowUpRight,
   Info,
   Globe,
@@ -24,7 +24,7 @@ import {
   Plus,
   RefreshCw,
   Settings2,
-  Sparkles,
+  ScrollText,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -265,8 +265,8 @@ export function SettingsPage({
     { id: "general" as const, label: t("settings.general"), icon: Settings2 },
     { id: "connections" as const, label: t("settings.connectors"), icon: Plug },
     { id: "providers" as const, label: t("settings.providers"), icon: Globe },
-    { id: "models" as const, label: t("settings.models"), icon: Cpu },
-    { id: "skills" as const, label: t("settings.skills"), icon: Sparkles },
+    { id: "models" as const, label: t("settings.models"), icon: Box },
+    { id: "skills" as const, label: t("settings.skills"), icon: ScrollText },
   ];
   function providerRows(items: ProviderInfo[], isConnected: boolean) {
     return (

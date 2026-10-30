@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { Settings } from "../../../../shared/contracts";
 import { backgroundShader } from "./background-shader";
+import { nightShader } from "./background-night-shader";
 import "./background-effect.css";
 
 // Shader branch for each effect; keep in sync with background-shader.ts.
@@ -78,7 +79,7 @@ export function BackgroundEffect({
           gl.VERTEX_SHADER,
           "attribute vec2 position;void main(){gl_Position=vec4(position,0.,1.);}",
         ],
-        [gl.FRAGMENT_SHADER, backgroundShader],
+        [gl.FRAGMENT_SHADER, dark ? nightShader : backgroundShader],
       ] as const) {
         const shader = gl.createShader(type)!;
         shaders.push(shader);
