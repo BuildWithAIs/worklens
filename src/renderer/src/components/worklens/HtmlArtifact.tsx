@@ -1,4 +1,5 @@
 import { syntaxHighlighter as hljs } from "@/lib/syntax-highlight";
+import { useStableArray } from "@/hooks/use-stable-array";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -379,9 +380,15 @@ export function HtmlArtifactWorkspace({
   }, []);
   // Every message's markdown reads this context; a stable value keeps them
   // from re-rendering whenever the thread around them does.
+  const stableOutputPaths = useStableArray(outputPaths);
   const workspace = useMemo(
-    () => ({ conversationId, outputPaths, register, open }),
-    [conversationId, outputPaths, register, open],
+    () => ({
+      conversationId,
+      outputPaths: stableOutputPaths,
+      register,
+      open,
+    }),
+    [conversationId, stableOutputPaths, register, open],
   );
   return (
     <Context.Provider value={workspace}>

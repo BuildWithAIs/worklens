@@ -9,6 +9,7 @@ import { JevSessionAccess } from "./connectors/jev/JevSessionAccess";
 import { JevConsentCards } from "./connectors/jev/JevConsentCard";
 import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
+import { useStableArray } from "@/hooks/use-stable-array";
 import { createThreadMessageCache } from "@/lib/thread-message-cache";
 import {
   ChatImageContext,
@@ -933,13 +934,24 @@ export const AgentThread = memo(function AgentThread({
     onNewConversation,
   };
   const busy = isRunning || submitting;
+  const conversationId = view?.id;
+  const userMessages = useMemo(
+    () =>
+      (view?.messages ?? noMessages).filter(
+        (message) => message.role === "user",
+      ),
+    [view?.messages],
+  );
+  const editableMessages = useStableArray(userMessages);
+  // Editing controls need user records only. Assistant token updates must not
+  // invalidate this context, which is read by every historical message.
   const editing = useMemo(
     () => ({
       editingId,
       recovered: recoveredEdit,
       busy,
       canSend,
-      messages: view?.messages ?? noMessages,
+      messages: editableMessages,
       begin: (id: string) => {
         handlers.current.onRecoveredEditLoaded();
         setEditingId(id);
@@ -961,15 +973,15 @@ export const AgentThread = memo(function AgentThread({
         text: string,
         attachments: readonly Attachment[],
       ) => {
-        const original = view?.messages.find(
+        const original = editableMessages.find(
           (message) => (message.entryId ?? message.id) === id,
         );
-        if (!view || !original?.entryId)
+        if (!conversationId || !original?.entryId)
           throw new Error("MESSAGE_VERSION_MISSING");
         await handlers.current.onEdit(
           original.entryId,
           text,
-          editedImages(attachments, view.id, original),
+          editedImages(attachments, conversationId, original),
         );
       },
       select: async (id: string, targetId: string) => {
@@ -980,7 +992,7 @@ export const AgentThread = memo(function AgentThread({
         }
       },
     }),
-    [editingId, recoveredEdit, busy, canSend, view],
+    [editingId, recoveredEdit, busy, canSend, conversationId, editableMessages],
   );
   const [modelMenuRequest, setModelMenuRequest] = useState(0);
   const menu = useMemo(
