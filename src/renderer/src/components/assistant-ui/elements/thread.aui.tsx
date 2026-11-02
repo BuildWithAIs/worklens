@@ -363,7 +363,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         ) : (
           <ComposerPrimitive.Input
             placeholder={t("thread.doAnything")}
-            className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
+            className="aui-composer-input caret-primary placeholder:text-muted-foreground max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
             rows={1}
             autoFocus={autoFocus}
             enterKeyHint="send"
