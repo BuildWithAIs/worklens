@@ -1276,11 +1276,14 @@ kbd {
   font-size: 1.5rem;
   font-weight: 400;
 }
-/* The resting state is the final frame; motion only adds the focus pass. */
+/* The resting state is the final frame; motion only adds the focus pass.
+   The negative top margin keeps the mark out of vertical centering, so the
+   heading and composer stay put and the mark extends upward. */
 .agent-thread .welcome-mark {
   display: block;
   width: 36px;
   height: 36px;
+  margin-top: -52px;
   margin-bottom: 16px;
   color: var(--faint);
 }
