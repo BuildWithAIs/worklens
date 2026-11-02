@@ -36,6 +36,13 @@ test("new chat composer stays in place while typing and clearing", async ({
     expect(
       Math.abs(before.x + before.width / 2 - viewport.x - viewport.width / 2),
     ).toBeLessThanOrEqual(6);
+    // The empty message list must not add its margin under the welcome.
+    const welcome = await page
+      .locator(".aui-thread-welcome-root")
+      .boundingBox();
+    expect(
+      Math.abs(before.y - welcome.y - welcome.height - 40),
+    ).toBeLessThanOrEqual(1);
     await page.screenshot({ path: testInfo.outputPath(`home-${width}.png`) });
     await input.fill("地");
     await expect(suggestions).toHaveCount(0);

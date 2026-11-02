@@ -259,7 +259,12 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="messages mb-14 flex w-full min-w-0 flex-col gap-y-6 empty:hidden"
+            className={cn(
+              "messages flex w-full min-w-0 flex-col gap-y-6",
+              // The progressive-history wrapper is always present, so
+              // :empty never matches; the welcome owns new-chat spacing.
+              !isEmpty && "mb-14",
+            )}
           >
             <ProgressiveThreadMessages
               first={first}
