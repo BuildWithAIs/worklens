@@ -26,6 +26,7 @@ import {
   ToolGroupTrigger,
 } from "@/components/assistant-ui/elements/tool-group.aui";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
+import { WelcomeMark } from "@/components/worklens/BrandMark";
 import { ModelMenu } from "@/components/worklens/ModelMenu";
 import { useModelMenuContext } from "@/components/worklens/model-menu-context";
 import { SkillCommandTag } from "@/components/worklens/skills/SkillCommandTag";
@@ -259,7 +260,12 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="messages mb-14 flex w-full min-w-0 flex-col gap-y-6 empty:hidden"
+            className={cn(
+              "messages flex w-full min-w-0 flex-col gap-y-6",
+              // The progressive-history wrapper is always present, so
+              // :empty never matches; the welcome owns new-chat spacing.
+              !isEmpty && "mb-14",
+            )}
           >
             <ProgressiveThreadMessages
               first={first}
@@ -324,6 +330,7 @@ const ThreadWelcome: FC = () => {
   const { t } = useAppTranslation();
   return (
     <div className="aui-thread-welcome-root flex flex-col items-center px-4 text-center">
+      <WelcomeMark />
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-normal tracking-tight duration-200">
         {t("thread.whereShallWeStartQuestion")}
       </h1>
@@ -353,7 +360,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         render={
           <div
             data-slot="aui_composer-shell"
-            className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-md shadow-black/5 dark:shadow-black/20 transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+            className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
           />
         }
       >
@@ -363,7 +370,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         ) : (
           <ComposerPrimitive.Input
             placeholder={t("thread.doAnything")}
-            className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
+            className="aui-composer-input caret-primary placeholder:text-muted-foreground max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
             rows={1}
             autoFocus={autoFocus}
             enterKeyHint="send"

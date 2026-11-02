@@ -36,6 +36,13 @@ test("new chat composer stays in place while typing and clearing", async ({
     expect(
       Math.abs(before.x + before.width / 2 - viewport.x - viewport.width / 2),
     ).toBeLessThanOrEqual(6);
+    // The empty message list must not add its margin under the welcome.
+    const welcome = await page
+      .locator(".aui-thread-welcome-root")
+      .boundingBox();
+    expect(
+      Math.abs(before.y - welcome.y - welcome.height - 40),
+    ).toBeLessThanOrEqual(1);
     await page.screenshot({ path: testInfo.outputPath(`home-${width}.png`) });
     await input.fill("地");
     await expect(suggestions).toHaveCount(0);
@@ -46,6 +53,51 @@ test("new chat composer stays in place while typing and clearing", async ({
     const after = await composer.boundingBox();
     expect(Math.abs(after.y - before.y)).toBeLessThan(1);
   }
+});
+
+test("new chat mark sits above the heading and focuses once", async ({
+  page,
+}) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  const mark = page.locator('[data-slot="welcome-mark"]');
+  const heading = page.getByRole("heading", { name: "Where shall we start?" });
+  await expect(mark).toBeVisible();
+  await expect(mark).toHaveAttribute("aria-hidden", "true");
+  const markBox = await mark.boundingBox();
+  const headingBox = await heading.boundingBox();
+  expect(markBox.y + markBox.height).toBeLessThanOrEqual(headingBox.y);
+  // Reduced motion (the suite default) shows the final frame without motion.
+  expect(
+    await mark.evaluate((el) => el.getAnimations({ subtree: true }).length),
+  ).toBe(0);
+
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.reload();
+  const timings = await page
+    .locator('[data-slot="welcome-mark"]')
+    .evaluate((el) =>
+      el
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.effect.getComputedTiming().iterations),
+    );
+  expect(timings.length).toBeGreaterThan(0);
+  expect(timings.every((iterations) => iterations === 1)).toBe(true);
+  await expect
+    .poll(
+      () =>
+        page
+          .locator('[data-slot="welcome-mark"]')
+          .evaluate(
+            (el) =>
+              el
+                .getAnimations({ subtree: true })
+                .filter((animation) => animation.playState === "running")
+                .length,
+          ),
+      { timeout: 10000 },
+    )
+    .toBe(0);
 });
 
 test("compact tool activity, history actions and fluid message width", async ({
