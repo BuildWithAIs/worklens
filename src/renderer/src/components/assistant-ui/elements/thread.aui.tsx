@@ -26,6 +26,7 @@ import {
   ToolGroupTrigger,
 } from "@/components/assistant-ui/elements/tool-group.aui";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
+import { WelcomeMark } from "@/components/worklens/BrandMark";
 import { ModelMenu } from "@/components/worklens/ModelMenu";
 import { useModelMenuContext } from "@/components/worklens/model-menu-context";
 import { SkillCommandTag } from "@/components/worklens/skills/SkillCommandTag";
@@ -329,6 +330,7 @@ const ThreadWelcome: FC = () => {
   const { t } = useAppTranslation();
   return (
     <div className="aui-thread-welcome-root flex flex-col items-center px-4 text-center">
+      <WelcomeMark />
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-normal tracking-tight duration-200">
         {t("thread.whereShallWeStartQuestion")}
       </h1>

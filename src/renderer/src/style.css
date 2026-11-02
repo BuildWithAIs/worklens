@@ -1276,6 +1276,51 @@ kbd {
   font-size: 1.5rem;
   font-weight: 400;
 }
+/* The resting state is the final frame; motion only adds the focus pass. */
+.agent-thread .welcome-mark {
+  display: block;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 16px;
+  color: var(--faint);
+}
+.welcome-mark-corner[data-corner="tl"] {
+  --welcome-mark-x: -7px;
+  --welcome-mark-y: -7px;
+}
+.welcome-mark-corner[data-corner="tr"] {
+  --welcome-mark-x: 7px;
+  --welcome-mark-y: -7px;
+}
+.welcome-mark-corner[data-corner="bl"] {
+  --welcome-mark-x: -7px;
+  --welcome-mark-y: 7px;
+}
+.welcome-mark-corner[data-corner="br"] {
+  --welcome-mark-x: 7px;
+  --welcome-mark-y: 7px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .agent-thread .welcome-mark .welcome-mark-corner {
+    animation: welcome-mark-settle 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .agent-thread .welcome-mark .welcome-mark-letter {
+    animation: welcome-mark-sharpen 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 140ms
+      both;
+  }
+}
+@keyframes welcome-mark-settle {
+  from {
+    transform: translate(var(--welcome-mark-x), var(--welcome-mark-y));
+    opacity: 0;
+  }
+}
+@keyframes welcome-mark-sharpen {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+}
 .conversation-actions {
   position: absolute;
   right: 6px;

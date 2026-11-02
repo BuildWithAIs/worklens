@@ -55,6 +55,51 @@ test("new chat composer stays in place while typing and clearing", async ({
   }
 });
 
+test("new chat mark sits above the heading and focuses once", async ({
+  page,
+}) => {
+  await mockWorklens(page);
+  await page.goto("/");
+  const mark = page.locator('[data-slot="welcome-mark"]');
+  const heading = page.getByRole("heading", { name: "Where shall we start?" });
+  await expect(mark).toBeVisible();
+  await expect(mark).toHaveAttribute("aria-hidden", "true");
+  const markBox = await mark.boundingBox();
+  const headingBox = await heading.boundingBox();
+  expect(markBox.y + markBox.height).toBeLessThanOrEqual(headingBox.y);
+  // Reduced motion (the suite default) shows the final frame without motion.
+  expect(
+    await mark.evaluate((el) => el.getAnimations({ subtree: true }).length),
+  ).toBe(0);
+
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.reload();
+  const timings = await page
+    .locator('[data-slot="welcome-mark"]')
+    .evaluate((el) =>
+      el
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.effect.getComputedTiming().iterations),
+    );
+  expect(timings.length).toBeGreaterThan(0);
+  expect(timings.every((iterations) => iterations === 1)).toBe(true);
+  await expect
+    .poll(
+      () =>
+        page
+          .locator('[data-slot="welcome-mark"]')
+          .evaluate(
+            (el) =>
+              el
+                .getAnimations({ subtree: true })
+                .filter((animation) => animation.playState === "running")
+                .length,
+          ),
+      { timeout: 10000 },
+    )
+    .toBe(0);
+});
+
 test("compact tool activity, history actions and fluid message width", async ({
   page,
 }, testInfo) => {
