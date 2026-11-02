@@ -1,9 +1,11 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ComposerPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { ScrollText } from "lucide-react";
 import { useAppTranslation } from "@/i18n";
 import { settingsErrorDescription } from "../settings-notification";
 import type { SkillInfo } from "../../../../../shared/contracts";
+import { parseSkillCommand } from "../../../../../shared/skill-command";
+import { SkillCommandChip } from "./SkillCommandTag";
 
 /** Completes Pi's native command without submitting the user's draft. */
 export function SkillComposerInput({ autoFocus }: { autoFocus: boolean }) {
@@ -12,6 +14,7 @@ export function SkillComposerInput({ autoFocus }: { autoFocus: boolean }) {
   const text = useAuiState((s) => s.composer.text);
   const running = useAuiState((s) => s.thread.isRunning);
   const input = useRef<HTMLTextAreaElement>(null);
+  const highlight = useRef<HTMLSpanElement>(null);
   const listId = useId();
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -19,6 +22,7 @@ export function SkillComposerInput({ autoFocus }: { autoFocus: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [active, setActive] = useState(0);
+  const [fits, setFits] = useState(true);
   const match = /^\/(?:skill:)?([^\s]*)$/.exec(text);
   const open = focused && !!match && !dismissed && !running;
   const query = match?.[1].toLocaleLowerCase() ?? "";
@@ -26,6 +30,10 @@ export function SkillComposerInput({ autoFocus }: { autoFocus: boolean }) {
     `${skill.name} ${skill.description}`.toLocaleLowerCase().includes(query),
   );
   const index = Math.min(active, Math.max(0, items.length - 1));
+  // Marks a completed command; the chooser stays open while the name is typed.
+  const command = /^\/skill:\S+(?=\s)/.test(text)
+    ? parseSkillCommand(text)
+    : undefined;
 
   useEffect(() => {
     setDismissed(false);
@@ -65,6 +73,36 @@ export function SkillComposerInput({ autoFocus }: { autoFocus: boolean }) {
         .getElementById(`${listId}-${index}`)
         ?.scrollIntoView({ block: "nearest" });
   }, [open, listId, index, items.length]);
+
+  useEffect(() => {
+    if (command && input.current) syncHighlight(input.current);
+  }, [command?.name]);
+  // A command longer than a line wraps in the draft, where a chip can't cover
+  // it; it then shows as typed.
+  useLayoutEffect(() => {
+    const textarea = input.current;
+    const token = highlight.current;
+    if (!textarea || !token) return;
+    const measure = () => {
+      const style = getComputedStyle(textarea);
+      setFits(
+        token.offsetWidth <=
+          textarea.clientWidth -
+            parseFloat(style.paddingLeft) -
+            parseFloat(style.paddingRight),
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(textarea);
+    return () => observer.disconnect();
+  }, [command?.name]);
+
+  // The chip sits over the text, which scrolls with a long draft.
+  function syncHighlight(textarea: HTMLTextAreaElement) {
+    if (highlight.current)
+      highlight.current.style.transform = `translateY(${-textarea.scrollTop}px)`;
+  }
 
   function select(skill: SkillInfo) {
     aui.composer.setText(`/skill:${skill.name} `);
@@ -124,53 +162,91 @@ export function SkillComposerInput({ autoFocus }: { autoFocus: boolean }) {
           )}
         </div>
       )}
-      <ComposerPrimitive.Input
-        ref={input}
-        placeholder={t("skills.messagePlaceholder")}
-        className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
-        rows={1}
-        autoFocus={autoFocus}
-        enterKeyHint="send"
-        aria-label={t("thread.message")}
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls={open && !loading && !error ? listId : undefined}
-        aria-activedescendant={
-          open && items.length ? `${listId}-${index}` : undefined
-        }
-        cancelOnEscape={!open}
-        onFocus={() => {
-          setFocused(true);
-          setDismissed(false);
-        }}
-        onBlur={() => setFocused(false)}
-        onKeyDown={(event) => {
-          if (!open || event.nativeEvent.isComposing || event.keyCode === 229)
-            return;
-          if (event.key === "Escape") {
-            event.preventDefault();
-            setDismissed(true);
-          } else if (
-            items.length &&
-            ["ArrowDown", "ArrowUp"].includes(event.key)
-          ) {
-            event.preventDefault();
-            setActive(
-              (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
-                items.length,
-            );
-          } else if (
-            !event.shiftKey &&
-            !event.ctrlKey &&
-            !event.metaKey &&
-            ["Enter", "Tab"].includes(event.key) &&
-            (items.length || loading)
-          ) {
-            event.preventDefault();
-            if (items[index]) select(items[index]);
+      <div className="relative">
+        <ComposerPrimitive.Input
+          ref={input}
+          placeholder={t("skills.messagePlaceholder")}
+          className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
+          rows={1}
+          autoFocus={autoFocus}
+          enterKeyHint="send"
+          aria-label={t("thread.message")}
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={open && !loading && !error ? listId : undefined}
+          aria-activedescendant={
+            open && items.length ? `${listId}-${index}` : undefined
           }
-        }}
-      />
+          cancelOnEscape={!open}
+          onFocus={() => {
+            setFocused(true);
+            setDismissed(false);
+          }}
+          onBlur={() => setFocused(false)}
+          onScroll={(event) => syncHighlight(event.currentTarget)}
+          onSelect={(event) => {
+            // The chip is one piece: a caret placed in or before its command
+            // moves past it, so typing can't change the skill by accident.
+            const textarea = event.currentTarget;
+            const end = command ? `/skill:${command.name}`.length : -1;
+            if (
+              !command ||
+              !fits ||
+              textarea.selectionStart !== textarea.selectionEnd ||
+              textarea.selectionStart > end
+            )
+              return;
+            textarea.setSelectionRange(end + 1, end + 1);
+          }}
+          onKeyDown={(event) => {
+            if (!open || event.nativeEvent.isComposing || event.keyCode === 229)
+              return;
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setDismissed(true);
+            } else if (
+              items.length &&
+              ["ArrowDown", "ArrowUp"].includes(event.key)
+            ) {
+              event.preventDefault();
+              setActive(
+                (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+                  items.length,
+              );
+            } else if (
+              !event.shiftKey &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              ["Enter", "Tab"].includes(event.key) &&
+              (items.length || loading)
+            ) {
+              event.preventDefault();
+              if (items[index]) select(items[index]);
+            }
+          }}
+        />
+        {command && (
+          // Covers the command text with the chip; the text stays in the
+          // draft, so sending, drafts and IME input are unchanged.
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 overflow-hidden px-2.5 py-1 text-sm leading-6 wrap-break-word whitespace-pre-wrap text-transparent"
+          >
+            <span
+              ref={highlight}
+              data-slot="skill-command-highlight"
+              className="relative inline-block whitespace-nowrap"
+            >
+              /skill:{command.name}
+              {fits && (
+                <span className="absolute inset-y-0 -start-px -end-px flex items-center bg-(--composer-bg)">
+                  <SkillCommandChip name={command.name} />
+                </span>
+              )}
+            </span>
+          </div>
+        )}
+      </div>
     </>
   );
 }

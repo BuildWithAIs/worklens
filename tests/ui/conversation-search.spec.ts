@@ -103,6 +103,20 @@ async function setup(page: Page) {
           thinking: "The oak table is ready.",
           text: "The oak table is ready.",
         },
+        {
+          id: "m-13",
+          entryId: "mixed-entry-5",
+          role: "user",
+          text: "/skill:maple-report Draft the summary",
+        },
+        { id: "m-14", role: "assistant", text: "Drafted." },
+        {
+          id: "m-15",
+          entryId: "mixed-entry-6",
+          role: "user",
+          text: "/skill:quarterly-portfolio-review-and-forecast-assistant-for-the-northern-region-zucchini Go.",
+        },
+        { id: "m-16", role: "assistant", text: "Going." },
       ],
     };
     const views: Record<string, any> = {
@@ -125,6 +139,8 @@ async function setup(page: Page) {
       python: [result("mixed", "python", "mixed-entry-2")],
       brass: [result("mixed", "brass", "mixed-entry-3")],
       oak: [result("mixed", "oak", "mixed-entry-4")],
+      maple: [result("mixed", "maple-report Draft", "mixed-entry-5")],
+      zucchini: [result("mixed", "zucchini", "mixed-entry-6")],
       zebra: [result("long", "zebra crossing", "long-entry-3")],
       violet: [result("long", "violet horizon", "long-entry-5")],
       alder: [result("long", "alder silver", "long-entry-6")],
@@ -849,4 +865,33 @@ test("reveals only the prompt and reply text the search indexes", async ({
     .poll(() => highlightedBlock(page))
     .toBe("The oak table is ready.");
   expect(await highlightInDisclosure(page)).toBe(false);
+
+  // A skill call is indexed as shown: its tag's name, then the message.
+  await open("maple-report draft");
+  await expect
+    .poll(() => highlighted(page))
+    .toMatchObject({ role: "user", text: "maple-report Draft" });
+
+  // A skill name cut short by its tag: a match in the hidden part marks the
+  // whole tag.
+  await page.setViewportSize({ width: 850, height: 720 });
+  const tag = page
+    .locator('[data-slot="skill-command-tag"]')
+    .filter({ hasText: "quarterly" });
+  expect(
+    await tag
+      .locator("span")
+      .last()
+      .evaluate((name) => name.scrollWidth > name.clientWidth),
+  ).toBe(true);
+  await open("zucchini");
+  await expect(tag).toHaveAttribute("data-search-match", "");
+  await expect
+    .poll(() => highlighted(page))
+    .toMatchObject({
+      role: "user",
+      text: "quarterly-portfolio-review-and-forecast-assistant-for-the-northern-region-zucchini",
+    });
+  await page.keyboard.press("Escape");
+  await expect(tag).not.toHaveAttribute("data-search-match", "");
 });
