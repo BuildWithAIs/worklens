@@ -71,6 +71,14 @@ test("new chat mark sits above the heading and focuses once", async ({
   expect(
     await mark.evaluate((el) => el.getAnimations({ subtree: true }).length),
   ).toBe(0);
+  // The mark extends upward instead of pushing the composer down.
+  const composer = page.locator('[data-slot="aui_composer-shell"]');
+  const withMark = await composer.boundingBox();
+  await mark.evaluate((el) => {
+    el.style.display = "none";
+  });
+  const withoutMark = await composer.boundingBox();
+  expect(Math.abs(withMark.y - withoutMark.y)).toBeLessThanOrEqual(1);
 
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.reload();
