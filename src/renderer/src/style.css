@@ -15,6 +15,7 @@
   --color-card-foreground: var(--text);
   --color-popover: var(--elevated);
   --color-popover-foreground: var(--text);
+  --color-floating-edge: var(--floating-edge);
   --color-primary: var(--accent);
   --color-primary-foreground: var(--accent-text);
   --color-checkbox-checked: color-mix(in srgb, var(--accent) 80%, var(--bg));
@@ -64,6 +65,10 @@
   --shadow: #18181b14;
   /* Floating surfaces: popovers, menus, dialogs and toasts. */
   --elevated: #ffffff;
+  /* Their outer edge lies over page text, so it is opaque, in the color the
+     translucent edge took on the page: through a translucent edge, cut-off
+     strokes of the text below seem to sit on top of it. */
+  --floating-edge: color-mix(in srgb, var(--text) 10%, var(--bg));
   --glass-edge: #ffffffb3;
   --panel-edge: #2028380a;
   --panel-shadow: -8px 0 28px -16px #26354a24;
@@ -124,7 +129,7 @@
     [data-slot="toast"]
   ) {
   border-color: transparent;
-  --tw-ring-color: #ffffff0f;
+  --tw-ring-color: color-mix(in srgb, #ffffff 6%, var(--bg));
   --tw-shadow: 0 16px 40px -12px #000000a6, 0 4px 12px -4px #00000066;
 }
 :where(:root[data-theme="dark"])

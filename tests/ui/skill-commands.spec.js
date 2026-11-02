@@ -155,6 +155,49 @@ test("sent skill commands show the skill as a tag before the message", async ({
   });
 });
 
+for (const theme of ["light", "dark"]) {
+  test(`skill details keep an opaque edge over the text below (${theme})`, async ({
+    page,
+  }) => {
+    await mockWorklens(page);
+    await page.addInitScript((theme) => {
+      const invoke = window.worklens.invoke;
+      const view = {
+        id: "skill-call",
+        title: "Weekly report",
+        phase: "completed",
+        messages: [{ id: "m-0", role: "user", text: "/skill:brave-search" }],
+        updatedAt: "2026-09-13T00:00:00Z",
+      };
+      window.worklens.invoke = async (name, input) => {
+        if (name === "open") return view;
+        const result = await invoke(name, input);
+        if (name === "bootstrap") {
+          result.conversations = [view];
+          result.settings.lastConversation = view.id;
+          result.settings.theme = theme;
+        }
+        return result;
+      };
+    }, theme);
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await page.locator('[data-slot="skill-command-tag"]').click();
+    const details = page.locator('[data-slot="popover-content"]');
+    await expect(details).toContainText("Web search.");
+    // The 1px ring is drawn outside the fill, over the page. Through a
+    // translucent ring, cut-off strokes of the text below seem to cross it.
+    const ring = await details.evaluate((el) =>
+      getComputedStyle(el)
+        .boxShadow.split(/,(?![^(]*\))/)
+        .map((layer) => layer.trim())
+        .find((layer) => layer.endsWith(" 0px 0px 0px 1px")),
+    );
+    expect(ring).toBeTruthy();
+    expect(ring).not.toMatch(/rgba\(|\/\s*[\d.]+\)/);
+  });
+}
+
 test("skill command chooser refreshes settings on reopening and ignores late results after dismissal", async ({
   page,
 }) => {
