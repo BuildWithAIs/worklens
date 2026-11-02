@@ -77,8 +77,8 @@
   --composer-focus-edge: #2028381a;
   --native-sidebar-tint: #ffffffa6;
   --composer-shadow:
-    0 -3px 10px -5px #20283818, 0 2px 5px #20283804, 0 8px 28px -10px #20283814,
-    0 20px 64px -24px #20283814, inset 0 1px 0 #ffffff;
+    0 1px 2px #2028380d, 0 4px 12px -4px #20283812, 0 12px 32px -16px #20283814,
+    inset 0 1px 0 #ffffff;
 }
 :root[data-theme="dark"] {
   --bg: #1c1c1e;
@@ -109,8 +109,8 @@
   /* Neutral scrim tempers wallpaper color while preserving native vibrancy. */
   --native-sidebar-tint: #20202099;
   --composer-shadow:
-    0 -3px 10px -5px #00000066, 0 2px 5px #00000014, 0 8px 28px -10px #00000066,
-    0 20px 64px -24px #00000080, inset 0 1px 0 #ffffff06;
+    0 1px 2px #00000033, 0 4px 12px -4px #00000040, 0 12px 32px -16px #00000059,
+    inset 0 1px 0 #ffffff06;
   /* A shadow barely shows on a dark page, so floating surfaces are lifted
      by a lighter fill instead of an outline. */
   --elevated: #222226;
