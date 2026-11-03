@@ -587,6 +587,37 @@ test("summary settings reveal long model names without squeezing the controls", 
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(buttons!.x);
 });
 
+// The add button reads as the list's next row, so its plus and label line up
+// with the rows' provider icons and model names.
+test("adding a summary model lines up with the models above", async ({
+  page,
+}) => {
+  await openInsights(page, 7, { summary: true });
+  await page
+    .getByRole("button", { name: "AI summary settings", exact: true })
+    .click();
+  const models = page.getByRole("dialog").locator(".report-settings-models");
+  await expect(models.locator("li")).toHaveCount(1);
+  const edges = await models.evaluate((root) => {
+    const left = (selector: string, scope: Element = root) =>
+      scope.querySelector(selector)!.getBoundingClientRect().left;
+    const row = root.querySelector("li")!;
+    const add = root.querySelector(".report-settings-add button")!;
+    const range = document.createRange();
+    range.selectNodeContents(
+      [...add.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!,
+    );
+    return {
+      icon: left('[data-slot="provider-icon"]', row),
+      name: left(".report-settings-model > .truncate", row),
+      plus: left("svg", add),
+      label: range.getBoundingClientRect().left,
+    };
+  });
+  expect(Math.abs(edges.plus - edges.icon)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(edges.label - edges.name)).toBeLessThanOrEqual(0.5);
+});
+
 test("short model names show no hint, and the summary separator is evenly spaced", async ({
   page,
 }) => {

@@ -1455,9 +1455,17 @@ button.overview-bar-row:hover,
 .report-settings-models li:is(:hover, :focus-within) .report-settings-actions {
   opacity: 1;
 }
+/* The add button reads as the list's next row: its plus sits in the provider
+   icon's column and its label starts where the model names do. The padding
+   is the rows' 26px up to the model, plus the model's 6px, less the
+   button's own 10px padding and 1px border. */
 .report-settings-add {
-  padding-left: 26px;
+  padding-left: 21px;
   color: var(--muted);
+}
+.report-settings-add .chat-model-trigger {
+  gap: 6px;
+  font-size: 13px;
 }
 /* With no models there are no names to line up with; start at the rows' edge. */
 .report-settings-models ol:empty + .report-settings-add {
