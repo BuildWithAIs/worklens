@@ -17,6 +17,8 @@ async function openInsights(
     themeIds?: string[];
     /** Summaries not set up yet, so the setup dialog asks. */
     firstVisit?: boolean;
+    /** Adds a comparison period that crosses the current one. */
+    previous?: boolean;
   } = {},
 ) {
   await mockWorklens(page);
@@ -41,7 +43,7 @@ async function openInsights(
         usage: usage(400000 + index * 1000),
         runs: 3,
       }));
-      const overview = {
+      const overview: any = {
         range: { start: day(0), end: day(days - 1) },
         scope: "retained-local-sessions",
         retainedSessions: 1,
@@ -87,6 +89,17 @@ async function openInsights(
       };
       if (options.otherUsage)
         overview.models.push({ runs: 0, usage: usage(1200) } as any);
+      if (options.previous) {
+        overview.previous = {
+          start: "2026-09-01",
+          end: "2026-09-30",
+          usage: usage(400000 * days),
+          activeConversations: 1,
+          partial: false,
+        };
+        for (const [index, item] of trend.entries())
+          (item as any).previous = usage(index % 2 ? 200000 : 600000);
+      }
       if (options.focusAreas) {
         const conversation = overview.conversations[0];
         overview.conversations = options.focusAreas.map((area, index) => ({
@@ -174,6 +187,34 @@ test("a single day's highlight stays near its bar", async ({ page }) => {
   const plot = await width(page, ".overview-hit");
   expect(highlight).toBeLessThanOrEqual(bar * 2 + 0.5);
   expect(highlight).toBeLessThan(plot / 4);
+});
+
+// The comparison is a reference: the bars and the current line cover it, so
+// it never reads as the series in front.
+test("the previous period runs behind the bars", async ({ page }) => {
+  await openInsights(page, 7, { previous: true });
+  const order = await page
+    .locator('.overview-card[data-area="trend"] .overview-chart svg')
+    .evaluate((svg) => {
+      const marks = [
+        ...svg.querySelectorAll(".overview-trend-bar, .overview-trend-line"),
+      ];
+      return marks.map((mark) =>
+        mark.classList.contains("overview-trend-bar")
+          ? "bar"
+          : mark.hasAttribute("data-previous")
+            ? "previous"
+            : "current",
+      );
+    });
+  expect(order).toEqual(["previous", ...Array(7).fill("bar"), "current"]);
+  await expect(trend(page, ".overview-trend-bar").first()).toHaveCSS(
+    "opacity",
+    "1",
+  );
+  await expect(
+    trend(page, ".overview-trend-line:not([data-previous])"),
+  ).toHaveCSS("stroke-opacity", "1");
 });
 
 test("a dense range's highlight fills its day", async ({ page }) => {

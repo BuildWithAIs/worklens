@@ -296,8 +296,17 @@ export function TrendChart({
               rx={6}
             />
           ))}
-          {/* Bars give each day its weight; the line over them shows the trend. */}
+          {/* Bars give each day its weight; the line over them shows the trend.
+              The previous period goes first, so the bars and the current line
+              both cover it and it reads as a reference behind them. */}
           <g data-animate={animate || undefined}>
+            {compare && earlier.length > 1 && (
+              <path
+                className="overview-trend-line"
+                data-previous=""
+                d={smoothPath(earlier)}
+              />
+            )}
             {trend.map((item, index) =>
               known(item.usage) > 0 ? (
                 <path
@@ -312,13 +321,6 @@ export function TrendChart({
                   )}
                 />
               ) : null,
-            )}
-            {compare && earlier.length > 1 && (
-              <path
-                className="overview-trend-line"
-                data-previous=""
-                d={smoothPath(earlier)}
-              />
             )}
             {line && (
               <path className="overview-trend-line" pathLength={1} d={line} />

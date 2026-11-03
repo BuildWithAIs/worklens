@@ -756,14 +756,15 @@ button[data-slot="overview-button"]:disabled {
 }
 /* Token trend: soft bars under a smooth line; the comparison is dashed. */
 /* The bars carry the values; the line over them only traces the shape, so
-   it stays thin and light enough not to read as a second series. */
+   it stays thin enough not to read as a second series. The comparison runs
+   behind both, so the bars are mixed with the card rather than translucent:
+   it shows only between them and never over the current period. */
 .overview-trend-bar {
-  fill: var(--overview-viz-3);
-  opacity: 0.45;
-  transition: opacity 120ms;
+  fill: color-mix(in srgb, var(--overview-viz-3) 45%, var(--overview-card));
+  transition: fill 120ms;
 }
 .overview-trend-bar[data-active] {
-  opacity: 0.7;
+  fill: color-mix(in srgb, var(--overview-viz-3) 70%, var(--overview-card));
 }
 [data-animate] > .overview-trend-bar {
   transform-box: fill-box;
@@ -778,14 +779,12 @@ button[data-slot="overview-button"]:disabled {
 .overview-trend-line {
   fill: none;
   stroke: var(--overview-viz-3);
-  stroke-opacity: 0.7;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .overview-trend-line[data-previous] {
   stroke: var(--overview-hatch-ink);
-  stroke-opacity: 1;
   stroke-width: 1.5;
   stroke-dasharray: 4 5;
 }
