@@ -845,8 +845,7 @@ export const AgentThread = memo(function AgentThread({
     let images: ChatImage[];
     try {
       images = submittedImages(message);
-      if (images.length && !supportsImages)
-        throw new Error("CHAT_IMAGE_MODEL");
+      if (images.length && !supportsImages) throw new Error("CHAT_IMAGE_MODEL");
     } catch (error) {
       onError(String(error));
       throw new MessageNotSentError();
@@ -882,7 +881,8 @@ export const AgentThread = memo(function AgentThread({
 
   useEffect(() => {
     const update = () => {
-      const attachments = composerRuntime.thread.composer.getState().attachments;
+      const attachments =
+        composerRuntime.thread.composer.getState().attachments;
       setAttachmentsBlocked(
         attachments.some(
           (image) =>
