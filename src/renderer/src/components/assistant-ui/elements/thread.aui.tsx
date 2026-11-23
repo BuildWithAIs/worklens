@@ -41,6 +41,8 @@ import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
   AuiIf,
+  AssistantRuntimeProvider,
+  type AssistantRuntime,
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
@@ -116,6 +118,7 @@ export type ThreadComponents = {
 };
 
 export type ThreadProps = {
+  composerRuntime: AssistantRuntime;
   onHistoryReady?: () => void;
   loadingStartedAt?: number;
   components?: ThreadComponents | undefined;
@@ -177,6 +180,7 @@ export const ThreadLoadingIndicator: FC<{ startedAt?: number }> = ({
 };
 
 export const Thread: FC<ThreadProps> = ({
+  composerRuntime,
   onHistoryReady,
   loadingStartedAt,
   components = EMPTY_COMPONENTS,
@@ -189,6 +193,7 @@ export const Thread: FC<ThreadProps> = ({
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadRoot
+        composerRuntime={composerRuntime}
         onHistoryReady={onHistoryReady}
         loadingStartedAt={loadingStartedAt}
         isEmpty={isEmpty}
@@ -201,6 +206,7 @@ export const Thread: FC<ThreadProps> = ({
 };
 
 const ThreadRoot: FC<{
+  composerRuntime: AssistantRuntime;
   onHistoryReady?: () => void;
   loadingStartedAt?: number;
   isEmpty: boolean;
@@ -208,6 +214,7 @@ const ThreadRoot: FC<{
   footer?: ReactNode;
   afterMessages?: ReactNode;
 }> = ({
+  composerRuntime,
   onHistoryReady,
   loadingStartedAt,
   isEmpty,
@@ -283,7 +290,9 @@ const ThreadRoot: FC<{
             )}
           >
             <ThreadScrollToBottom />
-            <Composer autoFocus={autoFocus && !loading} />
+            <AssistantRuntimeProvider runtime={composerRuntime}>
+              <Composer autoFocus={autoFocus && !loading} />
+            </AssistantRuntimeProvider>
             {footer}
           </ThreadPrimitive.ViewportFooter>
         </div>

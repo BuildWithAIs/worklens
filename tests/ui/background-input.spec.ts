@@ -9,18 +9,57 @@ async function setup(page: Page) {
       commits: [] as number[],
       renderSamples: [] as number[],
       historyListRenders: 0,
+      historyStoreChecks: 0,
       settledMs: [] as number[],
       streaming: false,
       stopStreaming: false,
       typedDuringStream: 0,
     };
     (window as any).backgroundProbe = probe;
+    type StoreHook = {
+      queue: { getSnapshot?: () => unknown } | null;
+      next: StoreHook | null;
+    };
     type Fiber = {
       flags: number;
       child: Fiber | null;
       sibling: Fiber | null;
       alternate: Fiber | null;
       memoizedProps: Record<string, unknown> | null;
+      memoizedState: StoreHook | null;
+    };
+    let currentRoot: Fiber;
+    // React 19.2 keeps each useSyncExternalStore snapshot reader on its hook
+    // queue. Count reads even when React bails out without rendering a message.
+    (window as any).watchHistoryStoreChecks = () => {
+      let watched = 0;
+      const visit = (fiber: Fiber, insideHistory: boolean) => {
+        const history =
+          insideHistory ||
+          fiber.memoizedProps?.["data-slot"] === "progressive-history";
+        if (
+          history &&
+          fiber.tag !== 5 &&
+          fiber.tag !== 26 &&
+          fiber.tag !== 27
+        ) {
+          for (let hook = fiber.memoizedState; hook; hook = hook.next) {
+            const store = hook.queue;
+            const read = store?.getSnapshot;
+            if (store && typeof read === "function") {
+              store.getSnapshot = () => {
+                probe.historyStoreChecks++;
+                return read();
+              };
+              watched++;
+            }
+          }
+        }
+        for (let child = fiber.child; child; child = child.sibling)
+          visit(child, history);
+      };
+      visit(currentRoot, false);
+      return watched;
     };
     // React 19.2's PerformedWork flag is set for rendered components in both
     // development and production builds. No component names or timing needed.
@@ -34,6 +73,7 @@ async function setup(page: Page) {
       },
       onCommitFiberUnmount() {},
       onCommitFiberRoot(_id: number, root: { current: Fiber }) {
+        currentRoot = root.current;
         let rendered = 0;
         const visit = (fiber: Fiber) => {
           if (fiber.flags & 1) {
@@ -87,8 +127,8 @@ async function setup(page: Page) {
         listener = undefined;
       };
     };
-    (window as any).backgroundUpdate = (completed = false) => {
-      const view = views["sample-1"];
+    (window as any).backgroundUpdate = (completed = false, id = "sample-1") => {
+      const view = views[id];
       view.messages.at(-1).text += `\nBackground update ${++sequence}`;
       view.phase = completed ? "completed" : "generating";
       view.runId = "sample-background-run";
@@ -165,12 +205,18 @@ async function setup(page: Page) {
   await expect(page.locator(".aui-composer-input")).toBeFocused();
 }
 
-test("typing and IME composition do not rebuild the mounted history list", async ({
+test("typing and IME composition do not notify mounted history", async ({
   page,
 }) => {
   await setup(page);
   const historyRenders = () =>
     page.evaluate(() => (window as any).backgroundProbe.historyListRenders);
+  const readHistoryChecks = () =>
+    page.evaluate(() => (window as any).backgroundProbe.historyStoreChecks);
+  const watched = await page.evaluate(() =>
+    (window as any).watchHistoryStoreChecks(),
+  );
+  expect(watched).toBeGreaterThan(0);
   const rendersBeforeTyping = await historyRenders();
   expect(rendersBeforeTyping).toBeGreaterThan(0);
 
@@ -195,6 +241,16 @@ test("typing and IME composition do not rebuild the mounted history list", async
 
   await expect(composer).toHaveValue("Sample draft 你好");
   expect(await historyRenders()).toBe(rendersBeforeTyping);
+  expect(await readHistoryChecks()).toBe(0);
+
+  const sequence = await page.evaluate(() =>
+    (window as any).backgroundUpdate(false, "sample-0"),
+  );
+  await expect(
+    page.getByText(`Background update ${sequence}`, { exact: false }),
+  ).toBeVisible();
+  expect(await readHistoryChecks()).toBeGreaterThan(0);
+  await expect(composer).toHaveValue("Sample draft 你好");
 });
 
 for (const target of ["existing", "new"] as const) {
