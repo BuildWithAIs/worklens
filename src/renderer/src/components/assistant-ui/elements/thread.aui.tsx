@@ -216,10 +216,10 @@ const ThreadRoot: FC<{
   afterMessages,
 }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
-  const messages = useAuiState((s) => s.thread.messages);
+  const messageCount = useAuiState((s) => s.thread.messages.length);
   const fetchingHistory = useAuiState(isHistoryLoadingView);
   const viewport = useRef<HTMLDivElement>(null);
-  const { first, ready } = useProgressiveHistory(messages.length, viewport);
+  const { first, ready } = useProgressiveHistory(messageCount, viewport);
   const loading = fetchingHistory || !ready;
   useEffect(() => {
     if (!loading) onHistoryReady?.();
@@ -269,6 +269,7 @@ const ThreadRoot: FC<{
           >
             <ProgressiveThreadMessages
               first={first}
+              messageCount={messageCount}
               components={messageComponents}
             />
             {afterMessages}

@@ -8,6 +8,7 @@ async function setup(page: Page) {
       rendererVersion: "",
       commits: [] as number[],
       renderSamples: [] as number[],
+      historyListRenders: 0,
       settledMs: [] as number[],
       streaming: false,
       stopStreaming: false,
@@ -19,6 +20,7 @@ async function setup(page: Page) {
       child: Fiber | null;
       sibling: Fiber | null;
       alternate: Fiber | null;
+      memoizedProps: Record<string, unknown> | null;
     };
     // React 19.2's PerformedWork flag is set for rendered components in both
     // development and production builds. No component names or timing needed.
@@ -34,7 +36,15 @@ async function setup(page: Page) {
       onCommitFiberRoot(_id: number, root: { current: Fiber }) {
         let rendered = 0;
         const visit = (fiber: Fiber) => {
-          if (fiber.flags & 1) rendered++;
+          if (fiber.flags & 1) {
+            rendered++;
+            if (
+              fiber.child?.memoizedProps?.["data-slot"] ===
+              "progressive-history"
+            ) {
+              probe.historyListRenders++;
+            }
+          }
           // A bailed-out subtree reuses its child fibers, including old flags.
           // Counting those flags again would count work from an earlier commit.
           if (fiber.alternate && fiber.child === fiber.alternate.child) return;
@@ -154,6 +164,38 @@ async function setup(page: Page) {
   ).toHaveAttribute("aria-busy", "false");
   await expect(page.locator(".aui-composer-input")).toBeFocused();
 }
+
+test("typing and IME composition do not rebuild the mounted history list", async ({
+  page,
+}) => {
+  await setup(page);
+  const historyRenders = () =>
+    page.evaluate(() => (window as any).backgroundProbe.historyListRenders);
+  const rendersBeforeTyping = await historyRenders();
+  expect(rendersBeforeTyping).toBeGreaterThan(0);
+
+  const composer = page.locator(".aui-composer-input");
+  await composer.pressSequentially("Sample draft ");
+  await expect(composer).toHaveValue("Sample draft ");
+
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    for (const text of ["n", "ni", "nihao"]) {
+      await cdp.send("Input.imeSetComposition", {
+        text,
+        selectionStart: text.length,
+        selectionEnd: text.length,
+      });
+      await expect(composer).toHaveValue(`Sample draft ${text}`);
+    }
+    await cdp.send("Input.insertText", { text: "你好" });
+  } finally {
+    await cdp.detach();
+  }
+
+  await expect(composer).toHaveValue("Sample draft 你好");
+  expect(await historyRenders()).toBe(rendersBeforeTyping);
+});
 
 for (const target of ["existing", "new"] as const) {
   test(`background streaming avoids unrelated renders while typing in ${target === "existing" ? "an existing" : "a new"} conversation`, async ({
