@@ -21,6 +21,7 @@ async function setup(page: Page) {
       next: StoreHook | null;
     };
     type Fiber = {
+      tag: number;
       flags: number;
       child: Fiber | null;
       sibling: Fiber | null;
