@@ -10,6 +10,7 @@ import { JevConsentCards } from "./connectors/jev/JevConsentCard";
 import { HtmlArtifactWorkspace } from "./HtmlArtifact";
 import { useShimmer } from "@/hooks/use-shimmer";
 import { useStableArray } from "@/hooks/use-stable-array";
+import { useLatestCallback } from "@/hooks/use-latest-callback";
 import { createThreadMessageCache } from "@/lib/thread-message-cache";
 import {
   ChatImageContext,
@@ -107,6 +108,7 @@ type Props = {
 };
 
 const noMessages: MessageView[] = [];
+const noComposerMessages: readonly ThreadMessage[] = [];
 const noConsent: NonNullable<ConversationView["jevConsent"]>["pending"] = [];
 const activePhases = new Set([
   "generating",
@@ -833,44 +835,54 @@ export const AgentThread = memo(function AgentThread({
   const [attachmentsBlocked, setAttachmentsBlocked] = useState(false);
   const submittedAfterRunId = useRef<string | undefined>(undefined);
   const isRunning = !!view && activePhases.has(view.phase);
-  const runtime = useExternalStoreRuntime<ThreadMessage>({
-    messageRepository,
+  // Only lock the draft until acceptance. A run-start event can arrive before
+  // send resolves; keep typing and Stop available as soon as the run appears.
+  const isDisabled =
+    submitting && !isRunning && view?.runId === submittedAfterRunId.current;
+  const submitMessage = useLatestCallback(async (message: AppendMessage) => {
+    submittedAfterRunId.current = view?.runId;
+    const text = submittedText(message);
+    let images: ChatImage[];
+    try {
+      images = submittedImages(message);
+      if (images.length && !supportsImages) throw new Error("CHAT_IMAGE_MODEL");
+    } catch (error) {
+      onError(String(error));
+      throw new MessageNotSentError();
+    }
+    try {
+      await onSend(text, images);
+    } catch {
+      throw new MessageNotSentError();
+    }
+  });
+  // The library notifies thread subscribers when the adapter identity changes.
+  // Draft attachment and send gates belong to the composer adapter below.
+  const historyOptions = useMemo(
+    () => ({ messageRepository, isRunning, isDisabled, onNew: submitMessage }),
+    [messageRepository, isRunning, isDisabled, submitMessage],
+  );
+  const historyRuntime = useExternalStoreRuntime<ThreadMessage>(historyOptions);
+  // WorkLens routes sends through onSend for the selected conversation.
+  const composerRuntime = useExternalStoreRuntime<ThreadMessage>({
+    messages: noComposerMessages,
     isRunning,
-    // Only lock the draft until acceptance. A run-start event can arrive before
-    // send resolves; keep typing and Stop available as soon as the run appears.
-    isDisabled:
-      submitting && !isRunning && view?.runId === submittedAfterRunId.current,
+    isDisabled,
     isSendDisabled: !canSend || attachmentsBlocked || !!editingId,
     adapters: { attachments: imageAdapter },
-    onNew: async (message) => {
-      submittedAfterRunId.current = view?.runId;
-      const text = submittedText(message);
-      let images: ChatImage[];
-      try {
-        images = submittedImages(message);
-        if (images.length && !supportsImages)
-          throw new Error("CHAT_IMAGE_MODEL");
-      } catch (error) {
-        onError(String(error));
-        throw new MessageNotSentError();
-      }
-      try {
-        await onSend(text, images);
-      } catch {
-        throw new MessageNotSentError();
-      }
-    },
+    onNew: submitMessage,
     onCancel,
   });
   attachmentState.current = () => ({
     supported: supportsImages,
-    disabled: runtime.thread.getState().isDisabled,
-    attachments: runtime.thread.composer.getState().attachments,
+    disabled: composerRuntime.thread.getState().isDisabled,
+    attachments: composerRuntime.thread.composer.getState().attachments,
   });
 
   useEffect(() => {
     const update = () => {
-      const attachments = runtime.thread.composer.getState().attachments;
+      const attachments =
+        composerRuntime.thread.composer.getState().attachments;
       setAttachmentsBlocked(
         attachments.some(
           (image) =>
@@ -881,8 +893,8 @@ export const AgentThread = memo(function AgentThread({
       );
     };
     update();
-    return runtime.thread.composer.subscribe(update);
-  }, [runtime, supportsImages]);
+    return composerRuntime.thread.composer.subscribe(update);
+  }, [composerRuntime, supportsImages]);
 
   const restoredDraft = useRef<
     { text: string; images?: ChatImage[] } | undefined
@@ -895,9 +907,9 @@ export const AgentThread = memo(function AgentThread({
     )
       return;
     restoredDraft.current = { text: draft, images: draftImages };
-    runtime.thread.composer.setText(draft);
+    composerRuntime.thread.composer.setText(draft);
     for (const image of draftImages ?? [])
-      void runtime.thread.composer.addAttachment({
+      void composerRuntime.thread.composer.addAttachment({
         type: "image",
         name: image.name,
         contentType: image.mimeType,
@@ -909,7 +921,7 @@ export const AgentThread = memo(function AgentThread({
         ],
       });
     onDraftLoaded();
-  }, [draft, draftImages, onDraftLoaded, runtime]);
+  }, [draft, draftImages, onDraftLoaded, composerRuntime]);
 
   // Each message reads these contexts, so their values change only with the
   // data they carry; callbacks read the latest props through a ref. Otherwise
@@ -1053,6 +1065,7 @@ export const AgentThread = memo(function AgentThread({
     () =>
       !suspended && (
         <Thread
+          composerRuntime={composerRuntime}
           onHistoryReady={onHistoryReady}
           loadingStartedAt={historyStartedAt}
           components={threadComponents}
@@ -1070,12 +1083,14 @@ export const AgentThread = memo(function AgentThread({
           }
         />
       ),
-    [suspended, onHistoryReady, historyStartedAt, view],
+    [composerRuntime, suspended, onHistoryReady, historyStartedAt, view],
   );
 
-  return (
-    <MessageEditingContext.Provider value={editing}>
-      <AssistantRuntimeProvider runtime={runtime}>
+  // The provider republishes its scopes on commit. Reuse its subtree when
+  // only the composer adapter changes.
+  const history = useMemo(
+    () => (
+      <AssistantRuntimeProvider runtime={historyRuntime}>
         <ChatImageContext.Provider value={images}>
           <ModelMenuContext.Provider value={menu}>
             <RunErrorActionsContext.Provider value={runErrorActions}>
@@ -1090,6 +1105,22 @@ export const AgentThread = memo(function AgentThread({
           </ModelMenuContext.Provider>
         </ChatImageContext.Provider>
       </AssistantRuntimeProvider>
+    ),
+    [
+      historyRuntime,
+      images,
+      menu,
+      runErrorActions,
+      view?.id,
+      outputPaths,
+      isRunning,
+      thread,
+    ],
+  );
+
+  return (
+    <MessageEditingContext.Provider value={editing}>
+      {history}
     </MessageEditingContext.Provider>
   );
 });

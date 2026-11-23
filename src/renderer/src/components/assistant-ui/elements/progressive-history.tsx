@@ -1,5 +1,6 @@
-import { ThreadPrimitive, useAuiState } from "@assistant-ui/react";
+import { ThreadPrimitive } from "@assistant-ui/react";
 import {
+  memo,
   startTransition,
   useEffect,
   useLayoutEffect,
@@ -63,29 +64,34 @@ export function useProgressiveHistory(
   return { first, ready };
 }
 
-export function ProgressiveThreadMessages({
-  first,
-  components,
-}: {
-  first: number;
-  components: ComponentProps<
-    typeof ThreadPrimitive.MessageByIndex
-  >["components"];
-}) {
-  const messages = useAuiState((s) => s.thread.messages);
-  return (
-    <div
-      className="contents"
-      data-slot="progressive-history"
-      aria-busy={first > 0}
-    >
-      {messages.slice(first).map((_message, offset) => (
-        <ThreadPrimitive.MessageByIndex
-          key={first + offset}
-          index={first + offset}
-          components={components}
-        />
-      ))}
-    </div>
-  );
-}
+export const ProgressiveThreadMessages = memo(
+  function ProgressiveThreadMessages({
+    first,
+    messageCount,
+    components,
+  }: {
+    first: number;
+    messageCount: number;
+    components: ComponentProps<
+      typeof ThreadPrimitive.MessageByIndex
+    >["components"];
+  }) {
+    // Each message subscribes to its own index. The list only needs its range,
+    // which avoids rebuilding it when the assistant store updates the draft.
+    return (
+      <div
+        className="contents"
+        data-slot="progressive-history"
+        aria-busy={first > 0}
+      >
+        {Array.from({ length: messageCount - first }, (_, offset) => (
+          <ThreadPrimitive.MessageByIndex
+            key={first + offset}
+            index={first + offset}
+            components={components}
+          />
+        ))}
+      </div>
+    );
+  },
+);

@@ -41,6 +41,8 @@ import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
   AuiIf,
+  AssistantRuntimeProvider,
+  type AssistantRuntime,
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
@@ -116,6 +118,7 @@ export type ThreadComponents = {
 };
 
 export type ThreadProps = {
+  composerRuntime: AssistantRuntime;
   onHistoryReady?: () => void;
   loadingStartedAt?: number;
   components?: ThreadComponents | undefined;
@@ -177,6 +180,7 @@ export const ThreadLoadingIndicator: FC<{ startedAt?: number }> = ({
 };
 
 export const Thread: FC<ThreadProps> = ({
+  composerRuntime,
   onHistoryReady,
   loadingStartedAt,
   components = EMPTY_COMPONENTS,
@@ -189,6 +193,7 @@ export const Thread: FC<ThreadProps> = ({
   return (
     <ThreadComponentsContext.Provider value={components}>
       <ThreadRoot
+        composerRuntime={composerRuntime}
         onHistoryReady={onHistoryReady}
         loadingStartedAt={loadingStartedAt}
         isEmpty={isEmpty}
@@ -201,6 +206,7 @@ export const Thread: FC<ThreadProps> = ({
 };
 
 const ThreadRoot: FC<{
+  composerRuntime: AssistantRuntime;
   onHistoryReady?: () => void;
   loadingStartedAt?: number;
   isEmpty: boolean;
@@ -208,6 +214,7 @@ const ThreadRoot: FC<{
   footer?: ReactNode;
   afterMessages?: ReactNode;
 }> = ({
+  composerRuntime,
   onHistoryReady,
   loadingStartedAt,
   isEmpty,
@@ -216,10 +223,10 @@ const ThreadRoot: FC<{
   afterMessages,
 }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
-  const messages = useAuiState((s) => s.thread.messages);
+  const messageCount = useAuiState((s) => s.thread.messages.length);
   const fetchingHistory = useAuiState(isHistoryLoadingView);
   const viewport = useRef<HTMLDivElement>(null);
-  const { first, ready } = useProgressiveHistory(messages.length, viewport);
+  const { first, ready } = useProgressiveHistory(messageCount, viewport);
   const loading = fetchingHistory || !ready;
   useEffect(() => {
     if (!loading) onHistoryReady?.();
@@ -269,6 +276,7 @@ const ThreadRoot: FC<{
           >
             <ProgressiveThreadMessages
               first={first}
+              messageCount={messageCount}
               components={messageComponents}
             />
             {afterMessages}
@@ -282,7 +290,9 @@ const ThreadRoot: FC<{
             )}
           >
             <ThreadScrollToBottom />
-            <Composer autoFocus={autoFocus && !loading} />
+            <AssistantRuntimeProvider runtime={composerRuntime}>
+              <Composer autoFocus={autoFocus && !loading} />
+            </AssistantRuntimeProvider>
             {footer}
           </ThreadPrimitive.ViewportFooter>
         </div>
