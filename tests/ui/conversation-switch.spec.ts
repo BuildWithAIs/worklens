@@ -65,6 +65,25 @@ async function setup(page: Page, turns = 24, plain = false) {
           view: { ...views[id], runId, revision: 1 },
         });
       };
+      (window as any).startReply = (id: string, text: string) => {
+        const runId = "synthetic-new-run";
+        listener?.({
+          conversationId: id,
+          runId,
+          type: "run_start",
+          sequence: 1,
+          view: {
+            ...views[id],
+            runId,
+            revision: 1,
+            phase: "generating",
+            messages: [
+              ...views[id].messages,
+              { id: "synthetic-follow-up", role: "user", text },
+            ],
+          },
+        });
+      };
       document.addEventListener("click", (event) => {
         const button = (event.target as Element).closest(".conversation-open");
         if (!button) return;
@@ -98,13 +117,14 @@ async function setup(page: Page, turns = 24, plain = false) {
       window.worklens.invoke = (async (name: string, input: any) => {
         if (name === "open") {
           probe.calls.push(input.id);
+          const view = structuredClone(views[input.id]);
           if (probe.held.includes(input.id))
             await new Promise<void>((resolve) => {
               probe.release[input.id] = resolve;
             });
           if (probe.failed.includes(input.id))
             throw new Error("Synthetic load failure");
-          return structuredClone(views[input.id]);
+          return view;
         }
         const result = await (invoke as any)(name, input);
         if (name === "bootstrap") {
@@ -122,6 +142,30 @@ async function setup(page: Page, turns = 24, plain = false) {
   await expect(page.getByText("Answer 0/0", { exact: true })).toBeVisible();
   await expect(page.locator(".aui-composer-input")).toBeFocused();
 }
+
+test("a preflight snapshot cannot hide a newer run on reopen", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => {
+    (window as any).switchProbe.held = ["chat-1"];
+  });
+  await page.getByRole("button", { name: "History 1", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => typeof (window as any).switchProbe.release["chat-1"]),
+    )
+    .toBe("function");
+  const prompt = "A synthetic follow-up from a newer run";
+  await page.evaluate((text) => {
+    (window as any).startReply("chat-1", text);
+    (window as any).switchProbe.release["chat-1"]();
+  }, prompt);
+  await expect(page.getByText(prompt, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Stop task", exact: true }),
+  ).toBeVisible();
+});
 
 test("selection and loading paint before history arrives; stale responses cannot replace a newer selection or draft", async ({
   page,

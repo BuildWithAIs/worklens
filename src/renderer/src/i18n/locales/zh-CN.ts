@@ -217,6 +217,7 @@ const zhCN = {
     doAnything: "输入你想做的事…",
     message: "消息",
     sendMessage: "发送消息",
+    sendingMessage: "正在发送消息…",
     stopTask: "停止运行",
     regenerate: "重新生成",
     more: "更多",

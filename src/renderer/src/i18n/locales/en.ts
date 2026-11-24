@@ -233,6 +233,7 @@ const en = {
     doAnything: "Do anything...",
     message: "Message",
     sendMessage: "Send message",
+    sendingMessage: "Sending message…",
     stopTask: "Stop task",
     regenerate: "Regenerate",
     more: "More",

@@ -179,7 +179,9 @@ export function requestHandlers(context: RequestContext): RequestHandlers {
     },
     previewHtml: (input) => agents.previewHtml(input.id, input.path),
     open: async (input) => {
-      const value = await agents.open(input.id);
+      const value = await agents.open(input.id, {
+        allowPreflightSnapshot: true,
+      });
       await state.update({ lastConversation: input.id });
       return value;
     },

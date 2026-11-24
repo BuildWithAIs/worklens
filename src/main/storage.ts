@@ -45,6 +45,9 @@ export class SerialQueue {
   busy(key: string) {
     return this.pending.has(key);
   }
+  isTail(key: string, task: Promise<unknown>) {
+    return this.pending.get(key) === task;
+  }
   run<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const previous = this.pending.get(key) ?? Promise.resolve();
     const task = trackToolTask(async () => {

@@ -460,8 +460,17 @@ export function App() {
       try {
         await afterPaint();
         if (visit !== navigation.current) return;
-        const view = await api.invoke("open", { id });
+        const runAtOpen = viewsRef.current[id]?.runId;
+        const opened = await api.invoke("open", { id });
         if (visit !== navigation.current) return;
+        const latest = viewsRef.current[id];
+        // A committed preflight snapshot can return after a new run starts.
+        const view =
+          latest?.runId &&
+          latest.runId !== runAtOpen &&
+          latest.runId !== opened.runId
+            ? latest
+            : opened;
         // History can render in the background; selection already painted above.
         startTransition(() => {
           acceptView(view);

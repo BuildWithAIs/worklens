@@ -399,6 +399,9 @@ const composerActionClassName =
 const ComposerAction: FC = () => {
   const { t } = useAppTranslation();
   const modelMenu = useModelMenuContext();
+  const sending = useAuiState(
+    (s) => s.thread.isDisabled && !s.thread.isRunning,
+  );
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <ComposerAddAttachment />
@@ -462,9 +465,19 @@ const ComposerAction: FC = () => {
               />
             }
           >
-            <ArrowUpIcon className="aui-composer-send-icon size-4" />
+            {sending ? (
+              <LoaderCircleIcon
+                aria-hidden="true"
+                className="size-4 animate-spin motion-reduce:animate-none"
+              />
+            ) : (
+              <ArrowUpIcon className="aui-composer-send-icon size-4" />
+            )}
           </ComposerPrimitive.Send>
         </AuiIf>
+        <span className="sr-only" aria-live="polite">
+          {sending ? t("thread.sendingMessage") : ""}
+        </span>
         <AuiIf condition={(s) => s.thread.isRunning}>
           <ComposerPrimitive.Cancel
             render={
