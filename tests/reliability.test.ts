@@ -1,4 +1,4 @@
-import { test, expect, afterEach } from "vitest";
+import { test, expect, afterEach, vi } from "vitest";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -51,6 +51,77 @@ async function setup() {
   };
   return { root, paths, server, runtime, service, events, selection };
 }
+test("reopening during send preflight reads committed history and respects a queued write", async () => {
+  const { service, runtime, selection, server, events } = await setup();
+  const first = await service.send({
+    requestId: randomUUID(),
+    text: "The saved question",
+    selection,
+  });
+  await expect
+    .poll(() => events.some((event) => event.type === "run_end"))
+    .toBe(true);
+
+  let enterPreflight!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enterPreflight = resolve;
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const getAvailable = runtime.getAvailable.bind(runtime);
+  vi.spyOn(runtime, "getAvailable").mockImplementationOnce(async (...args) => {
+    enterPreflight();
+    await gate;
+    return getAvailable(...args);
+  });
+  const sending = service.send({
+    conversationId: first.id,
+    requestId: randomUUID(),
+    text: "The next question",
+    selection,
+  });
+  try {
+    await entered;
+    let opened: Awaited<ReturnType<typeof service.open>> | undefined;
+    const reopen = () =>
+      service.open(first.id, { allowPreflightSnapshot: true });
+    const reopening = reopen().then((view) => {
+      opened = view;
+    });
+    await expect.poll(() => opened?.phase, { timeout: 1000 }).toBe("completed");
+    await reopening;
+    expect(
+      opened?.messages
+        .filter(({ role }) => role === "user")
+        .map(({ text }) => text),
+    ).toEqual(["The saved question"]);
+    expect(server.requests).toHaveLength(1);
+
+    const renaming = service.rename(first.id, "Renamed synthetic conversation");
+    const openingAfterRename = reopen();
+    release();
+    await sending;
+    await renaming;
+    expect((await openingAfterRename).title).toBe(
+      "Renamed synthetic conversation",
+    );
+    await expect
+      .poll(() => events.filter((event) => event.type === "run_end").length)
+      .toBe(2);
+    const current = await service.open(first.id);
+    expect(
+      current.messages
+        .filter(({ role }) => role === "user")
+        .map(({ text }) => text),
+    ).toEqual(["The saved question", "The next question"]);
+  } finally {
+    release();
+    await sending.catch(() => {});
+  }
+});
+
 test("PRD 035: 20 concurrent session pairs have no cross-session contamination", async () => {
   const { service, selection, events, paths, root } = await setup();
   for (let round = 0; round < 20; round++) {

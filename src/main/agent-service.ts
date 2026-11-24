@@ -147,6 +147,10 @@ interface Runtime {
 export class AgentService {
   private sessions = new Map<string, Runtime>();
   private operations = new SerialQueue();
+  private preparingSubmissions = new Map<
+    string,
+    { runtime: Runtime; task: Promise<ConversationView> }
+  >();
   private requests = new Map<string, Promise<ConversationView>>();
   // Idle conversations kept with their Pi sessions; others reload from disk.
   private retainedSessions = 12;
@@ -504,18 +508,21 @@ export class AgentService {
     const dispatch = () => {
       runtime.timer = undefined;
       if (runtime.active !== active) return;
+      const sequence = ++active.sequence;
+      const view = this.view(id, runtime);
       this.emit({
         conversationId: id,
         runId: active.id,
-        sequence: ++active.sequence,
+        sequence,
         type,
-        view: this.view(id, runtime),
+        view,
         globalUsage: this.getGlobalUsage(),
       });
+      return view;
     };
     if (immediate) {
       if (runtime.timer) clearTimeout(runtime.timer);
-      dispatch();
+      return dispatch();
     } else if (!runtime.timer) runtime.timer = setTimeout(dispatch, 40);
   }
   connectorConsentChanged(id: string) {
@@ -952,7 +959,14 @@ export class AgentService {
       await this.disposeSession(runtime).catch(() => {});
     }
   }
-  open(id: string) {
+  async open(id: string, options?: { allowPreflightSnapshot: boolean }) {
+    const preparing = options?.allowPreflightSnapshot
+      ? this.preparingSubmissions.get(id)
+      : undefined;
+    // Preflight can expose the committed state to navigation. Once a later
+    // operation is queued, or the submit starts mutating the session, wait.
+    if (preparing && this.operations.isTail(id, preparing.task))
+      return this.view(id, preparing.runtime);
     return this.operations.run(id, async () =>
       this.view(id, await this.get(id)),
     );
@@ -1409,6 +1423,50 @@ export class AgentService {
   editMessage(input: Requests["editMessage"]["input"]) {
     return this.submit({ ...input, images: undefined }, input);
   }
+  private async prepareSubmission(
+    runtime: Runtime,
+    input: Requests["send"]["input"],
+    images: ChatImage[],
+    edit?: Requests["editMessage"]["input"],
+  ) {
+    const model = this.assertSelection(input.selection);
+    if (model.input.includes("image")) {
+      // Validate the retained history as well as the new draft. An edit uses
+      // its candidate prefix without moving the selected branch.
+      const contextMessages = edit
+        ? buildSessionContext(
+            runtime.manager.getEntries(),
+            editParent(runtime.manager, edit.messageId),
+          ).messages
+        : (runtime.session?.messages ??
+          runtime.manager.buildSessionContext().messages);
+      await prepareImageContext(
+        {
+          messages: [
+            ...convertToLlm(contextMessages),
+            {
+              role: "user",
+              content: images.map((image) => ({
+                type: "image" as const,
+                data: image.data,
+                mimeType: image.mimeType,
+              })),
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        model,
+      );
+    }
+    const skillCommand = parseSkillCommand(input.text);
+    if (input.text.startsWith("/skill:") && !skillCommand)
+      throw new Error("该技能未启用或已不存在，请在设置中检查技能");
+    const prepared = await this.prepareSession(
+      input.selection,
+      skillCommand?.name,
+    );
+    return { prepared, skillCommand };
+  }
   private submit(
     input: Requests["send"]["input"],
     edit?: Requests["editMessage"]["input"],
@@ -1416,7 +1474,7 @@ export class AgentService {
     if (this.stopping) return Promise.reject(new Error("应用正在退出"));
     const requestKey = `${input.conversationId ?? "new"}/${edit ? "edit" : "send"}/${input.requestId}`;
     if (this.requests.has(requestKey)) return this.requests.get(requestKey)!;
-    const task = this.operations.run(
+    const task: Promise<ConversationView> = this.operations.run(
       input.conversationId ?? input.requestId,
       async () => {
         const editingRuntime = edit
@@ -1480,42 +1538,20 @@ export class AgentService {
           };
         }
         if (runtime.active) throw new Error("当前会话正在运行，请先停止");
-        // Exercise the model image budget before accepting/persisting the prompt.
-        // IPC rejection lets the composer retain its text and attachments. The
-        // stream guard still handles later tool images/context changes.
-        // Preview the edit's prefix without moving the selected branch: the
-        // replaced prompt and its continuation will not enter the new request.
-        const contextMessages = edit
-          ? buildSessionContext(
-              runtime.manager.getEntries(),
-              editParent(runtime.manager, edit.messageId),
-            ).messages
-          : (runtime.session?.messages ??
-            runtime.manager.buildSessionContext().messages);
-        await prepareImageContext(
-          {
-            messages: [
-              ...convertToLlm(contextMessages),
-              {
-                role: "user",
-                content: images.map((image) => ({
-                  type: "image" as const,
-                  data: image.data,
-                  mimeType: image.mimeType,
-                })),
-                timestamp: Date.now(),
-              },
-            ],
-          },
-          this.assertSelection(input.selection),
-        );
-        const skillCommand = parseSkillCommand(input.text);
-        if (input.text.startsWith("/skill:") && !skillCommand)
-          throw new Error("该技能未启用或已不存在，请在设置中检查技能");
-        const prepared = await this.prepareSession(
-          input.selection,
-          skillCommand?.name,
-        );
+        const id = runtime.manager.getSessionId();
+        this.preparingSubmissions.set(id, { runtime, task });
+        let submission: Awaited<ReturnType<AgentService["prepareSubmission"]>>;
+        try {
+          submission = await this.prepareSubmission(
+            runtime,
+            input,
+            images,
+            edit,
+          );
+        } finally {
+          this.preparingSubmissions.delete(id);
+        }
+        const { prepared, skillCommand } = submission;
         if (!edit)
           await this.ensureSession(
             runtime,
@@ -1527,7 +1563,6 @@ export class AgentService {
         const prompt = skillCommand
           ? `/skill:${skillCommand.name}${skillCommand.message ? ` ${skillCommand.message}` : ""}`
           : input.text;
-        const id = runtime.manager.getSessionId();
         if (!runtime.manager.getSessionName() && !edit) {
           const title = skillCommand
             ? skillCommand.message.trim() || skillCommand.name
@@ -1740,8 +1775,9 @@ export class AgentService {
               }).catch(() => {});
           }
         });
-        this.publish(id, runtime, "run_start", true);
-        return this.view(id, runtime);
+        return (
+          this.publish(id, runtime, "run_start", true) ?? this.view(id, runtime)
+        );
       },
     );
     this.requests.set(requestKey, task);
