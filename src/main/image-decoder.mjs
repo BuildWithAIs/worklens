@@ -7,7 +7,10 @@ sharp.concurrency(1);
 
 if (!process.connected) process.exit(0);
 
-process.once("message", async ({ data, mimeType, options, pixelLimit }) => {
+let decoding = false;
+process.on("message", async ({ data, mimeType, options, pixelLimit }) => {
+  if (decoding) process.exit(1);
+  decoding = true;
   try {
     const bytes = Buffer.from(data, "base64");
     const source = sharp(bytes, {
@@ -95,8 +98,17 @@ process.once("message", async ({ data, mimeType, options, pixelLimit }) => {
       }
     }
     if (result && firstFrameOnly) result.firstFrameOnly = true;
-    process.send?.(result ? { result } : { error: "CHAT_IMAGE_REQUEST" }, () =>
-      process.exit(0),
+    // Retire after large native allocations even if the parent can reuse us.
+    const reusable =
+      !!result &&
+      options.reuseDecoder &&
+      process.memoryUsage.rss() < 256 * 1024 * 1024;
+    decoding = false;
+    process.send?.(
+      result ? { result, reusable } : { error: "CHAT_IMAGE_REQUEST" },
+      (error) => {
+        if (error || !reusable) process.exit(0);
+      },
     );
   } catch (error) {
     const message = String(error);
