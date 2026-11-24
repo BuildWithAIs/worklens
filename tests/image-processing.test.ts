@@ -328,9 +328,104 @@ test("crashes are not remembered, so a later request can decode again", async ()
   expect(childProcess.fork).toHaveBeenCalledTimes(2);
 });
 
+test("request history reuses disposable decoders and retains a second pass", async () => {
+  const images = Array.from({ length: 80 }, (_, index) =>
+    input(syntheticPng(200 + index, 50)),
+  );
+  const options = { ...originalOptions, decoderBatch: Symbol() };
+  for (const [index, image] of images.entries()) {
+    const result = await processChatImage(image, options);
+    expect(result).toMatchObject({ data: image.data, width: 200 + index });
+  }
+  // The worker is retired every 16 jobs even when native memory stays low.
+  expect(childProcess.fork).toHaveBeenCalledTimes(5);
+  for (const image of images) await processChatImage(image, options);
+  expect(childProcess.fork).toHaveBeenCalledTimes(5);
+});
+
+test("a reused decoder still cancels its active job and is not reused afterward", async () => {
+  const child = Object.assign(fakeChild(), {
+    connected: true,
+    ref: vi.fn(),
+    unref: vi.fn(),
+  });
+  const options = { ...thumbnailOptions, decoderBatch: Symbol() };
+  const first = processChatImage(input(syntheticPng(81, 9)), options);
+  child.emit("message", {
+    reusable: true,
+    result: {
+      data: "aa",
+      mimeType: "image/png",
+      originalWidth: 81,
+      originalHeight: 9,
+      width: 81,
+      height: 9,
+    },
+  });
+  await first;
+  expect(child.kill).not.toHaveBeenCalled();
+
+  const controller = new AbortController();
+  const second = processChatImage(
+    input(syntheticPng(82, 9)),
+    options,
+    controller.signal,
+  );
+  const cancelled = expect(second).rejects.toThrow("CHAT_IMAGE_CANCELLED");
+  expect(childProcess.fork).toHaveBeenCalledTimes(1);
+  controller.abort();
+  await cancelled;
+  expect(child.kill).toHaveBeenCalledTimes(1);
+
+  const next = fakeChild();
+  const third = processChatImage(input(syntheticPng(83, 9)), options);
+  const rejected = expect(third).rejects.toThrow("CHAT_IMAGE_PROCESSING");
+  next.emit("exit", 1);
+  await rejected;
+  expect(childProcess.fork).toHaveBeenCalledTimes(2);
+});
+
+test("independent request histories do not share a decoder and idle workers retire", async () => {
+  vi.useFakeTimers();
+  const idle = Object.assign(fakeChild(), {
+    connected: true,
+    ref: vi.fn(),
+    unref: vi.fn(),
+  });
+  const first = processChatImage(input(syntheticPng(91, 9)), {
+    ...thumbnailOptions,
+    decoderBatch: Symbol(),
+  });
+  idle.emit("message", {
+    reusable: true,
+    result: {
+      data: "aa",
+      mimeType: "image/png",
+      originalWidth: 91,
+      originalHeight: 9,
+      width: 91,
+      height: 9,
+    },
+  });
+  await first;
+
+  const current = fakeChild();
+  const second = processChatImage(input(syntheticPng(92, 9)), {
+    ...thumbnailOptions,
+    decoderBatch: Symbol(),
+  });
+  expect(childProcess.fork).toHaveBeenCalledTimes(2);
+  expect(idle.kill).not.toHaveBeenCalled();
+  const rejected = expect(second).rejects.toThrow("CHAT_IMAGE_PROCESSING");
+  current.emit("exit", 1);
+  await rejected;
+  await vi.advanceTimersByTimeAsync(500);
+  expect(idle.kill).toHaveBeenCalledTimes(1);
+});
+
 test("processed-image cache evicts by retained bytes instead of growing with history", async () => {
   const child = fakeChild();
-  const images = Array.from({ length: 5 }, (_, index) =>
+  const images = Array.from({ length: 7 }, (_, index) =>
     input(syntheticPng(40 + index, 10)),
   );
   const complete = async (image: (typeof images)[number]) => {
@@ -348,9 +443,9 @@ test("processed-image cache evicts by retained bytes instead of growing with his
     await task;
   };
   for (const image of images) await complete(image);
-  expect(childProcess.fork).toHaveBeenCalledTimes(5);
-  await processChatImage(images[4], originalOptions);
-  expect(childProcess.fork).toHaveBeenCalledTimes(5);
+  expect(childProcess.fork).toHaveBeenCalledTimes(7);
+  await processChatImage(images[6], originalOptions);
+  expect(childProcess.fork).toHaveBeenCalledTimes(7);
   await complete(images[0]);
-  expect(childProcess.fork).toHaveBeenCalledTimes(6);
+  expect(childProcess.fork).toHaveBeenCalledTimes(8);
 });

@@ -79,6 +79,8 @@ export async function prepareImageContext<T extends Context>(
     limits.encodedImage,
     Math.floor((limits.request * 0.75) / (count - dropped.size)),
   );
+  // Reuse isolated workers only within this pass through one request.
+  const decoderBatch = Symbol();
   const messages: Context["messages"] = [];
   for (const [index, message] of context.messages.entries()) {
     if (
@@ -109,6 +111,7 @@ export async function prepareImageContext<T extends Context>(
             sourceBytes: CHAT_IMAGE_LIMITS.sourceBytes,
             sourcePixels: CHAT_IMAGE_LIMITS.sourcePixels,
             allowGif: message.role === "toolResult",
+            decoderBatch,
           },
           signal,
         );

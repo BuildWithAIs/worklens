@@ -1,4 +1,4 @@
-import { fork } from "node:child_process";
+import { fork, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { imageDimensions } from "../shared/image-dimensions";
@@ -16,6 +16,7 @@ export interface ImageOptions {
   sourceBytes?: number;
   sourcePixels?: number;
   allowGif?: boolean;
+  decoderBatch?: symbol;
 }
 export interface DecodedImage {
   data: string;
@@ -40,7 +41,70 @@ const REMEMBERED_FAILURES = [
 const FAILURE_TTL = 10 * 60 * 1000;
 let running = 0;
 const waiting: { resume: () => void }[] = [];
-const CACHE_BYTES = 16 * 1024 * 1024;
+const MAX_DECODERS = 2;
+// One request can carry 22.5 MB of encoded images and up to 100 images.
+// Keep enough results to reuse a full preflight in the stream guard.
+const CACHE_BYTES = 24 * 1024 * 1024;
+const CACHE_ENTRIES = 128;
+const DECODER_MAX_JOBS = 16;
+const DECODER_IDLE_MS = 500;
+type Decoder = { child: ChildProcess; jobs: number };
+const idleDecoders = new Map<
+  symbol,
+  { claim: () => Decoder; discard: () => void }
+>();
+
+function closeDecoder(child: ChildProcess) {
+  child.once("error", () => {});
+  child.kill("SIGKILL");
+}
+
+function takeDecoder(batch?: symbol): Decoder {
+  const idle = batch && idleDecoders.get(batch);
+  if (idle) return idle.claim();
+  if (running + idleDecoders.size > MAX_DECODERS)
+    idleDecoders.values().next().value?.discard();
+  const child = fork(
+    fileURLToPath(new URL("./image-decoder.mjs", import.meta.url)),
+    [],
+    {
+      execArgv: ["--max-old-space-size=128"],
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NODE_OPTIONS: "" },
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+    },
+  );
+  return { child, jobs: 0 };
+}
+
+function keepDecoder(decoder: Decoder, batch: symbol) {
+  const { child } = decoder;
+  const clearIdle = () => {
+    idleDecoders.delete(batch);
+    clearTimeout(timer);
+    child.off("disconnect", discard);
+    child.off("error", discard);
+    child.off("exit", discard);
+  };
+  const claim = () => {
+    clearIdle();
+    child.ref();
+    child.channel?.ref();
+    return decoder;
+  };
+  const discard = () => {
+    clearIdle();
+    closeDecoder(child);
+  };
+  idleDecoders.get(batch)?.discard();
+  const timer = setTimeout(discard, DECODER_IDLE_MS);
+  timer.unref();
+  child.once("disconnect", discard);
+  child.once("error", discard);
+  child.once("exit", discard);
+  child.unref();
+  child.channel?.unref();
+  idleDecoders.set(batch, { claim, discard });
+}
 export const thumbnailOptions = {
   maxWidth: 256,
   maxHeight: 256,
@@ -66,6 +130,7 @@ export async function processChatImage(
   options: ImageOptions,
   signal?: AbortSignal,
 ): Promise<DecodedImage> {
+  const { decoderBatch, ...decodeOptions } = options;
   signal?.throwIfAborted();
   const sourceBytes = options.sourceBytes ?? CHAT_IMAGE_LIMITS.perImage;
   const pixelLimit = options.sourcePixels ?? CHAT_IMAGE_LIMITS.pixels;
@@ -90,7 +155,7 @@ export async function processChatImage(
   }
   const key = createHash("sha256")
     .update(bytes)
-    .update(JSON.stringify(options))
+    .update(JSON.stringify(decodeOptions))
     .digest("hex");
   const failed = failures.get(key);
   if (failed && failed.expires > Date.now()) throw new Error(failed.code);
@@ -102,7 +167,7 @@ export async function processChatImage(
     return existing;
   }
   if (waiting.length >= 32) throw new Error("CHAT_IMAGE_BUSY");
-  if (running >= 2)
+  if (running >= MAX_DECODERS)
     await new Promise<void>((resolve, reject) => {
       const abort = () => {
         const index = waiting.indexOf(entry);
@@ -121,70 +186,91 @@ export async function processChatImage(
   else running++;
   try {
     signal?.throwIfAborted();
-    const result = await new Promise<DecodedImage>((resolve, reject) => {
-      const child = fork(
-        fileURLToPath(new URL("./image-decoder.mjs", import.meta.url)),
-        [],
-        {
-          execArgv: ["--max-old-space-size=128"],
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NODE_OPTIONS: "" },
-          stdio: ["ignore", "ignore", "ignore", "ipc"],
-        },
-      );
+    const decoder = takeDecoder(decoderBatch);
+    const { child } = decoder;
+    const { result, reusable } = await new Promise<{
+      result: DecodedImage;
+      reusable?: boolean;
+    }>((resolve, reject) => {
       let settled = false;
       const finish = (
         value?: DecodedImage,
         error = new Error("CHAT_IMAGE_PROCESSING"),
+        canReuse?: boolean,
       ) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
         signal?.removeEventListener("abort", abort);
-        child.kill("SIGKILL");
-        if (value) resolve(value);
-        else reject(error);
+        child.off("error", failed);
+        child.off("exit", failed);
+        child.off("disconnect", failed);
+        child.off("message", messageReceived);
+        if (value) resolve({ result: value, reusable: canReuse });
+        else {
+          closeDecoder(child);
+          reject(error);
+        }
       };
       const timeout = setTimeout(
         () => finish(undefined, new Error("CHAT_IMAGE_TIMEOUT")),
         15000,
       );
       const abort = () => finish(undefined, new Error("CHAT_IMAGE_CANCELLED"));
+      const failed = () => finish();
+      const messageReceived = (message: {
+        result?: DecodedImage;
+        error?: string;
+        reusable?: boolean;
+      }) => {
+        const code = [
+          "CHAT_IMAGE_INVALID",
+          "CHAT_IMAGE_DIMENSIONS",
+          "CHAT_IMAGE_REQUEST",
+        ].includes(message.error ?? "")
+          ? message.error
+          : "CHAT_IMAGE_PROCESSING";
+        finish(message.result, new Error(code), message.reusable);
+      };
       signal?.addEventListener("abort", abort, { once: true });
-      child.once("error", () => finish());
-      child.once("exit", () => finish());
-      child.once(
-        "message",
-        (message: { result?: DecodedImage; error?: string }) => {
-          const code = [
-            "CHAT_IMAGE_INVALID",
-            "CHAT_IMAGE_DIMENSIONS",
-            "CHAT_IMAGE_REQUEST",
-          ].includes(message.error ?? "")
-            ? message.error
-            : "CHAT_IMAGE_PROCESSING";
-          finish(message.result, new Error(code));
-        },
-      );
-      child.send(
-        {
-          data: image.data,
-          mimeType: image.mimeType,
-          options,
-          pixelLimit,
-        },
-        (error) => {
-          if (error) finish();
-        },
-      );
+      child.once("error", failed);
+      child.once("exit", failed);
+      child.once("disconnect", failed);
+      child.once("message", messageReceived);
+      try {
+        child.send(
+          {
+            data: image.data,
+            mimeType: image.mimeType,
+            options: { ...decodeOptions, reuseDecoder: !!decoderBatch },
+            pixelLimit,
+          },
+          (error) => {
+            if (error) finish();
+          },
+        );
+      } catch {
+        finish();
+      }
     });
-    if (
+    const invalidDimensions =
       result.originalWidth * result.originalHeight > pixelLimit ||
       result.width > options.maxWidth ||
-      result.height > options.maxHeight
+      result.height > options.maxHeight;
+    const exceedsBudget = result.data.length >= options.maxBytes;
+    decoder.jobs++;
+    if (
+      decoderBatch &&
+      reusable &&
+      child.connected &&
+      !invalidDimensions &&
+      !exceedsBudget &&
+      decoder.jobs < DECODER_MAX_JOBS
     )
-      throw new Error("CHAT_IMAGE_DIMENSIONS");
-    if (result.data.length >= options.maxBytes)
-      throw new Error("CHAT_IMAGE_REQUEST");
+      keepDecoder(decoder, decoderBatch);
+    else closeDecoder(child);
+    if (invalidDimensions) throw new Error("CHAT_IMAGE_DIMENSIONS");
+    if (exceedsBudget) throw new Error("CHAT_IMAGE_REQUEST");
     const previous = cache.get(key);
     if (previous) {
       cachedBytes -= previous.data.length;
@@ -192,7 +278,8 @@ export async function processChatImage(
     }
     while (
       cache.size &&
-      (cachedBytes + result.data.length > CACHE_BYTES || cache.size >= 64)
+      (cachedBytes + result.data.length > CACHE_BYTES ||
+        cache.size >= CACHE_ENTRIES)
     ) {
       const oldest = cache.keys().next().value!;
       cachedBytes -= cache.get(oldest)!.data.length;
